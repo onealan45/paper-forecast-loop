@@ -35,10 +35,7 @@ def _run_once(args) -> int:
         if args.now
         else datetime.now(tz=UTC)
     )
-    if args.provider == "sample":
-        provider = build_sample_provider(now, args.symbol)
-    else:
-        provider = CoinGeckoMarketDataProvider()
+    provider = _build_data_provider(args.provider, now, args.symbol)
     repository = JsonFileRepository(args.storage_dir)
     loop = ForecastingLoop(
         config=LoopConfig(
@@ -69,6 +66,12 @@ def _run_once(args) -> int:
         )
     )
     return 0
+
+
+def _build_data_provider(provider_name: str, now: datetime, symbol: str):
+    if provider_name == "sample":
+        return build_sample_provider(now, symbol)
+    return CoinGeckoMarketDataProvider()
 
 
 def _write_last_run_meta(*, storage_dir: Path, now_utc: datetime, symbol: str, provider: str, result) -> None:

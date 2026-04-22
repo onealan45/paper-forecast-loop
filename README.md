@@ -1,20 +1,152 @@
 # Paper Forecast Loop
 
-Paper-only public-data forecasting and strategy-research loop for BTC-USD.
+Paper-only public-data forecasting and strategy-research loop for `BTC-USD`.
 
-## What It Does
+This repository is intentionally narrow. The goal of this milestone is not feature breadth. The goal is the first **trustworthy forecasting research loop**:
 
-- ingests public market data from CoinGecko
-- creates immutable forecast artifacts
-- resolves matured forecasts into scores
-- writes review artifacts and defensive strategy proposals
-- stays paper-only with no live trading or automatic promotion
+- create a forecast on a reproducible hourly boundary
+- wait for the target window to complete
+- only score when provider coverage is complete
+- generate review and proposal artifacts with provenance
+- keep reruns safe and idempotent
 
-## Project Layout
+## Current Scope
 
-- `src/forecast_loop/`: forecasting loop, providers, storage, models, CLI
-- `tests/`: pipeline and provider tests
-- `run_forecast_loop.py`: repo-root entrypoint for local runs
+This version intentionally includes only:
+
+- single symbol: `BTC-USD`
+- hourly public market data
+- providers:
+  - sample provider
+  - CoinGecko provider
+- JSONL artifacts:
+  - `forecasts.jsonl`
+  - `scores.jsonl`
+  - `reviews.jsonl`
+  - `proposals.jsonl`
+- one-off CLI execution via `run-once`
+
+This version intentionally excludes:
+
+- UI
+- live trading
+- real capital
+- multi-asset support
+- portfolio / NAV / PnL accounting
+- notifications / Telegram
+- full scheduler or repair daemon orchestration
+
+## Forecast Contract
+
+Each forecast records enough information to reconstruct and audit the forecast window:
+
+- `anchor_time`: the latest provider-aligned hourly boundary available at run time
+- `target_window_start`: the forecast window start boundary
+- `target_window_end`: the forecast window end boundary
+- `candle_interval_minutes`: the expected candle interval
+- `expected_candle_count`: the number of hourly boundaries required for a complete score
+- `status`: lifecycle state
+- `status_reason`: why the forecast is in that state
+- `provider_data_through`: latest provider boundary observed during evaluation
+- `observed_candle_count`: how many aligned candles were actually observed for the target window
+
+### Boundary Rule
+
+Forecast creation does **not** use arbitrary wall-clock timestamps. It aligns to the latest provider hourly boundary that is actually available.
+
+Example:
+
+- run time: `2026-04-21T12:37:00Z`
+- latest available hourly candle boundary: `2026-04-21T11:00:00Z`
+- forecast anchor and target window start: `2026-04-21T11:00:00Z`
+
+## Resolve and Scoring Contract
+
+A forecast may only be scored when **all** of the following are true:
+
+1. `now >= target_window_end`
+2. provider data coverage reaches at least `target_window_end`
+3. the target window contains the full expected set of hourly boundaries
+4. the realized candle set is non-empty and sufficient to classify
+
+If any of those conditions fail, the loop must not score the forecast.
+
+## Forecast States
+
+- `pending`
+  - meaning: the target window has not finished yet
+  - reason: `awaiting_horizon_end`
+
+- `waiting_for_data`
+  - meaning: the target window has finished, but provider coverage has not yet reached the target window end
+  - reason: `awaiting_provider_coverage`
+
+- `resolved`
+  - meaning: a valid score has been recorded for the forecast
+  - reason examples:
+    - `scored`
+    - `score_already_recorded`
+
+- `unscorable`
+  - meaning: enough wall-clock time has passed, but the realized data is invalid or incomplete for trustworthy scoring
+  - reason examples:
+    - `empty_realized_window`
+    - `missing_expected_candles`
+    - `insufficient_realized_candles`
+
+## Artifact Provenance
+
+### Score Artifact
+
+Each score records:
+
+- which forecast it belongs to
+- the scored target window
+- predicted regime
+- actual regime
+- expected and observed candle counts
+- provider data coverage at scoring time
+- scoring basis
+
+### Review Artifact
+
+Each review records:
+
+- which scores were used
+- which forecasts those scores came from
+- threshold used
+- decision basis
+- whether a proposal is recommended
+- why a proposal was or was not recommended
+
+### Proposal Artifact
+
+Each proposal records:
+
+- which review produced it
+- which scores were used as the basis
+- threshold used
+- decision basis
+- rationale for generation
+
+## Idempotency and Rerun Safety
+
+This version keeps JSONL storage, but rerun safety is enforced:
+
+- the same forecast anchor/window resolves to the same forecast identity
+- the same forecast cannot be scored twice
+- the same review basis does not create duplicate reviews
+- the same review does not create duplicate proposals
+- rerunning `run-once` in the same hour does not keep creating semantically duplicate artifacts
+
+## Failure and Degrade Behavior
+
+The loop degrades conservatively:
+
+- if the horizon is complete but provider data does not fully cover the window, the forecast remains `waiting_for_data`
+- if provider coverage exists but required hourly boundaries are missing, the forecast becomes `unscorable`
+- if candles are empty or insufficient for classification, the loop does not crash into scoring; it leaves an auditable terminal state instead
+- review and proposal generation only happen when the current run produced valid scores
 
 ## Local Commands
 
@@ -36,16 +168,13 @@ Run one public-data cycle:
 python run_forecast_loop.py run-once --provider coingecko --symbol BTC-USD --storage-dir .\paper_storage\manual-coingecko
 ```
 
-## Current Scope
+## Remaining Gaps Intentionally Left for the Next Stage
 
-- single symbol: `BTC-USD`
-- public data provider: CoinGecko
-- paper-only artifacts: forecasts, scores, reviews, proposals
+This milestone improves correctness and auditability, but it does not yet solve everything:
 
-## Review Focus
-
-The current implementation is intentionally small. Good review targets are:
-
-- forecast horizon alignment versus provider candle timestamps
-- resolution safety when market data has not fully covered the forecast window
-- proposal and review thresholds for paper-only adjustment logic
+- regime classification is still intentionally simple
+- only `BTC-USD` is supported
+- there is no portfolio or strategy-performance layer
+- proposal logic is still heuristic and conservative
+- there is no explicit repair daemon or orchestration state machine in this repo
+- there is no operator UI yet

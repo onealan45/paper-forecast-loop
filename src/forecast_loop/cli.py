@@ -62,6 +62,7 @@ def _run_once(args) -> int:
             {
                 "symbol": args.symbol,
                 "new_forecast_status": result.new_forecast.status if result.new_forecast else None,
+                "score_count": len(result.scores),
                 "review_created": result.review is not None,
                 "proposal_created": result.proposal is not None,
             }
@@ -81,7 +82,11 @@ def _write_last_run_meta(*, storage_dir: Path, now_utc: datetime, symbol: str, p
         "provider": provider,
         "symbol": symbol,
         "new_forecast": result.new_forecast.to_dict() if result.new_forecast else None,
+        "score_count": len(result.scores),
+        "score_ids": [score.score_id for score in result.scores],
+        "review_id": result.review.review_id if result.review else None,
         "review_created": result.review is not None,
+        "proposal_id": result.proposal.proposal_id if result.proposal else None,
         "proposal_created": result.proposal is not None,
     }
     tmp_path = meta_path.with_suffix(".json.tmp")

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 import json
 from typing import Callable
 from urllib.request import urlopen
@@ -9,26 +9,62 @@ from urllib.request import urlopen
 from forecast_loop.models import MarketCandle
 
 
+HOURLY_INTERVAL = timedelta(hours=1)
+
+
+def align_to_hour_boundary(timestamp: datetime) -> datetime:
+    utc_timestamp = timestamp.astimezone(UTC)
+    return utc_timestamp.replace(minute=0, second=0, microsecond=0)
+
+
+def _normalize_hourly_candles(candles: list[MarketCandle]) -> list[MarketCandle]:
+    candles_by_boundary: dict[datetime, MarketCandle] = {}
+    for candle in candles:
+        boundary = align_to_hour_boundary(candle.timestamp)
+        candles_by_boundary[boundary] = MarketCandle(
+            timestamp=boundary,
+            open=candle.open,
+            high=candle.high,
+            low=candle.low,
+            close=candle.close,
+            volume=candle.volume,
+        )
+    return [candles_by_boundary[key] for key in sorted(candles_by_boundary)]
+
+
 @dataclass(slots=True)
 class InMemoryMarketDataProvider:
     candles_by_symbol: dict[str, list[MarketCandle]]
+    candle_interval_minutes: int = 60
 
     def get_recent_candles(self, symbol: str, lookback_candles: int, end_time=None) -> list[MarketCandle]:
-        candles = self.candles_by_symbol[symbol]
+        candles = self._load_candles(symbol)
         if end_time is not None:
-            candles = [candle for candle in candles if candle.timestamp <= end_time]
+            end_boundary = align_to_hour_boundary(end_time)
+            candles = [candle for candle in candles if candle.timestamp <= end_boundary]
         return candles[-lookback_candles:]
 
     def get_candles_between(self, symbol: str, start, end) -> list[MarketCandle]:
+        start_boundary = align_to_hour_boundary(start)
+        end_boundary = align_to_hour_boundary(end)
         return [
             candle
-            for candle in self.candles_by_symbol[symbol]
-            if start <= candle.timestamp <= end
+            for candle in self._load_candles(symbol)
+            if start_boundary <= candle.timestamp <= end_boundary
         ]
+
+    def get_latest_candle_boundary(self, symbol: str, end_time: datetime | None = None) -> datetime | None:
+        candles = self.get_recent_candles(symbol, lookback_candles=10_000, end_time=end_time)
+        if not candles:
+            return None
+        return candles[-1].timestamp
+
+    def _load_candles(self, symbol: str) -> list[MarketCandle]:
+        return _normalize_hourly_candles(self.candles_by_symbol.get(symbol, []))
 
 
 def build_sample_provider(now: datetime, symbol: str) -> InMemoryMarketDataProvider:
-    anchor = now.astimezone(UTC)
+    anchor = align_to_hour_boundary(now)
     candles = []
     for hour in range(48):
         timestamp = anchor - timedelta(hours=47 - hour)
@@ -50,6 +86,7 @@ def build_sample_provider(now: datetime, symbol: str) -> InMemoryMarketDataProvi
 class CoinGeckoMarketDataProvider:
     days: int = 7
     http_get: Callable[[str], dict] | None = None
+    candle_interval_minutes: int = 60
     _cache: dict[str, list[MarketCandle]] = field(init=False, default_factory=dict)
 
     SYMBOL_MAP = {
@@ -63,15 +100,24 @@ class CoinGeckoMarketDataProvider:
     def get_recent_candles(self, symbol: str, lookback_candles: int, end_time=None) -> list[MarketCandle]:
         candles = self._load_candles(symbol)
         if end_time is not None:
-            candles = [candle for candle in candles if candle.timestamp <= end_time]
+            end_boundary = align_to_hour_boundary(end_time)
+            candles = [candle for candle in candles if candle.timestamp <= end_boundary]
         return candles[-lookback_candles:]
 
     def get_candles_between(self, symbol: str, start, end) -> list[MarketCandle]:
+        start_boundary = align_to_hour_boundary(start)
+        end_boundary = align_to_hour_boundary(end)
         return [
             candle
             for candle in self._load_candles(symbol)
-            if start <= candle.timestamp <= end
+            if start_boundary <= candle.timestamp <= end_boundary
         ]
+
+    def get_latest_candle_boundary(self, symbol: str, end_time: datetime | None = None) -> datetime | None:
+        candles = self.get_recent_candles(symbol, lookback_candles=10_000, end_time=end_time)
+        if not candles:
+            return None
+        return candles[-1].timestamp
 
     def _load_candles(self, symbol: str) -> list[MarketCandle]:
         if symbol in self._cache:
@@ -87,7 +133,7 @@ class CoinGeckoMarketDataProvider:
             int(item[0]): float(item[1])
             for item in payload.get("total_volumes", [])
         }
-        candles = [
+        raw_candles = [
             MarketCandle(
                 timestamp=datetime.fromtimestamp(int(price_point[0]) / 1000, tz=UTC),
                 open=float(price_point[1]),
@@ -98,8 +144,8 @@ class CoinGeckoMarketDataProvider:
             )
             for price_point in payload.get("prices", [])
         ]
-        self._cache[symbol] = candles
-        return candles
+        self._cache[symbol] = _normalize_hourly_candles(raw_candles)
+        return self._cache[symbol]
 
     def _fetch_json(self, url: str) -> dict:
         if self.http_get is not None:

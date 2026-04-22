@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from forecast_loop.models import Forecast, ForecastScore, Proposal, Review
+from forecast_loop.models import EvaluationSummary, Forecast, ForecastScore, Proposal, Review
 
 
 class JsonFileRepository:
@@ -14,6 +14,7 @@ class JsonFileRepository:
         self.scores_path = self.root / "scores.jsonl"
         self.reviews_path = self.root / "reviews.jsonl"
         self.proposals_path = self.root / "proposals.jsonl"
+        self.evaluation_summaries_path = self.root / "evaluation_summaries.jsonl"
 
     def save_forecast(self, forecast: Forecast) -> None:
         forecasts = self.load_forecasts()
@@ -57,6 +58,24 @@ class JsonFileRepository:
 
     def load_proposals(self) -> list[Proposal]:
         return self._load_lines(self.proposals_path, Proposal.from_dict)
+
+    def save_evaluation_summary(self, summary: EvaluationSummary) -> None:
+        normalized_summary = EvaluationSummary.from_dict(summary.to_dict())
+        summaries = self.load_evaluation_summaries()
+        if any(existing.summary_id == normalized_summary.summary_id for existing in summaries):
+            return
+        self._append(self.evaluation_summaries_path, normalized_summary.to_dict())
+
+    def load_evaluation_summaries(self) -> list[EvaluationSummary]:
+        summaries = self._load_lines(self.evaluation_summaries_path, EvaluationSummary.from_dict)
+        deduped: list[EvaluationSummary] = []
+        seen_summary_ids: set[str] = set()
+        for summary in summaries:
+            if summary.summary_id in seen_summary_ids:
+                continue
+            seen_summary_ids.add(summary.summary_id)
+            deduped.append(summary)
+        return deduped
 
     def _append(self, path: Path, payload: dict) -> None:
         with path.open("a", encoding="utf-8") as handle:

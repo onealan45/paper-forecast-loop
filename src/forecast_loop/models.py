@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
+import json
+from hashlib import sha1
 
 
 def _serialize_datetime(value: datetime | None) -> str | None:
@@ -10,6 +12,42 @@ def _serialize_datetime(value: datetime | None) -> str | None:
 
 def _deserialize_datetime(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value) if value is not None else None
+
+
+def _evaluation_summary_identity(
+    forecast_ids: list[str],
+    scored_forecast_ids: list[str],
+    score_ids: list[str],
+    review_ids: list[str],
+    proposal_ids: list[str],
+    replay_window_start: datetime | None,
+    replay_window_end: datetime | None,
+    anchor_time_start: datetime | None,
+    anchor_time_end: datetime | None,
+    forecast_count: int,
+    resolved_count: int,
+    waiting_for_data_count: int,
+    unscorable_count: int,
+    average_score: float | None,
+) -> str:
+    payload = {
+        "forecast_ids": sorted(forecast_ids),
+        "scored_forecast_ids": sorted(scored_forecast_ids),
+        "score_ids": sorted(score_ids),
+        "review_ids": sorted(review_ids),
+        "proposal_ids": sorted(proposal_ids),
+        "replay_window_start": _serialize_datetime(replay_window_start),
+        "replay_window_end": _serialize_datetime(replay_window_end),
+        "anchor_time_start": _serialize_datetime(anchor_time_start),
+        "anchor_time_end": _serialize_datetime(anchor_time_end),
+        "forecast_count": forecast_count,
+        "resolved_count": resolved_count,
+        "waiting_for_data_count": waiting_for_data_count,
+        "unscorable_count": unscorable_count,
+        "average_score": average_score,
+    }
+    digest = sha1(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()[:16]
+    return f"evaluation-summary:{digest}"
 
 
 @dataclass(slots=True)
@@ -217,6 +255,80 @@ class Proposal:
             threshold_used=payload.get("threshold_used", 0.6),
             decision_basis=payload.get("decision_basis", "legacy_proposal_basis"),
             rationale=payload["rationale"],
+        )
+
+
+@dataclass(slots=True)
+class EvaluationSummary:
+    summary_id: str
+    replay_id: str
+    generated_at: datetime
+    forecast_ids: list[str]
+    scored_forecast_ids: list[str]
+    replay_window_start: datetime | None
+    replay_window_end: datetime | None
+    anchor_time_start: datetime | None
+    anchor_time_end: datetime | None
+    forecast_count: int
+    resolved_count: int
+    waiting_for_data_count: int
+    unscorable_count: int
+    average_score: float | None
+    score_ids: list[str]
+    review_ids: list[str]
+    proposal_ids: list[str]
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        for key in ("generated_at", "replay_window_start", "replay_window_end", "anchor_time_start", "anchor_time_end"):
+            payload[key] = _serialize_datetime(payload[key])
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "EvaluationSummary":
+        replay_window_start = _deserialize_datetime(payload.get("replay_window_start"))
+        replay_window_end = _deserialize_datetime(payload.get("replay_window_end"))
+        anchor_time_start = _deserialize_datetime(payload.get("anchor_time_start"))
+        anchor_time_end = _deserialize_datetime(payload.get("anchor_time_end"))
+        forecast_ids = payload.get("forecast_ids", [])
+        scored_forecast_ids = payload.get("scored_forecast_ids", [])
+        score_ids = payload.get("score_ids", [])
+        review_ids = payload.get("review_ids", [])
+        proposal_ids = payload.get("proposal_ids", [])
+        summary_id = _evaluation_summary_identity(
+            forecast_ids=forecast_ids,
+            scored_forecast_ids=scored_forecast_ids,
+            score_ids=score_ids,
+            review_ids=review_ids,
+            proposal_ids=proposal_ids,
+            replay_window_start=replay_window_start,
+            replay_window_end=replay_window_end,
+            anchor_time_start=anchor_time_start,
+            anchor_time_end=anchor_time_end,
+            forecast_count=payload["forecast_count"],
+            resolved_count=payload["resolved_count"],
+            waiting_for_data_count=payload["waiting_for_data_count"],
+            unscorable_count=payload["unscorable_count"],
+            average_score=payload.get("average_score"),
+        )
+        return cls(
+            summary_id=summary_id,
+            replay_id=payload["replay_id"],
+            generated_at=datetime.fromisoformat(payload["generated_at"]),
+            forecast_ids=sorted(forecast_ids),
+            scored_forecast_ids=sorted(scored_forecast_ids),
+            replay_window_start=replay_window_start,
+            replay_window_end=replay_window_end,
+            anchor_time_start=anchor_time_start,
+            anchor_time_end=anchor_time_end,
+            forecast_count=payload["forecast_count"],
+            resolved_count=payload["resolved_count"],
+            waiting_for_data_count=payload["waiting_for_data_count"],
+            unscorable_count=payload["unscorable_count"],
+            average_score=payload.get("average_score"),
+            score_ids=sorted(score_ids),
+            review_ids=sorted(review_ids),
+            proposal_ids=sorted(proposal_ids),
         )
 
 

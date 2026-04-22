@@ -24,7 +24,9 @@ This version intentionally includes only:
   - `scores.jsonl`
   - `reviews.jsonl`
   - `proposals.jsonl`
-- one-off CLI execution via `run-once`
+- CLI execution via:
+  - `run-once`
+  - `replay-range`
 
 This version intentionally excludes:
 
@@ -139,6 +141,44 @@ This version keeps JSONL storage, but rerun safety is enforced:
 - the same review does not create duplicate proposals
 - rerunning `run-once` in the same hour does not keep creating semantically duplicate artifacts
 
+## Replay Contract
+
+Use `replay-range` for deterministic historical validation.
+
+Replay guarantees:
+
+- input datetimes must be timezone-aware
+- the replay runner itself only accepts hour-aligned UTC boundaries
+- replay executes on fixed hourly steps only
+- replay uses the same forecast / resolve / scoring contract as `run-once`
+- replay evaluation summaries are built from the replay-scoped artifacts for the requested symbol and window, not from the entire storage directory
+- replay summaries are persisted to the base storage directory, while replay-run artifacts live in a replay-scoped storage path under `.replay/`
+
+### Replay Scoped Storage
+
+Each replay invocation writes its raw artifacts into a deterministic path under the chosen storage directory:
+
+```text
+<storage-dir>/.replay/<provider>/<symbol>/<start>-<end>/
+```
+
+This avoids contaminating one replay run with hidden forecast, score, review, or proposal state from another replay window or another symbol.
+
+### Replay Metadata
+
+After each replay run, the CLI writes:
+
+- `last_replay_meta.json` in the base storage directory
+- `evaluation_summaries.jsonl` in the base storage directory
+
+The replay metadata reports:
+
+- replay window start/end
+- cycle count
+- forecasts created
+- scores created
+- the replay-scoped evaluation summary
+
 ## Failure and Degrade Behavior
 
 The loop degrades conservatively:
@@ -168,6 +208,12 @@ Run one public-data cycle:
 python run_forecast_loop.py run-once --provider coingecko --symbol BTC-USD --storage-dir .\paper_storage\manual-coingecko
 ```
 
+Run one deterministic sample replay:
+
+```powershell
+python run_forecast_loop.py replay-range --provider sample --symbol BTC-USD --storage-dir .\paper_storage\manual-replay --start 2026-04-21T04:00:00+00:00 --end 2026-04-21T08:00:00+00:00 --horizon-hours 2
+```
+
 ## Remaining Gaps Intentionally Left for the Next Stage
 
 This milestone improves correctness and auditability, but it does not yet solve everything:
@@ -178,3 +224,4 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - proposal logic is still heuristic and conservative
 - there is no explicit repair daemon or orchestration state machine in this repo
 - there is no operator UI yet
+- replay still writes summary metadata into the base storage directory instead of a more formal run registry or database

@@ -87,7 +87,15 @@ def _replay_range(args) -> int:
     start = _parse_datetime(args.start)
     end = _parse_datetime(args.end)
     provider = _build_data_provider(args.provider, end, args.symbol)
-    repository = JsonFileRepository(args.storage_dir)
+    base_storage_dir = Path(args.storage_dir)
+    replay_storage_dir = _replay_storage_dir(
+        storage_dir=base_storage_dir,
+        provider=args.provider,
+        symbol=args.symbol,
+        start_utc=start.astimezone(UTC),
+        end_utc=end.astimezone(UTC),
+    )
+    repository = JsonFileRepository(replay_storage_dir)
     runner = ReplayRunner(
         config=LoopConfig(
             symbol=args.symbol,
@@ -107,9 +115,10 @@ def _replay_range(args) -> int:
         end_utc=end.astimezone(UTC),
         repository=repository,
     )
-    repository.save_evaluation_summary(summary)
+    summary_repository = JsonFileRepository(base_storage_dir)
+    summary_repository.save_evaluation_summary(summary)
     _write_last_replay_meta(
-        storage_dir=Path(args.storage_dir),
+        storage_dir=base_storage_dir,
         start_utc=start.astimezone(UTC),
         end_utc=end.astimezone(UTC),
         symbol=args.symbol,
@@ -188,8 +197,28 @@ def _write_last_replay_meta(
 def _parse_datetime(value: str) -> datetime:
     parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise ValueError("replay range datetimes must be timezone-aware")
+        raise ValueError("datetimes must be timezone-aware")
     return parsed.astimezone(UTC)
+
+
+def _replay_storage_dir(
+    *,
+    storage_dir: Path,
+    provider: str,
+    symbol: str,
+    start_utc: datetime,
+    end_utc: datetime,
+) -> Path:
+    def _safe_timestamp(value: datetime) -> str:
+        return value.strftime("%Y%m%dT%H%M%SZ")
+
+    return (
+        storage_dir
+        / ".replay"
+        / provider
+        / symbol
+        / f"{_safe_timestamp(start_utc)}-{_safe_timestamp(end_utc)}"
+    )
 
 
 def _build_replay_scoped_summary(
@@ -219,7 +248,7 @@ def _build_replay_scoped_summary(
         proposal
         for proposal in repository.load_proposals()
         if proposal.review_id in review_ids
-        or any(score_id in score_ids for score_id in proposal.score_ids)
+        and (not proposal.score_ids or set(proposal.score_ids).issubset(score_ids))
     ]
     return build_evaluation_summary(
         replay_id=replay_id,

@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from forecast_loop.cli import main
+from forecast_loop.cli import _replay_storage_dir, main
 from forecast_loop.evaluation import build_evaluation_summary
 from forecast_loop.config import LoopConfig
 from forecast_loop.models import Forecast, ForecastScore, Proposal, Review
@@ -1007,10 +1007,11 @@ def test_cli_replay_range_scopes_summary_to_requested_window(tmp_path):
     assert payload["evaluation_summary"]["anchor_time_start"] == "2026-04-21T06:00:00+00:00"
     assert payload["evaluation_summary"]["anchor_time_end"] == "2026-04-21T08:00:00+00:00"
     assert len(payload["evaluation_summary"]["score_ids"]) == 1
-    assert payload["evaluation_summary"]["review_ids"] == []
     assert payload["evaluation_summary"]["proposal_ids"] == []
     assert summaries["forecast_count"] == 3
     assert summaries["resolved_count"] == 1
+    assert summaries["proposal_ids"] == []
+    assert summaries["review_ids"] == payload["evaluation_summary"]["review_ids"]
 
 
 def test_cli_replay_range_rejects_naive_datetimes(tmp_path):
@@ -1035,7 +1036,7 @@ def test_cli_replay_range_rejects_naive_datetimes(tmp_path):
 
 
 def test_cli_run_once_rejects_naive_now(tmp_path):
-    with pytest.raises(ValueError, match="timezone-aware"):
+    with pytest.raises(ValueError, match="datetimes must be timezone-aware"):
         main(
             [
                 "run-once",
@@ -1158,5 +1159,87 @@ def test_cli_replay_range_scopes_to_requested_symbol_in_reused_storage(tmp_path)
     assert payload["symbol"] == "ETH-USD"
     assert payload["evaluation_summary"]["forecast_count"] == 3
     assert payload["evaluation_summary"]["resolved_count"] == 1
+    assert payload["evaluation_summary"]["proposal_ids"] == []
     assert summary_row["forecast_count"] == 3
     assert summary_row["resolved_count"] == 1
+    assert summary_row["proposal_ids"] == []
+    assert summary_row["review_ids"] == payload["evaluation_summary"]["review_ids"]
+
+
+def test_cli_replay_range_does_not_leak_partially_overlapping_proposals(tmp_path):
+    first_exit_code = main(
+        [
+            "replay-range",
+            "--provider",
+            "sample",
+            "--symbol",
+            "BTC-USD",
+            "--storage-dir",
+            str(tmp_path),
+            "--start",
+            "2026-04-21T04:00:00+00:00",
+            "--end",
+            "2026-04-21T08:00:00+00:00",
+            "--horizon-hours",
+            "2",
+        ]
+    )
+
+    replay_storage = _replay_storage_dir(
+        storage_dir=tmp_path,
+        provider="sample",
+        symbol="BTC-USD",
+        start_utc=datetime(2026, 4, 21, 4, 0, tzinfo=UTC),
+        end_utc=datetime(2026, 4, 21, 8, 0, tzinfo=UTC),
+    )
+    repository = JsonFileRepository(replay_storage)
+    forecast_by_anchor = {
+        forecast.anchor_time: forecast
+        for forecast in repository.load_forecasts()
+        if forecast.symbol == "BTC-USD"
+    }
+    scoped_forecast_id = forecast_by_anchor[datetime(2026, 4, 21, 6, 0, tzinfo=UTC)].forecast_id
+    scoped_score_id = next(
+        score.score_id
+        for score in repository.load_scores()
+        if score.forecast_id == scoped_forecast_id
+    )
+    repository.save_proposal(
+        Proposal(
+            proposal_id="proposal:mixed",
+            created_at=datetime(2026, 4, 21, 9, 30, tzinfo=UTC),
+            review_id="review:stale",
+            score_ids=["score:btc:old", scoped_score_id],
+            proposal_type="risk_adjustment",
+            changes={"max_position_pct": 0.10, "new_entry_enabled": False},
+            threshold_used=0.6,
+            decision_basis="mixed stale proposal",
+            rationale="should not be included because only part of the evidence overlaps",
+        )
+    )
+
+    second_exit_code = main(
+        [
+            "replay-range",
+            "--provider",
+            "sample",
+            "--symbol",
+            "BTC-USD",
+            "--storage-dir",
+            str(tmp_path),
+            "--start",
+            "2026-04-21T06:00:00+00:00",
+            "--end",
+            "2026-04-21T08:00:00+00:00",
+            "--horizon-hours",
+            "2",
+        ]
+    )
+
+    payload = json.loads((tmp_path / "last_replay_meta.json").read_text(encoding="utf-8"))
+    summary_row = json.loads((tmp_path / "evaluation_summaries.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+
+    assert first_exit_code == 0
+    assert second_exit_code == 0
+    assert payload["evaluation_summary"]["proposal_ids"] == []
+    assert summary_row["proposal_ids"] == []

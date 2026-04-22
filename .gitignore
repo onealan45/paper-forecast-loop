@@ -1,0 +1,13 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+
+debug_resolve_copy/
+paper_storage/
+public_run/
+public_run_seq/
+sample_run/
+verify_public_run/
+
+.venv/
+venv/

@@ -6,8 +6,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from forecast_loop.config import LoopConfig
+from forecast_loop.evaluation import build_evaluation_summary
 from forecast_loop.pipeline import ForecastingLoop
 from forecast_loop.providers import CoinGeckoMarketDataProvider, build_sample_provider
+from forecast_loop.replay import ReplayRunner
 from forecast_loop.storage import JsonFileRepository
 
 
@@ -23,18 +25,25 @@ def main(argv: list[str] | None = None) -> int:
     run_once.add_argument("--lookback-candles", type=int, default=8)
     run_once.add_argument("--now")
 
+    replay_range = subparsers.add_parser("replay-range")
+    replay_range.add_argument("--provider", choices=["sample", "coingecko"], default="sample")
+    replay_range.add_argument("--symbol", default="BTC-USD")
+    replay_range.add_argument("--storage-dir", required=True)
+    replay_range.add_argument("--start", required=True)
+    replay_range.add_argument("--end", required=True)
+    replay_range.add_argument("--horizon-hours", type=int, default=24)
+    replay_range.add_argument("--lookback-candles", type=int, default=8)
+
     args = parser.parse_args(argv)
     if args.command == "run-once":
         return _run_once(args)
+    if args.command == "replay-range":
+        return _replay_range(args)
     return 1
 
 
 def _run_once(args) -> int:
-    now = (
-        datetime.fromisoformat(args.now).astimezone(UTC)
-        if args.now
-        else datetime.now(tz=UTC)
-    )
+    now = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
     provider = _build_data_provider(args.provider, now, args.symbol)
     repository = JsonFileRepository(args.storage_dir)
     loop = ForecastingLoop(
@@ -74,6 +83,53 @@ def _build_data_provider(provider_name: str, now: datetime, symbol: str):
     return CoinGeckoMarketDataProvider()
 
 
+def _replay_range(args) -> int:
+    start = _parse_datetime(args.start)
+    end = _parse_datetime(args.end)
+    provider = _build_data_provider(args.provider, end, args.symbol)
+    repository = JsonFileRepository(args.storage_dir)
+    runner = ReplayRunner(
+        config=LoopConfig(
+            symbol=args.symbol,
+            horizon_hours=args.horizon_hours,
+            lookback_candles=args.lookback_candles,
+        ),
+        data_provider=provider,
+        repository=repository,
+    )
+    result = runner.run_range(start=start, end=end)
+
+    summary = _build_replay_scoped_summary(
+        replay_id=f"replay:{args.provider}:{args.symbol}:{start.isoformat()}:{end.isoformat()}",
+        generated_at=datetime.now(tz=UTC),
+        symbol=args.symbol,
+        start_utc=start.astimezone(UTC),
+        end_utc=end.astimezone(UTC),
+        repository=repository,
+    )
+    repository.save_evaluation_summary(summary)
+    _write_last_replay_meta(
+        storage_dir=Path(args.storage_dir),
+        start_utc=start.astimezone(UTC),
+        end_utc=end.astimezone(UTC),
+        symbol=args.symbol,
+        provider=args.provider,
+        result=result,
+        summary=summary,
+    )
+    print(
+        json.dumps(
+            {
+                "symbol": args.symbol,
+                "cycles_run": result.cycles_run,
+                "scores_created": result.scores_created,
+                "evaluation_summary_id": summary.summary_id,
+            }
+        )
+    )
+    return 0
+
+
 def _write_last_run_meta(*, storage_dir: Path, now_utc: datetime, symbol: str, provider: str, result) -> None:
     storage_dir.mkdir(parents=True, exist_ok=True)
     meta_path = storage_dir / "last_run_meta.json"
@@ -95,6 +151,84 @@ def _write_last_run_meta(*, storage_dir: Path, now_utc: datetime, symbol: str, p
     tmp_path = meta_path.with_suffix(".json.tmp")
     tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     tmp_path.replace(meta_path)
+
+
+def _write_last_replay_meta(
+    *,
+    storage_dir: Path,
+    start_utc: datetime,
+    end_utc: datetime,
+    symbol: str,
+    provider: str,
+    result,
+    summary,
+) -> None:
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    meta_path = storage_dir / "last_replay_meta.json"
+    payload = {
+        "generated_at_utc": datetime.now(tz=UTC).isoformat(),
+        "workspace": str(Path.cwd()),
+        "storage_dir": str(storage_dir.resolve()),
+        "provider": provider,
+        "symbol": symbol,
+        "start_utc": start_utc.isoformat(),
+        "end_utc": end_utc.isoformat(),
+        "cycles_run": result.cycles_run,
+        "forecasts_created": result.forecasts_created,
+        "scores_created": result.scores_created,
+        "first_cycle_at": result.first_cycle_at.isoformat(),
+        "last_cycle_at": result.last_cycle_at.isoformat(),
+        "evaluation_summary": summary.to_dict(),
+    }
+    tmp_path = meta_path.with_suffix(".json.tmp")
+    tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp_path.replace(meta_path)
+
+
+def _parse_datetime(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("replay range datetimes must be timezone-aware")
+    return parsed.astimezone(UTC)
+
+
+def _build_replay_scoped_summary(
+    *,
+    replay_id: str,
+    generated_at: datetime,
+    symbol: str,
+    start_utc: datetime,
+    end_utc: datetime,
+    repository: JsonFileRepository,
+):
+    forecasts = [
+        forecast
+        for forecast in repository.load_forecasts()
+        if forecast.symbol == symbol and start_utc <= forecast.anchor_time <= end_utc
+    ]
+    forecast_ids = {forecast.forecast_id for forecast in forecasts}
+    scores = [score for score in repository.load_scores() if score.forecast_id in forecast_ids]
+    score_ids = {score.score_id for score in scores}
+    reviews = [
+        review
+        for review in repository.load_reviews()
+        if review.forecast_ids and set(review.forecast_ids).issubset(forecast_ids)
+    ]
+    review_ids = {review.review_id for review in reviews}
+    proposals = [
+        proposal
+        for proposal in repository.load_proposals()
+        if proposal.review_id in review_ids
+        or any(score_id in score_ids for score_id in proposal.score_ids)
+    ]
+    return build_evaluation_summary(
+        replay_id=replay_id,
+        generated_at=generated_at,
+        forecasts=forecasts,
+        scores=scores,
+        reviews=reviews,
+        proposals=proposals,
+    )
 
 
 if __name__ == "__main__":

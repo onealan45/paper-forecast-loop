@@ -27,10 +27,11 @@ This version intentionally includes only:
 - CLI execution via:
   - `run-once`
   - `replay-range`
+  - `render-dashboard`
 
 This version intentionally excludes:
 
-- UI
+- interactive UI controls
 - live trading
 - real capital
 - multi-asset support
@@ -179,6 +180,65 @@ The replay metadata reports:
 - scores created
 - the replay-scoped evaluation summary
 
+## Read-Only Inspector
+
+This repository now includes a minimal read-only inspector layer.
+
+Purpose:
+
+- inspect the current system state without reading JSONL files manually
+- inspect the latest forecast / score / review / proposal
+- inspect the latest replay summary and raw metadata
+- support operator review while the system remains in building mode
+
+Current form:
+
+- static HTML output
+- generated from existing persisted artifacts
+- no live controls
+- no trading actions
+
+### Dashboard Contract
+
+The dashboard is an inspection surface only.
+
+It does not:
+
+- trigger forecasts
+- mutate loop state
+- write reviews or proposals
+- control automation
+
+It only reads:
+
+- `forecasts.jsonl`
+- `scores.jsonl`
+- `reviews.jsonl`
+- `proposals.jsonl`
+- `evaluation_summaries.jsonl`
+- `last_run_meta.json`
+- `last_replay_meta.json`
+
+### Dashboard Command
+
+Generate the current dashboard:
+
+```powershell
+python run_forecast_loop.py render-dashboard --storage-dir .\paper_storage\manual-sample
+```
+
+By default this writes:
+
+```text
+<storage-dir>\dashboard.html
+```
+
+You can also choose a specific output path:
+
+```powershell
+python run_forecast_loop.py render-dashboard --storage-dir .\paper_storage\manual-sample --output .\dashboard.html
+```
+
 ## Failure and Degrade Behavior
 
 The loop degrades conservatively:
@@ -187,6 +247,7 @@ The loop degrades conservatively:
 - if provider coverage exists but required hourly boundaries are missing, the forecast becomes `unscorable`
 - if candles are empty or insufficient for classification, the loop does not crash into scoring; it leaves an auditable terminal state instead
 - review and proposal generation only happen when the current run produced valid scores
+- the dashboard degrades read-only: if no artifacts exist yet, it renders explicit empty states instead of failing
 
 ## Local Commands
 
@@ -214,6 +275,12 @@ Run one deterministic sample replay:
 python run_forecast_loop.py replay-range --provider sample --symbol BTC-USD --storage-dir .\paper_storage\manual-replay --start 2026-04-21T04:00:00+00:00 --end 2026-04-21T08:00:00+00:00 --horizon-hours 2
 ```
 
+Render a dashboard for an existing storage directory:
+
+```powershell
+python run_forecast_loop.py render-dashboard --storage-dir .\paper_storage\manual-replay
+```
+
 ## Remaining Gaps Intentionally Left for the Next Stage
 
 This milestone improves correctness and auditability, but it does not yet solve everything:
@@ -223,5 +290,5 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - there is no portfolio or strategy-performance layer
 - proposal logic is still heuristic and conservative
 - there is no explicit repair daemon or orchestration state machine in this repo
-- there is no operator UI yet
+- the inspector is currently static HTML, not a live operator app
 - replay still writes summary metadata into the base storage directory instead of a more formal run registry or database

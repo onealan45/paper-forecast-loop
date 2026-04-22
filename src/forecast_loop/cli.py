@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from forecast_loop.config import LoopConfig
+from forecast_loop.dashboard import write_dashboard_html
 from forecast_loop.evaluation import build_evaluation_summary
 from forecast_loop.pipeline import ForecastingLoop
 from forecast_loop.providers import CoinGeckoMarketDataProvider, build_sample_provider
@@ -34,11 +35,17 @@ def main(argv: list[str] | None = None) -> int:
     replay_range.add_argument("--horizon-hours", type=int, default=24)
     replay_range.add_argument("--lookback-candles", type=int, default=8)
 
+    render_dashboard = subparsers.add_parser("render-dashboard")
+    render_dashboard.add_argument("--storage-dir", required=True)
+    render_dashboard.add_argument("--output")
+
     args = parser.parse_args(argv)
     if args.command == "run-once":
         return _run_once(args)
     if args.command == "replay-range":
         return _replay_range(args)
+    if args.command == "render-dashboard":
+        return _render_dashboard(args)
     return 1
 
 
@@ -133,6 +140,22 @@ def _replay_range(args) -> int:
                 "cycles_run": result.cycles_run,
                 "scores_created": result.scores_created,
                 "evaluation_summary_id": summary.summary_id,
+            }
+        )
+    )
+    return 0
+
+
+def _render_dashboard(args) -> int:
+    output_path = write_dashboard_html(
+        storage_dir=args.storage_dir,
+        output_path=args.output,
+    )
+    print(
+        json.dumps(
+            {
+                "storage_dir": str(Path(args.storage_dir).resolve()),
+                "dashboard_path": str(output_path.resolve()),
             }
         )
     )

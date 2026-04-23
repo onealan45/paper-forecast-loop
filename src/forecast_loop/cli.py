@@ -8,6 +8,7 @@ from pathlib import Path
 from forecast_loop.config import LoopConfig
 from forecast_loop.dashboard import write_dashboard_html
 from forecast_loop.evaluation import build_evaluation_summary
+from forecast_loop.maintenance import repair_storage
 from forecast_loop.pipeline import ForecastingLoop
 from forecast_loop.providers import CoinGeckoMarketDataProvider, build_sample_provider
 from forecast_loop.replay import ReplayRunner
@@ -39,6 +40,9 @@ def main(argv: list[str] | None = None) -> int:
     render_dashboard.add_argument("--storage-dir", required=True)
     render_dashboard.add_argument("--output")
 
+    repair_storage_cmd = subparsers.add_parser("repair-storage")
+    repair_storage_cmd.add_argument("--storage-dir", required=True)
+
     args = parser.parse_args(argv)
     if args.command == "run-once":
         return _run_once(args)
@@ -46,6 +50,8 @@ def main(argv: list[str] | None = None) -> int:
         return _replay_range(args)
     if args.command == "render-dashboard":
         return _render_dashboard(args)
+    if args.command == "repair-storage":
+        return _repair_storage(args)
     return 1
 
 
@@ -156,6 +162,21 @@ def _render_dashboard(args) -> int:
             {
                 "storage_dir": str(Path(args.storage_dir).resolve()),
                 "dashboard_path": str(output_path.resolve()),
+            }
+        )
+    )
+    return 0
+
+
+def _repair_storage(args) -> int:
+    result = repair_storage(args.storage_dir)
+    print(
+        json.dumps(
+            {
+                "storage_dir": str(result.storage_dir.resolve()),
+                "quarantined_forecast_count": result.quarantined_forecast_count,
+                "kept_forecast_count": result.kept_forecast_count,
+                "status": result.status,
             }
         )
     )

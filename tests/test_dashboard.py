@@ -134,6 +134,61 @@ def test_render_dashboard_includes_latest_artifacts(tmp_path):
     assert summary.summary_id in html
 
 
+def test_render_dashboard_marks_stale_replay_context(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    latest_forecast = Forecast(
+        forecast_id="forecast:live",
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 23, 13, 23, tzinfo=UTC),
+        anchor_time=datetime(2026, 4, 23, 13, 0, tzinfo=UTC),
+        target_window_start=datetime(2026, 4, 23, 13, 0, tzinfo=UTC),
+        target_window_end=datetime(2026, 4, 24, 13, 0, tzinfo=UTC),
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        status="pending",
+        status_reason="awaiting_horizon_end",
+        predicted_regime="trend_down",
+        confidence=0.55,
+        provider_data_through=datetime(2026, 4, 23, 13, 0, tzinfo=UTC),
+        observed_candle_count=8,
+    )
+    replay_forecast = Forecast(
+        forecast_id="forecast:replay",
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 22, 8, 0, tzinfo=UTC),
+        anchor_time=datetime(2026, 4, 22, 8, 0, tzinfo=UTC),
+        target_window_start=datetime(2026, 4, 22, 8, 0, tzinfo=UTC),
+        target_window_end=datetime(2026, 4, 22, 9, 0, tzinfo=UTC),
+        candle_interval_minutes=60,
+        expected_candle_count=2,
+        status="resolved",
+        status_reason="scored",
+        predicted_regime="trend_up",
+        confidence=0.55,
+        provider_data_through=datetime(2026, 4, 22, 9, 0, tzinfo=UTC),
+        observed_candle_count=2,
+    )
+    repository.save_forecast(latest_forecast)
+    summary = build_evaluation_summary(
+        replay_id="replay:btc",
+        generated_at=datetime(2026, 4, 22, 18, 40, tzinfo=UTC),
+        forecasts=[replay_forecast],
+        scores=[],
+        reviews=[],
+        proposals=[],
+    )
+    repository.save_evaluation_summary(summary)
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+    html = render_dashboard_html(snapshot)
+
+    assert snapshot.replay_is_stale is True
+    assert "historical" in snapshot.replay_freshness_label.lower()
+    assert "Generated At" in html
+
+
 def test_cli_render_dashboard_writes_html_file(tmp_path):
     exit_code = main(
         [

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from html import escape
 import json
+import os
 from pathlib import Path
+import tomllib
 
 from forecast_loop.models import EvaluationSummary, Forecast, ForecastScore, Proposal, Review
 from forecast_loop.storage import JsonFileRepository
@@ -24,6 +27,13 @@ class DashboardSnapshot:
     review_count: int
     proposal_count: int
     replay_summary_count: int
+    current_mode: str
+    hourly_status: str
+    building_status: str
+    mode_reason: str
+    replay_freshness_label: str
+    replay_generated_at: datetime | None
+    replay_is_stale: bool
 
 
 def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
@@ -34,21 +44,37 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
     reviews = repository.load_reviews()
     proposals = repository.load_proposals()
     replay_summaries = repository.load_evaluation_summaries()
+    latest_forecast = forecasts[-1] if forecasts else None
+    latest_replay_summary = replay_summaries[-1] if replay_summaries else None
+    hourly_status = _load_automation_status("hourly-paper-forecast")
+    building_status = _load_automation_status("loop-building-heartbeat")
+    current_mode, mode_reason = _derive_mode(hourly_status, building_status)
+    replay_freshness_label, replay_generated_at, replay_is_stale = _derive_replay_freshness(
+        latest_replay_summary,
+        latest_forecast,
+    )
 
     return DashboardSnapshot(
         storage_dir=storage_dir,
         last_run_meta=_load_json(storage_dir / "last_run_meta.json"),
         last_replay_meta=_load_json(storage_dir / "last_replay_meta.json"),
-        latest_forecast=forecasts[-1] if forecasts else None,
+        latest_forecast=latest_forecast,
         latest_score=scores[-1] if scores else None,
         latest_review=reviews[-1] if reviews else None,
         latest_proposal=proposals[-1] if proposals else None,
-        latest_replay_summary=replay_summaries[-1] if replay_summaries else None,
+        latest_replay_summary=latest_replay_summary,
         forecast_count=len(forecasts),
         score_count=len(scores),
         review_count=len(reviews),
         proposal_count=len(proposals),
         replay_summary_count=len(replay_summaries),
+        current_mode=current_mode,
+        hourly_status=hourly_status,
+        building_status=building_status,
+        mode_reason=mode_reason,
+        replay_freshness_label=replay_freshness_label,
+        replay_generated_at=replay_generated_at,
+        replay_is_stale=replay_is_stale,
     )
 
 
@@ -65,6 +91,7 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Paper Forecast Loop Dashboard</title>
   <style>
+    html {{ color-scheme: dark; }}
     :root {{
       --bg: #08111b;
       --panel: rgba(11, 24, 38, 0.88);
@@ -75,6 +102,7 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
       --accent: #7dd3fc;
       --ok: #8df5ae;
       --warn: #ffd479;
+      --focus: #f8fafc;
     }}
     * {{ box-sizing: border-box; }}
     body {{
@@ -85,6 +113,23 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
         linear-gradient(180deg, #08111b 0%, #0b1521 100%);
       color: var(--text);
       min-height: 100vh;
+    }}
+    .skip-link {{
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      transform: translateY(-150%);
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: rgba(248, 250, 252, 0.96);
+      color: #08111b;
+      text-decoration: none;
+      z-index: 20;
+    }}
+    .skip-link:focus-visible {{
+      transform: translateY(0);
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
     }}
     .shell {{
       display: grid;
@@ -110,12 +155,14 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
       margin: 0 0 8px;
       font-size: 1.8rem;
       line-height: 1.1;
+      text-wrap: balance;
     }}
     .subtitle {{
       color: var(--muted);
       margin: 0 0 24px;
       font-size: 0.95rem;
       line-height: 1.5;
+      overflow-wrap: anywhere;
     }}
     .nav-list {{
       list-style: none;
@@ -138,10 +185,20 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
       border-color: var(--line);
       background: rgba(125, 211, 252, 0.06);
     }}
+    .nav-list a:focus-visible,
+    summary:focus-visible {{
+      outline: 2px solid var(--focus);
+      outline-offset: 3px;
+      color: var(--text);
+      border-color: var(--accent);
+    }}
     main {{
       padding: 34px 40px 48px;
       display: grid;
       gap: 22px;
+    }}
+    section[id] {{
+      scroll-margin-top: 24px;
     }}
     .grid {{
       display: grid;
@@ -163,11 +220,14 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
       margin: 0 0 8px;
       font-size: 1.05rem;
       letter-spacing: 0.01em;
+      text-wrap: balance;
+      overflow-wrap: anywhere;
     }}
     .meta {{
       color: var(--muted);
       font-size: 0.9rem;
       margin-bottom: 14px;
+      overflow-wrap: anywhere;
     }}
     .stat-grid {{
       display: grid;
@@ -191,6 +251,7 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
     .stat-value {{
       font-size: 1.35rem;
       font-weight: 600;
+      font-variant-numeric: tabular-nums;
     }}
     .kicker {{
       color: var(--accent);
@@ -210,7 +271,7 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
       margin: 0;
     }}
     dt {{ color: var(--muted); }}
-    dd {{ margin: 0; }}
+    dd {{ margin: 0; overflow-wrap: anywhere; }}
     .tag {{
       display: inline-flex;
       align-items: center;
@@ -220,6 +281,14 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
       border: 1px solid var(--line);
       background: rgba(125, 211, 252, 0.08);
       font-size: 0.85rem;
+    }}
+    .tag.warn {{
+      background: rgba(255, 212, 121, 0.1);
+      color: var(--warn);
+    }}
+    .tag.ok {{
+      background: rgba(141, 245, 174, 0.1);
+      color: var(--ok);
     }}
     pre {{
       margin: 0;
@@ -251,6 +320,7 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
   </style>
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
   <div class="shell">
     <aside class="sidebar">
       <div class="brand">Paper-Only Inspector</div>
@@ -264,11 +334,18 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
         <li><a href="#raw">Raw Metadata</a></li>
       </ul>
     </aside>
-    <main>
+    <main id="main-content">
       <section class="panel hero" id="system">
         <div class="kicker">Current Mode</div>
         <h2>System State</h2>
+        <div class="meta">
+          <span class="tag">{escape(snapshot.current_mode)}</span>
+          <span class="tag">{escape(f"Hourly: {snapshot.hourly_status}")}</span>
+          <span class="tag">{escape(f"Building: {snapshot.building_status}")}</span>
+          <span class="tag {'warn' if snapshot.replay_is_stale else 'ok'}">{escape(snapshot.replay_freshness_label)}</span>
+        </div>
         <div class="meta">Storage: {escape(str(snapshot.storage_dir.resolve()))}</div>
+        <div class="meta">{escape(snapshot.mode_reason)}</div>
         <div class="stat-grid">
           <div class="stat"><div class="stat-label">Forecasts</div><div class="stat-value">{snapshot.forecast_count}</div></div>
           <div class="stat"><div class="stat-label">Scores</div><div class="stat-value">{snapshot.score_count}</div></div>
@@ -389,8 +466,9 @@ def render_replay_panel(summary: EvaluationSummary | None) -> str:
 
     return f"""
       <h2>{escape(summary.summary_id)}</h2>
-      <div class="meta">Replay evidence for current scoped artifacts.</div>
+      <div class="meta">Historical replay evidence for the current scoped artifacts.</div>
       <dl>
+        <dt>Generated At</dt><dd>{escape(summary.generated_at.isoformat())}</dd>
         <dt>Forecast Count</dt><dd>{summary.forecast_count}</dd>
         <dt>Resolved</dt><dd>{summary.resolved_count}</dd>
         <dt>Waiting</dt><dd>{summary.waiting_for_data_count}</dd>
@@ -414,3 +492,37 @@ def _load_json(path: Path) -> dict | None:
     if not path.exists():
         return None
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _load_automation_status(automation_id: str) -> str:
+    codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
+    path = codex_home / "automations" / automation_id / "automation.toml"
+    if not path.exists():
+        return "NOT_FOUND"
+    payload = tomllib.loads(path.read_text(encoding="utf-8"))
+    return payload.get("status", "UNKNOWN")
+
+
+def _derive_mode(hourly_status: str, building_status: str) -> tuple[str, str]:
+    if building_status == "ACTIVE":
+        return "Building Mode", "Loop Building Heartbeat is active while the system is still being improved."
+    if hourly_status == "ACTIVE":
+        return "Hourly Research Mode", "Hourly Paper Forecast is active and the system is running paper-only prediction cycles."
+    if hourly_status == "PAUSED":
+        return "Paused Prediction Mode", "Hourly Paper Forecast is paused while the system remains under manual inspection."
+    return "Manual Mode", "No known automation is currently active for this workspace."
+
+
+def _derive_replay_freshness(
+    summary: EvaluationSummary | None,
+    latest_forecast: Forecast | None,
+) -> tuple[str, datetime | None, bool]:
+    if summary is None:
+        return "No replay summary yet", None, False
+    if latest_forecast is None or summary.anchor_time_end is None:
+        return "Historical replay available", summary.generated_at, False
+    delta = latest_forecast.anchor_time - summary.anchor_time_end
+    if delta > timedelta(hours=1):
+        hours = int(delta.total_seconds() // 3600)
+        return f"Replay is historical ({hours}h behind latest forecast)", summary.generated_at, True
+    return "Replay aligns with the latest forecast window", summary.generated_at, False

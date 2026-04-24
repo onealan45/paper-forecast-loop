@@ -12,6 +12,7 @@ from forecast_loop.models import (
     EvaluationSummary,
     Forecast,
     ForecastScore,
+    PaperOrder,
     PaperPortfolioSnapshot,
     Proposal,
     RepairRequest,
@@ -41,6 +42,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("evaluation_summaries", "evaluation_summaries.jsonl", "summary_id", EvaluationSummary.from_dict),
     ArtifactSpec("baseline_evaluations", "baseline_evaluations.jsonl", "baseline_id", BaselineEvaluation.from_dict),
     ArtifactSpec("strategy_decisions", "strategy_decisions.jsonl", "decision_id", StrategyDecision.from_dict),
+    ArtifactSpec("paper_orders", "paper_orders.jsonl", "order_id", PaperOrder.from_dict),
     ArtifactSpec("portfolio_snapshots", "portfolio_snapshots.jsonl", "snapshot_id", PaperPortfolioSnapshot.from_dict),
     ArtifactSpec("repair_requests", "repair_requests.jsonl", "repair_request_id", RepairRequest.from_dict),
 )
@@ -151,6 +153,12 @@ class SQLiteRepository:
     def load_strategy_decisions(self) -> list[StrategyDecision]:
         return self._load("strategy_decisions", StrategyDecision.from_dict)
 
+    def save_paper_order(self, order: PaperOrder) -> None:
+        self._save_unique("paper_orders", order.order_id, order.to_dict())
+
+    def load_paper_orders(self) -> list[PaperOrder]:
+        return self._load("paper_orders", PaperOrder.from_dict)
+
     def save_portfolio_snapshot(self, snapshot: PaperPortfolioSnapshot) -> None:
         self._save_unique("portfolio_snapshots", snapshot.snapshot_id, snapshot.to_dict())
 
@@ -254,6 +262,8 @@ def migrate_jsonl_to_sqlite(storage_dir: Path | str, db_path: Path | str | None 
         sqlite_repository.save_baseline_evaluation(baseline)
     for decision in json_repository.load_strategy_decisions():
         sqlite_repository.save_strategy_decision(decision)
+    for order in json_repository.load_paper_orders():
+        sqlite_repository.save_paper_order(order)
     for snapshot in json_repository.load_portfolio_snapshots():
         sqlite_repository.save_portfolio_snapshot(snapshot)
     for repair_request in json_repository.load_repair_requests():

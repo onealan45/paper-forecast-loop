@@ -115,7 +115,7 @@ handling, real broker client, or real order path is allowed in M1.
 ## Deferred
 
 - Switching the hourly loop from JSONL-default execution to SQLite-backed execution.
-- Paper order ledger and paper execution simulation.
+- Paper fills, position accounting, NAV, and paper execution simulation.
 - Broker/exchange live adapters.
 - Multi-asset strategy allocation.
 - Macro and ETF/stock ingestion.

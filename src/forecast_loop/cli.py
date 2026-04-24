@@ -12,6 +12,7 @@ from forecast_loop.evaluation import build_evaluation_summary
 from forecast_loop.health import run_health_check
 from forecast_loop.maintenance import repair_storage
 from forecast_loop.models import StrategyDecision
+from forecast_loop.orders import create_paper_order_from_decision
 from forecast_loop.pipeline import ForecastingLoop
 from forecast_loop.providers import CoinGeckoMarketDataProvider, build_sample_provider
 from forecast_loop.replay import ReplayRunner
@@ -82,6 +83,12 @@ def main(argv: list[str] | None = None) -> int:
     db_health.add_argument("--storage-dir", required=True)
     db_health.add_argument("--db-path")
 
+    paper_order = subparsers.add_parser("paper-order")
+    paper_order.add_argument("--storage-dir", required=True)
+    paper_order.add_argument("--decision-id", required=True)
+    paper_order.add_argument("--symbol", default="BTC-USD")
+    paper_order.add_argument("--now")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -104,6 +111,8 @@ def main(argv: list[str] | None = None) -> int:
             return _export_jsonl(args)
         if args.command == "db-health":
             return _db_health(args)
+        if args.command == "paper-order":
+            return _paper_order(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -363,6 +372,38 @@ def _db_health(args) -> int:
     result = sqlite_db_health(args.storage_dir, db_path=args.db_path)
     print(json.dumps(result, ensure_ascii=False))
     return 0 if result["status"] == "healthy" else 2
+
+
+def _paper_order(args) -> int:
+    now = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    storage_dir = Path(args.storage_dir)
+    health_result = run_health_check(
+        storage_dir=storage_dir,
+        symbol=args.symbol,
+        now=now,
+        create_repair_request=True,
+    )
+    if health_result.severity == "blocking" or health_result.repair_required:
+        result = create_paper_order_from_decision(
+            repository=None,
+            decision_id=args.decision_id,
+            symbol=args.symbol,
+            now=now,
+            health_result=health_result,
+        )
+        print(json.dumps(result.to_dict(), ensure_ascii=False))
+        return 0
+
+    repository = JsonFileRepository(storage_dir)
+    result = create_paper_order_from_decision(
+        repository=repository,
+        decision_id=args.decision_id,
+        symbol=args.symbol,
+        now=now,
+        health_result=health_result,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
 
 
 def _write_last_run_meta(*, storage_dir: Path, now_utc: datetime, symbol: str, provider: str, result) -> None:

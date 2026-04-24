@@ -11,6 +11,7 @@ from forecast_loop.models import (
     ForecastScore,
     HealthCheckResult,
     HealthFinding,
+    PaperOrder,
     PaperPortfolioSnapshot,
     Proposal,
     RepairRequest,
@@ -73,6 +74,7 @@ def run_health_check(
         "reviews": _load_jsonl(storage_path / "reviews.jsonl", Review.from_dict, findings),
         "proposals": _load_jsonl(storage_path / "proposals.jsonl", Proposal.from_dict, findings),
         "decisions": _load_jsonl(storage_path / "strategy_decisions.jsonl", StrategyDecision.from_dict, findings),
+        "paper_orders": _load_jsonl(storage_path / "paper_orders.jsonl", PaperOrder.from_dict, findings),
         "baselines": _load_jsonl(storage_path / "baseline_evaluations.jsonl", BaselineEvaluation.from_dict, findings),
         "portfolios": _load_jsonl(storage_path / "portfolio_snapshots.jsonl", PaperPortfolioSnapshot.from_dict, findings),
         "evaluation_summaries": _load_jsonl(storage_path / "evaluation_summaries.jsonl", EvaluationSummary.from_dict, findings),
@@ -83,6 +85,7 @@ def run_health_check(
     reviews: list[Review] = artifact_rows["reviews"]
     proposals: list[Proposal] = artifact_rows["proposals"]
     decisions: list[StrategyDecision] = artifact_rows["decisions"]
+    paper_orders: list[PaperOrder] = artifact_rows["paper_orders"]
     baselines: list[BaselineEvaluation] = artifact_rows["baselines"]
     portfolios: list[PaperPortfolioSnapshot] = artifact_rows["portfolios"]
     evaluation_summaries: list[EvaluationSummary] = artifact_rows["evaluation_summaries"]
@@ -93,6 +96,7 @@ def run_health_check(
     _check_duplicate_ids(reviews, "review_id", storage_path / "reviews.jsonl", findings)
     _check_duplicate_ids(proposals, "proposal_id", storage_path / "proposals.jsonl", findings)
     _check_duplicate_ids(decisions, "decision_id", storage_path / "strategy_decisions.jsonl", findings)
+    _check_duplicate_ids(paper_orders, "order_id", storage_path / "paper_orders.jsonl", findings)
     _check_duplicate_ids(baselines, "baseline_id", storage_path / "baseline_evaluations.jsonl", findings)
     _check_duplicate_ids(portfolios, "snapshot_id", storage_path / "portfolio_snapshots.jsonl", findings)
     _check_duplicate_ids(evaluation_summaries, "summary_id", storage_path / "evaluation_summaries.jsonl", findings)

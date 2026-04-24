@@ -7,6 +7,9 @@ from forecast_loop.models import (
     EvaluationSummary,
     Forecast,
     ForecastScore,
+    PaperOrder,
+    PaperOrderStatus,
+    PaperOrderType,
     PaperPortfolioSnapshot,
     Proposal,
     RepairRequest,
@@ -165,6 +168,22 @@ def _repair_request(now: datetime) -> RepairRequest:
     )
 
 
+def _paper_order(now: datetime, decision: StrategyDecision) -> PaperOrder:
+    return PaperOrder(
+        order_id="paper-order:sqlite",
+        created_at=now,
+        decision_id=decision.decision_id,
+        symbol="BTC-USD",
+        side="BUY",
+        order_type=PaperOrderType.TARGET_PERCENT.value,
+        status=PaperOrderStatus.CREATED.value,
+        target_position_pct=0.15,
+        current_position_pct=0.0,
+        max_position_pct=0.15,
+        rationale="test",
+    )
+
+
 def _seed_repository(repository) -> dict:
     now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
     forecast = _forecast(now)
@@ -174,6 +193,7 @@ def _seed_repository(repository) -> dict:
     summary = _summary(now, forecast, score, review, proposal)
     baseline = _baseline(now, forecast, score)
     decision = _decision(now, forecast, score, review, baseline)
+    order = _paper_order(now, decision)
     snapshot = PaperPortfolioSnapshot.empty(created_at=now)
     repair_request = _repair_request(now)
 
@@ -184,6 +204,7 @@ def _seed_repository(repository) -> dict:
     repository.save_evaluation_summary(summary)
     repository.save_baseline_evaluation(baseline)
     repository.save_strategy_decision(decision)
+    repository.save_paper_order(order)
     repository.save_portfolio_snapshot(snapshot)
     repository.save_repair_request(repair_request)
     return {
@@ -194,6 +215,7 @@ def _seed_repository(repository) -> dict:
         "summary": summary,
         "baseline": baseline,
         "decision": decision,
+        "order": order,
         "snapshot": snapshot,
         "repair_request": repair_request,
     }
@@ -212,6 +234,7 @@ def test_sqlite_repository_round_trips_and_dedupes_m1_artifacts(tmp_path):
     assert repository.load_evaluation_summaries() == [artifacts["summary"]]
     assert repository.load_baseline_evaluations() == [artifacts["baseline"]]
     assert repository.load_strategy_decisions() == [artifacts["decision"]]
+    assert repository.load_paper_orders() == [artifacts["order"]]
     assert repository.load_portfolio_snapshots() == [artifacts["snapshot"]]
     assert repository.load_repair_requests() == [artifacts["repair_request"]]
     assert repository.artifact_counts()["forecasts"] == 1
@@ -254,11 +277,13 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert sqlite_repository.load_forecasts() == [artifacts["forecast"]]
     assert sqlite_repository.load_scores() == [artifacts["score"]]
     assert sqlite_repository.load_strategy_decisions() == [artifacts["decision"]]
+    assert sqlite_repository.load_paper_orders() == [artifacts["order"]]
 
     assert main(["db-health", "--storage-dir", str(tmp_path)]) == 0
     health_result = json.loads(capsys.readouterr().out)
     assert health_result["artifact_counts"]["forecasts"] == 1
     assert health_result["artifact_counts"]["strategy_decisions"] == 1
+    assert health_result["artifact_counts"]["paper_orders"] == 1
 
 
 def test_export_jsonl_writes_compatibility_artifacts(tmp_path, capsys):
@@ -276,3 +301,4 @@ def test_export_jsonl_writes_compatibility_artifacts(tmp_path, capsys):
     assert exported_repository.load_forecasts() == [artifacts["forecast"]]
     assert exported_repository.load_scores() == [artifacts["score"]]
     assert exported_repository.load_strategy_decisions() == [artifacts["decision"]]
+    assert exported_repository.load_paper_orders() == [artifacts["order"]]

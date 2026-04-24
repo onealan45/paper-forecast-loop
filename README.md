@@ -33,6 +33,7 @@ This version intentionally includes only:
     - `baseline_evaluations.jsonl`
     - `portfolio_snapshots.jsonl`
     - `strategy_decisions.jsonl`
+    - `paper_orders.jsonl`
     - `repair_requests.jsonl`
 - CLI execution via:
   - `run-once`
@@ -45,6 +46,7 @@ This version intentionally includes only:
   - `migrate-jsonl-to-sqlite`
   - `export-jsonl`
   - `db-health`
+  - `paper-order`
 
 This version intentionally excludes:
 
@@ -54,7 +56,7 @@ This version intentionally excludes:
 - multi-asset support
 - live broker / exchange adapters
 - real orders
-- portfolio / NAV / PnL accounting beyond a minimal paper snapshot
+- fills, positions, NAV, and PnL accounting beyond a minimal paper snapshot and local paper order ledger
 - notifications / Telegram
 - full scheduler or autonomous repair daemon orchestration
 
@@ -121,7 +123,8 @@ M1 includes a broker interface only to keep future integration boundaries clean.
 The only implementation is `PaperBrokerAdapter`.
 
 Live broker or exchange modes are intentionally unavailable. There is no API key
-handling and no real order path in M1.
+handling and no real order path. M2B adds a local paper order ledger, but broker
+submission remains unavailable until a later paper execution stage.
 
 ## Forecast Contract
 
@@ -227,6 +230,20 @@ Each decision records:
 - invalidation conditions
 - whether directional action is blocked and why
 
+### Paper Order Artifact
+
+Each paper order records:
+
+- the strategy decision that produced it
+- side (`BUY` or `SELL`)
+- target paper position percentage
+- current paper position percentage
+- local order status
+- rationale copied from the decision
+
+Paper orders are local ledger artifacts only. They do not submit to a broker,
+exchange, sandbox, or testnet.
+
 ### Repair Request Artifact
 
 Each repair request records:
@@ -256,6 +273,8 @@ storage migration. Rerun safety is enforced:
 - the same review does not create duplicate proposals
 - the same baseline evidence does not create duplicate baseline evaluations
 - the same decision basis does not create duplicate strategy decisions
+- the same active symbol cannot receive a second paper order until the open
+  paper order is handled by a later lifecycle stage
 - rerunning `run-once` in the same hour does not keep creating semantically duplicate artifacts
 
 ## Replay Contract
@@ -417,6 +436,12 @@ Generate a paper-only strategy decision from existing artifacts:
 python run_forecast_loop.py decide --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD --horizon-hours 24
 ```
 
+Create a local paper order from the latest strategy decision:
+
+```powershell
+python run_forecast_loop.py paper-order --storage-dir .\paper_storage\manual-coingecko --decision-id latest
+```
+
 Run a health audit and create a Codex repair request if blocking issues exist:
 
 ```powershell
@@ -477,8 +502,7 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - the current hourly loop still writes JSONL artifacts by default while M2A proves SQLite migration and export parity
 - regime classification is still intentionally simple
 - only `BTC-USD` is supported
-- paper portfolio support is a minimal snapshot, not a full ledger
-- there is no paper order ledger or PnL engine yet
+- paper portfolio support is a minimal snapshot plus local order ledger, not fills, positions, NAV, or a PnL engine
 - proposal logic is still heuristic and conservative
 - health-check creates repair requests, but there is no autonomous repair daemon in this repo
 - the inspector is currently static HTML, not a live operator app

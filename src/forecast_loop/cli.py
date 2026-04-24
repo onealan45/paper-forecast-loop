@@ -6,6 +6,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from forecast_loop.assets import list_assets
+from forecast_loop.candle_store import (
+    StoredCandleProvider,
+    export_market_candles,
+    import_market_candles,
+    run_candle_health,
+)
 from forecast_loop.config import LoopConfig
 from forecast_loop.dashboard import write_dashboard_html
 from forecast_loop.decision import generate_strategy_decision
@@ -43,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
     run_once.add_argument("--also-decide", action="store_true")
 
     replay_range = subparsers.add_parser("replay-range")
-    replay_range.add_argument("--provider", choices=["sample"], default="sample")
+    replay_range.add_argument("--provider", choices=["stored", "sample"], default="stored")
     replay_range.add_argument("--symbol", default="BTC-USD")
     replay_range.add_argument("--storage-dir", required=True)
     replay_range.add_argument("--start", required=True)
@@ -121,6 +127,25 @@ def main(argv: list[str] | None = None) -> int:
     list_assets_cmd.add_argument("--status", choices=["all", "active", "planned", "inactive"], default="all")
     list_assets_cmd.add_argument("--format", choices=["json", "text"], default="json")
 
+    import_candles = subparsers.add_parser("import-candles")
+    import_candles.add_argument("--storage-dir", required=True)
+    import_candles.add_argument("--input", required=True)
+    import_candles.add_argument("--symbol", default="BTC-USD")
+    import_candles.add_argument("--source", default="manual-jsonl")
+    import_candles.add_argument("--imported-at")
+
+    export_candles = subparsers.add_parser("export-candles")
+    export_candles.add_argument("--storage-dir", required=True)
+    export_candles.add_argument("--output", required=True)
+    export_candles.add_argument("--symbol", default="BTC-USD")
+
+    candle_health = subparsers.add_parser("candle-health")
+    candle_health.add_argument("--storage-dir", required=True)
+    candle_health.add_argument("--symbol", default="BTC-USD")
+    candle_health.add_argument("--start", required=True)
+    candle_health.add_argument("--end", required=True)
+    candle_health.add_argument("--interval-minutes", type=int, default=60)
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -153,6 +178,12 @@ def main(argv: list[str] | None = None) -> int:
             return _risk_check(args)
         if args.command == "list-assets":
             return _list_assets(args)
+        if args.command == "import-candles":
+            return _import_candles(args)
+        if args.command == "export-candles":
+            return _export_candles(args)
+        if args.command == "candle-health":
+            return _candle_health(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -265,8 +296,8 @@ def _build_data_provider(provider_name: str, now: datetime, symbol: str):
 def _replay_range(args) -> int:
     start = _parse_datetime(args.start)
     end = _parse_datetime(args.end)
-    provider = _build_data_provider(args.provider, end, args.symbol)
     base_storage_dir = Path(args.storage_dir)
+    provider = _build_replay_provider(args.provider, end, args.symbol, base_storage_dir)
     replay_storage_dir = _replay_storage_dir(
         storage_dir=base_storage_dir,
         provider=args.provider,
@@ -316,6 +347,15 @@ def _replay_range(args) -> int:
         )
     )
     return 0
+
+
+def _build_replay_provider(provider_name: str, end: datetime, symbol: str, storage_dir: Path):
+    if provider_name == "stored":
+        repository = JsonFileRepository(storage_dir)
+        if not any(record.symbol == symbol for record in repository.load_market_candles()):
+            raise ValueError(f"no stored market candles found for {symbol}. Run import-candles first.")
+        return StoredCandleProvider(repository)
+    return _build_data_provider(provider_name, end, symbol)
 
 
 def _render_dashboard(args) -> int:
@@ -574,6 +614,41 @@ def _list_assets(args) -> int:
     else:
         print(json.dumps({"assets": [asset.to_dict() for asset in assets]}, ensure_ascii=False))
     return 0
+
+
+def _import_candles(args) -> int:
+    imported_at = _parse_datetime(args.imported_at) if args.imported_at else datetime.now(tz=UTC)
+    result = import_market_candles(
+        storage_dir=args.storage_dir,
+        input_path=args.input,
+        symbol=args.symbol,
+        source=args.source,
+        imported_at=imported_at,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _export_candles(args) -> int:
+    result = export_market_candles(
+        storage_dir=args.storage_dir,
+        output_path=args.output,
+        symbol=args.symbol,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _candle_health(args) -> int:
+    result = run_candle_health(
+        storage_dir=args.storage_dir,
+        symbol=args.symbol,
+        start=_parse_datetime(args.start),
+        end=_parse_datetime(args.end),
+        interval_minutes=args.interval_minutes,
+    )
+    print(json.dumps(result, ensure_ascii=False))
+    return 0 if result["status"] == "healthy" else 2
 
 
 def _write_last_run_meta(*, storage_dir: Path, now_utc: datetime, symbol: str, provider: str, result) -> None:

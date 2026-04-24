@@ -34,6 +34,7 @@ This version intentionally includes:
 - storage:
   - SQLite repository for M2 canonical state migration
   - JSONL artifacts for audit export and backward compatibility:
+    - `market_candles.jsonl`
     - `forecasts.jsonl`
     - `scores.jsonl`
     - `reviews.jsonl`
@@ -63,6 +64,9 @@ This version intentionally includes:
   - `portfolio-snapshot`
   - `risk-check`
   - `list-assets`
+  - `import-candles`
+  - `export-candles`
+  - `candle-health`
 
 This version intentionally excludes:
 
@@ -435,6 +439,7 @@ It only reads:
 - `strategy_decisions.jsonl`
 - `provider_runs.jsonl`
 - `repair_requests.jsonl`
+- `market_candles.jsonl`
 - `last_run_meta.json`
 - `last_replay_meta.json`
 
@@ -550,6 +555,30 @@ Run one deterministic sample replay:
 python run_forecast_loop.py replay-range --provider sample --symbol BTC-USD --storage-dir .\paper_storage\manual-replay --start 2026-04-21T04:00:00+00:00 --end 2026-04-21T08:00:00+00:00 --horizon-hours 2
 ```
 
+Import stored historical candles for deterministic replay:
+
+```powershell
+python run_forecast_loop.py import-candles --storage-dir .\paper_storage\manual-replay --input .\fixtures\btc-hourly.jsonl --symbol BTC-USD --source fixture
+```
+
+Audit stored candle coverage before replay:
+
+```powershell
+python run_forecast_loop.py candle-health --storage-dir .\paper_storage\manual-replay --symbol BTC-USD --start 2026-04-21T04:00:00+00:00 --end 2026-04-21T08:00:00+00:00
+```
+
+Run replay from stored candles:
+
+```powershell
+python run_forecast_loop.py replay-range --provider stored --symbol BTC-USD --storage-dir .\paper_storage\manual-replay --start 2026-04-21T04:00:00+00:00 --end 2026-04-21T08:00:00+00:00 --horizon-hours 2
+```
+
+Export stored candles:
+
+```powershell
+python run_forecast_loop.py export-candles --storage-dir .\paper_storage\manual-replay --symbol BTC-USD --output .\paper_storage\btc-hourly-export.jsonl
+```
+
 Render a dashboard for an existing storage directory:
 
 ```powershell
@@ -604,3 +633,4 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - health-check creates repair requests, but there is no autonomous repair daemon in this repo
 - the inspector is currently static HTML, not a live operator app
 - replay still writes summary metadata into the base storage directory instead of a more formal run registry or database
+- stored candle import is JSONL-only; ETF/stock calendars and adjusted closes are deferred to M3D

@@ -100,6 +100,85 @@ class MarketCandle:
 
 
 @dataclass(slots=True)
+class MarketCandleRecord:
+    candle_id: str
+    symbol: str
+    timestamp: datetime
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    source: str
+    imported_at: datetime
+
+    @classmethod
+    def build_id(cls, *, symbol: str, timestamp: datetime, source: str) -> str:
+        return _stable_artifact_id(
+            "market-candle",
+            {
+                "symbol": symbol,
+                "timestamp": timestamp.isoformat(),
+                "source": source,
+            },
+        )
+
+    @classmethod
+    def from_candle(
+        cls,
+        candle: MarketCandle,
+        *,
+        symbol: str,
+        source: str,
+        imported_at: datetime,
+    ) -> "MarketCandleRecord":
+        candle_id = cls.build_id(symbol=symbol, timestamp=candle.timestamp, source=source)
+        return cls(
+            candle_id=candle_id,
+            symbol=symbol,
+            timestamp=candle.timestamp,
+            open=float(candle.open),
+            high=float(candle.high),
+            low=float(candle.low),
+            close=float(candle.close),
+            volume=float(candle.volume),
+            source=source,
+            imported_at=imported_at,
+        )
+
+    def to_candle(self) -> MarketCandle:
+        return MarketCandle(
+            timestamp=self.timestamp,
+            open=self.open,
+            high=self.high,
+            low=self.low,
+            close=self.close,
+            volume=self.volume,
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["timestamp"] = self.timestamp.isoformat()
+        payload["imported_at"] = self.imported_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "MarketCandleRecord":
+        return cls(
+            candle_id=_require_string(payload, "candle_id"),
+            symbol=_require_string(payload, "symbol"),
+            timestamp=_require_aware_datetime(payload, "timestamp"),
+            open=float(payload["open"]),
+            high=float(payload["high"]),
+            low=float(payload["low"]),
+            close=float(payload["close"]),
+            volume=float(payload["volume"]),
+            source=_require_string(payload, "source"),
+            imported_at=_require_aware_datetime(payload, "imported_at"),
+        )
+
+
+@dataclass(slots=True)
 class Forecast:
     forecast_id: str
     symbol: str

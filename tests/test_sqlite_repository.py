@@ -9,6 +9,8 @@ from forecast_loop.models import (
     EvaluationSummary,
     Forecast,
     ForecastScore,
+    MarketCandle,
+    MarketCandleRecord,
     PaperFill,
     PaperOrder,
     PaperOrderStatus,
@@ -41,6 +43,22 @@ def _forecast(now: datetime) -> Forecast:
         confidence=0.55,
         provider_data_through=now,
         observed_candle_count=0,
+    )
+
+
+def _market_candle(now: datetime) -> MarketCandleRecord:
+    return MarketCandleRecord.from_candle(
+        MarketCandle(
+            timestamp=now,
+            open=100.0,
+            high=101.0,
+            low=99.0,
+            close=100.5,
+            volume=1_000.0,
+        ),
+        symbol="BTC-USD",
+        source="fixture",
+        imported_at=now,
     )
 
 
@@ -276,8 +294,10 @@ def _seed_repository(repository) -> dict:
     equity_point = _equity_point(now)
     risk_snapshot = _risk_snapshot(now)
     provider_run = _provider_run(now)
+    market_candle = _market_candle(now)
     repair_request = _repair_request(now)
 
+    repository.save_market_candle(market_candle)
     repository.save_forecast(forecast)
     repository.save_score(score)
     repository.save_review(review)
@@ -306,6 +326,7 @@ def _seed_repository(repository) -> dict:
         "equity_point": equity_point,
         "risk_snapshot": risk_snapshot,
         "provider_run": provider_run,
+        "market_candle": market_candle,
         "repair_request": repair_request,
     }
 
@@ -316,6 +337,7 @@ def test_sqlite_repository_round_trips_and_dedupes_m1_artifacts(tmp_path):
     _seed_repository(repository)
 
     assert repository.schema_versions() == [1]
+    assert repository.load_market_candles() == [artifacts["market_candle"]]
     assert repository.load_forecasts() == [artifacts["forecast"]]
     assert repository.load_scores() == [artifacts["score"]]
     assert repository.load_reviews() == [artifacts["review"]]
@@ -368,6 +390,7 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
 
     sqlite_repository = SQLiteRepository(tmp_path, initialize=False)
     assert sqlite_repository.load_forecasts() == [artifacts["forecast"]]
+    assert sqlite_repository.load_market_candles() == [artifacts["market_candle"]]
     assert sqlite_repository.load_scores() == [artifacts["score"]]
     assert sqlite_repository.load_strategy_decisions() == [artifacts["decision"]]
     assert sqlite_repository.load_paper_orders() == [artifacts["order"]]
@@ -376,6 +399,7 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert main(["db-health", "--storage-dir", str(tmp_path)]) == 0
     health_result = json.loads(capsys.readouterr().out)
     assert health_result["artifact_counts"]["forecasts"] == 1
+    assert health_result["artifact_counts"]["market_candles"] == 1
     assert health_result["artifact_counts"]["strategy_decisions"] == 1
     assert health_result["artifact_counts"]["paper_orders"] == 1
     assert health_result["artifact_counts"]["paper_fills"] == 1
@@ -422,6 +446,7 @@ def test_export_jsonl_writes_compatibility_artifacts(tmp_path, capsys):
 
     exported_repository = JsonFileRepository(export_dir)
     assert export_result["artifact_counts"]["forecasts"] == 1
+    assert exported_repository.load_market_candles() == [artifacts["market_candle"]]
     assert exported_repository.load_forecasts() == [artifacts["forecast"]]
     assert exported_repository.load_scores() == [artifacts["score"]]
     assert exported_repository.load_strategy_decisions() == [artifacts["decision"]]

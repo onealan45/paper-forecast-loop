@@ -285,6 +285,7 @@ Current practical V1 path:
 - M4A adds leakage-checked research dataset artifacts built from scored forecasts
 - M4B records expanded baseline suite results for research audit
 - M4C adds a paper-only backtest engine over stored candles
+- M4D adds rolling walk-forward validation artifacts with train/validation/test boundaries
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation
@@ -330,6 +331,8 @@ V1 MVP should include:
   momentum, and deterministic-random baselines
 - paper-only backtest run/result artifacts with return, benchmark, drawdown,
   Sharpe, turnover, and win-rate metrics
+- walk-forward validation artifacts with rolling boundaries, aggregate metrics,
+  and overfit-risk flags
 - health-check output
 - Codex repair request artifacts
 - minimal CLI
@@ -374,6 +377,7 @@ correctness defects:
 - per-symbol multi-asset decisions do not yet perform portfolio optimization or cross-asset allocation
 - research datasets are generated artifacts only; no model training or optimizer is included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved
+- walk-forward validation does not yet influence production decision gates
 
 The repository is suitable for continued paper-only hourly research only when
 tests pass, active storage repair status is fresh, dashboard freshness is

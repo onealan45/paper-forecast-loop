@@ -24,6 +24,7 @@ from forecast_loop.models import (
     RiskSnapshot,
     Review,
     StrategyDecision,
+    WalkForwardValidation,
 )
 
 
@@ -110,6 +111,10 @@ class ArtifactRepository(Protocol):
 
     def load_backtest_results(self) -> list[BacktestResult]: ...
 
+    def save_walk_forward_validation(self, validation: WalkForwardValidation) -> None: ...
+
+    def load_walk_forward_validations(self) -> list[WalkForwardValidation]: ...
+
 
 class JsonFileRepository:
     def __init__(self, root: Path | str) -> None:
@@ -134,6 +139,7 @@ class JsonFileRepository:
         self.research_datasets_path = self.root / "research_datasets.jsonl"
         self.backtest_runs_path = self.root / "backtest_runs.jsonl"
         self.backtest_results_path = self.root / "backtest_results.jsonl"
+        self.walk_forward_validations_path = self.root / "walk_forward_validations.jsonl"
 
     def save_market_candle(self, candle: MarketCandleRecord) -> None:
         self._append_unique(
@@ -340,6 +346,16 @@ class JsonFileRepository:
 
     def load_backtest_results(self) -> list[BacktestResult]:
         return self._load_lines(self.backtest_results_path, BacktestResult.from_dict)
+
+    def save_walk_forward_validation(self, validation: WalkForwardValidation) -> None:
+        self._append_unique(
+            self.walk_forward_validations_path,
+            validation.to_dict(),
+            identity_key="validation_id",
+        )
+
+    def load_walk_forward_validations(self) -> list[WalkForwardValidation]:
+        return self._load_lines(self.walk_forward_validations_path, WalkForwardValidation.from_dict)
 
     def _append(self, path: Path, payload: dict) -> None:
         with path.open("a", encoding="utf-8") as handle:

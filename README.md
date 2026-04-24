@@ -53,6 +53,7 @@ This version intentionally includes:
     - `research_datasets.jsonl`
     - `backtest_runs.jsonl`
     - `backtest_results.jsonl`
+    - `walk_forward_validations.jsonl`
 - CLI execution via:
   - `run-once`
   - `replay-range`
@@ -80,6 +81,7 @@ This version intentionally includes:
   - `macro-calendar`
   - `build-research-dataset`
   - `backtest`
+  - `walk-forward`
 
 This version intentionally excludes:
 
@@ -667,6 +669,17 @@ rate, and trade count with configurable paper-only fee/slippage assumptions.
 The default fixed-rule strategy uses prior-candle signals only; it does not
 use the same candle to decide and fill a trade.
 
+Run walk-forward validation from stored candles:
+
+```powershell
+python run_forecast_loop.py walk-forward --storage-dir .\paper_storage\manual-replay --symbol BTC-USD --start 2026-04-01T00:00:00+00:00 --end 2026-04-30T00:00:00+00:00 --train-size 8 --validation-size 4 --test-size 4 --step-size 2
+```
+
+The M4D walk-forward engine records rolling train / validation / test
+boundaries, runs paper-only validation and test backtests, writes
+`walk_forward_validations.jsonl`, and reports aggregate validation return, test
+return, benchmark return, excess return, test win rate, and overfit-risk flags.
+
 Render a dashboard for an existing storage directory:
 
 ```powershell
@@ -727,3 +740,4 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - macro events are calendar artifacts only; they do not yet influence decisions
 - research datasets are artifact builders only; no model training or optimizer is included yet
 - backtests are local paper simulations over stored candles; no broker or live execution path is involved
+- walk-forward validation is a research artifact only; it does not yet gate BUY/SELL decisions

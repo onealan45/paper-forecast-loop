@@ -20,6 +20,8 @@ from forecast_loop.models import (
     Proposal,
     ProviderRun,
     RepairRequest,
+    ResearchDataset,
+    ResearchDatasetRow,
     Review,
     RiskSnapshot,
     StrategyDecision,
@@ -210,6 +212,31 @@ def _repair_request(now: datetime) -> RepairRequest:
     )
 
 
+def _research_dataset(now: datetime, forecast: Forecast, score: ForecastScore) -> ResearchDataset:
+    row = ResearchDatasetRow(
+        forecast_id=forecast.forecast_id,
+        score_id=score.score_id,
+        symbol=forecast.symbol,
+        decision_timestamp=forecast.anchor_time,
+        feature_timestamp=forecast.anchor_time,
+        label_timestamp=score.target_window_end,
+        features={"confidence": forecast.confidence},
+        label={"score": score.score},
+    )
+    return ResearchDataset(
+        dataset_id="research-dataset:sqlite",
+        created_at=now,
+        symbol=forecast.symbol,
+        row_count=1,
+        leakage_status="passed",
+        leakage_findings=[],
+        forecast_ids=[forecast.forecast_id],
+        score_ids=[score.score_id],
+        rows=[row],
+        decision_basis="test",
+    )
+
+
 def _paper_order(now: datetime, decision: StrategyDecision) -> PaperOrder:
     return PaperOrder(
         order_id="paper-order:sqlite",
@@ -316,6 +343,7 @@ def _seed_repository(repository) -> dict:
     market_candle = _market_candle(now)
     macro_event = _macro_event(now)
     repair_request = _repair_request(now)
+    dataset = _research_dataset(now, forecast, score)
 
     repository.save_market_candle(market_candle)
     repository.save_macro_event(macro_event)
@@ -333,6 +361,7 @@ def _seed_repository(repository) -> dict:
     repository.save_risk_snapshot(risk_snapshot)
     repository.save_provider_run(provider_run)
     repository.save_repair_request(repair_request)
+    repository.save_research_dataset(dataset)
     return {
         "forecast": forecast,
         "score": score,
@@ -350,6 +379,7 @@ def _seed_repository(repository) -> dict:
         "market_candle": market_candle,
         "macro_event": macro_event,
         "repair_request": repair_request,
+        "dataset": dataset,
     }
 
 
@@ -375,6 +405,7 @@ def test_sqlite_repository_round_trips_and_dedupes_m1_artifacts(tmp_path):
     assert repository.load_risk_snapshots() == [artifacts["risk_snapshot"]]
     assert repository.load_provider_runs() == [artifacts["provider_run"]]
     assert repository.load_repair_requests() == [artifacts["repair_request"]]
+    assert repository.load_research_datasets() == [artifacts["dataset"]]
     assert repository.artifact_counts()["forecasts"] == 1
 
 
@@ -419,6 +450,7 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert sqlite_repository.load_strategy_decisions() == [artifacts["decision"]]
     assert sqlite_repository.load_paper_orders() == [artifacts["order"]]
     assert sqlite_repository.load_paper_fills() == [artifacts["fill"]]
+    assert sqlite_repository.load_research_datasets() == [artifacts["dataset"]]
 
     assert main(["db-health", "--storage-dir", str(tmp_path)]) == 0
     health_result = json.loads(capsys.readouterr().out)
@@ -431,6 +463,7 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert health_result["artifact_counts"]["equity_curve"] == 1
     assert health_result["artifact_counts"]["risk_snapshots"] == 1
     assert health_result["artifact_counts"]["provider_runs"] == 1
+    assert health_result["artifact_counts"]["research_datasets"] == 1
 
 
 def test_db_health_flags_malformed_provider_run_payload(tmp_path, capsys):
@@ -481,3 +514,5 @@ def test_export_jsonl_writes_compatibility_artifacts(tmp_path, capsys):
     assert exported_repository.load_equity_curve_points() == [artifacts["equity_point"]]
     assert exported_repository.load_risk_snapshots() == [artifacts["risk_snapshot"]]
     assert exported_repository.load_provider_runs() == [artifacts["provider_run"]]
+    assert exported_repository.load_repair_requests() == [artifacts["repair_request"]]
+    assert exported_repository.load_research_datasets() == [artifacts["dataset"]]

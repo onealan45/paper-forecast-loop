@@ -18,6 +18,7 @@ from forecast_loop.models import (
     Proposal,
     ProviderRun,
     RepairRequest,
+    ResearchDataset,
     RiskSnapshot,
     Review,
     StrategyDecision,
@@ -87,6 +88,7 @@ def run_health_check(
         "provider_runs": _load_jsonl(storage_path / "provider_runs.jsonl", ProviderRun.from_dict, findings),
         "evaluation_summaries": _load_jsonl(storage_path / "evaluation_summaries.jsonl", EvaluationSummary.from_dict, findings),
         "repair_requests": _load_jsonl(storage_path / "repair_requests.jsonl", RepairRequest.from_dict, findings),
+        "research_datasets": _load_jsonl(storage_path / "research_datasets.jsonl", ResearchDataset.from_dict, findings),
     }
     forecasts: list[Forecast] = artifact_rows["forecasts"]
     scores: list[ForecastScore] = artifact_rows["scores"]
@@ -102,6 +104,7 @@ def run_health_check(
     provider_runs: list[ProviderRun] = artifact_rows["provider_runs"]
     evaluation_summaries: list[EvaluationSummary] = artifact_rows["evaluation_summaries"]
     repair_requests: list[RepairRequest] = artifact_rows["repair_requests"]
+    research_datasets: list[ResearchDataset] = artifact_rows["research_datasets"]
 
     _check_duplicate_ids(forecasts, "forecast_id", storage_path / "forecasts.jsonl", findings)
     _check_duplicate_ids(scores, "score_id", storage_path / "scores.jsonl", findings)
@@ -117,6 +120,7 @@ def run_health_check(
     _check_duplicate_ids(provider_runs, "provider_run_id", storage_path / "provider_runs.jsonl", findings)
     _check_duplicate_ids(evaluation_summaries, "summary_id", storage_path / "evaluation_summaries.jsonl", findings)
     _check_duplicate_ids(repair_requests, "repair_request_id", storage_path / "repair_requests.jsonl", findings)
+    _check_duplicate_ids(research_datasets, "dataset_id", storage_path / "research_datasets.jsonl", findings)
 
     scoped_forecasts = [forecast for forecast in forecasts if forecast.symbol == symbol]
     latest_forecast = scoped_forecasts[-1] if scoped_forecasts else None
@@ -146,7 +150,19 @@ def run_health_check(
 
     _check_last_run_meta(storage_path, symbol, latest_forecast, findings)
     _check_provider_runs(storage_path, symbol, now, provider_runs, findings)
-    _check_links(storage_path, forecasts, scores, reviews, proposals, decisions, baselines, evaluation_summaries, findings)
+    _check_links(
+        storage_path,
+        forecasts,
+        scores,
+        reviews,
+        proposals,
+        decisions,
+        baselines,
+        evaluation_summaries,
+        research_datasets,
+        findings,
+    )
+    _check_research_dataset_leakage(storage_path, research_datasets, findings)
     _check_dashboard(storage_path, findings)
 
     return _finalize_health_result(
@@ -305,6 +321,7 @@ def _check_links(
     decisions: list[StrategyDecision],
     baselines: list[BaselineEvaluation],
     evaluation_summaries: list[EvaluationSummary],
+    research_datasets: list[ResearchDataset],
     findings: list[HealthFinding],
 ) -> None:
     forecast_ids = {forecast.forecast_id for forecast in forecasts}
@@ -407,6 +424,30 @@ def _check_links(
                 findings,
             )
 
+    for dataset in research_datasets:
+        missing_forecasts = [forecast_id for forecast_id in dataset.forecast_ids if forecast_id not in forecast_ids]
+        missing_scores = [score_id for score_id in dataset.score_ids if score_id not in score_ids]
+        row_forecast_ids = [row.forecast_id for row in dataset.rows]
+        row_score_ids = [row.score_id for row in dataset.rows]
+        missing_row_forecasts = [forecast_id for forecast_id in row_forecast_ids if forecast_id not in forecast_ids]
+        missing_row_scores = [score_id for score_id in row_score_ids if score_id not in score_ids]
+        if missing_forecasts or missing_row_forecasts:
+            _add_link_finding(
+                "research_dataset_missing_forecast",
+                storage_path / "research_datasets.jsonl",
+                dataset.dataset_id,
+                ", ".join(sorted(set([*missing_forecasts, *missing_row_forecasts]))),
+                findings,
+            )
+        if missing_scores or missing_row_scores:
+            _add_link_finding(
+                "research_dataset_missing_score",
+                storage_path / "research_datasets.jsonl",
+                dataset.dataset_id,
+                ", ".join(sorted(set([*missing_scores, *missing_row_scores]))),
+                findings,
+            )
+
 
 def _add_link_finding(code: str, path: Path, source_id: str, missing_id: str, findings: list[HealthFinding]) -> None:
     findings.append(
@@ -418,6 +459,39 @@ def _add_link_finding(code: str, path: Path, source_id: str, missing_id: str, fi
             repair_required=True,
         )
     )
+
+
+def _check_research_dataset_leakage(
+    storage_path: Path,
+    research_datasets: list[ResearchDataset],
+    findings: list[HealthFinding],
+) -> None:
+    for dataset in research_datasets:
+        leakage_findings = list(dataset.leakage_findings)
+        for row in dataset.rows:
+            if row.feature_timestamp > row.decision_timestamp:
+                leakage_findings.append(
+                    f"{row.forecast_id}: feature_timestamp {row.feature_timestamp.isoformat()} "
+                    f"> decision_timestamp {row.decision_timestamp.isoformat()}"
+                )
+            if row.label_timestamp <= row.decision_timestamp:
+                leakage_findings.append(
+                    f"{row.forecast_id}: label_timestamp {row.label_timestamp.isoformat()} "
+                    f"<= decision_timestamp {row.decision_timestamp.isoformat()}"
+                )
+        if dataset.leakage_status != "passed" or leakage_findings:
+            findings.append(
+                HealthFinding(
+                    code="research_dataset_leakage",
+                    severity="blocking",
+                    message=(
+                        f"Research dataset {dataset.dataset_id} failed no-lookahead checks: "
+                        + "; ".join(leakage_findings or [dataset.leakage_status])
+                    ),
+                    artifact_path=str(storage_path / "research_datasets.jsonl"),
+                    repair_required=True,
+                )
+            )
 
 
 def _check_dashboard(storage_path: Path, findings: list[HealthFinding]) -> None:

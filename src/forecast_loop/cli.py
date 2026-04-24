@@ -26,6 +26,7 @@ from forecast_loop.provider_audit import AuditedMarketDataProvider
 from forecast_loop.portfolio import create_portfolio_snapshot, fill_paper_order, save_portfolio_mark
 from forecast_loop.providers import CoinGeckoMarketDataProvider, build_sample_provider
 from forecast_loop.replay import ReplayRunner
+from forecast_loop.research_dataset import build_research_dataset
 from forecast_loop.risk import evaluate_risk
 from forecast_loop.market_calendar import parse_date
 from forecast_loop.stock_data import (
@@ -190,6 +191,11 @@ def main(argv: list[str] | None = None) -> int:
     macro_calendar_cmd.add_argument("--event-type")
     macro_calendar_cmd.add_argument("--region")
 
+    build_research_dataset_cmd = subparsers.add_parser("build-research-dataset")
+    build_research_dataset_cmd.add_argument("--storage-dir", required=True)
+    build_research_dataset_cmd.add_argument("--symbol", default="BTC-USD")
+    build_research_dataset_cmd.add_argument("--created-at")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -240,6 +246,8 @@ def main(argv: list[str] | None = None) -> int:
             return _import_macro_events(args)
         if args.command == "macro-calendar":
             return _macro_calendar(args)
+        if args.command == "build-research-dataset":
+            return _build_research_dataset(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -814,6 +822,17 @@ def _macro_calendar(args) -> int:
         region=args.region,
     )
     print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
+def _build_research_dataset(args) -> int:
+    created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
+    result = build_research_dataset(
+        storage_dir=args.storage_dir,
+        symbol=args.symbol,
+        created_at=created_at,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0
 
 

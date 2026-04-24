@@ -268,6 +268,94 @@ class MacroEvent:
 
 
 @dataclass(slots=True)
+class ResearchDatasetRow:
+    forecast_id: str
+    score_id: str
+    symbol: str
+    decision_timestamp: datetime
+    feature_timestamp: datetime
+    label_timestamp: datetime
+    features: dict[str, object]
+    label: dict[str, object]
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        for key in ("decision_timestamp", "feature_timestamp", "label_timestamp"):
+            payload[key] = payload[key].isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "ResearchDatasetRow":
+        return cls(
+            forecast_id=_require_string(payload, "forecast_id"),
+            score_id=_require_string(payload, "score_id"),
+            symbol=_require_string(payload, "symbol"),
+            decision_timestamp=_require_aware_datetime(payload, "decision_timestamp"),
+            feature_timestamp=_require_aware_datetime(payload, "feature_timestamp"),
+            label_timestamp=_require_aware_datetime(payload, "label_timestamp"),
+            features=dict(payload.get("features") or {}),
+            label=dict(payload.get("label") or {}),
+        )
+
+
+@dataclass(slots=True)
+class ResearchDataset:
+    dataset_id: str
+    created_at: datetime
+    symbol: str
+    row_count: int
+    leakage_status: str
+    leakage_findings: list[str]
+    forecast_ids: list[str]
+    score_ids: list[str]
+    rows: list[ResearchDatasetRow]
+    decision_basis: str
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        symbol: str,
+        forecast_ids: list[str],
+        score_ids: list[str],
+        row_count: int,
+        leakage_status: str,
+    ) -> str:
+        return _stable_artifact_id(
+            "research-dataset",
+            {
+                "symbol": symbol,
+                "forecast_ids": sorted(forecast_ids),
+                "score_ids": sorted(score_ids),
+                "row_count": row_count,
+                "leakage_status": leakage_status,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        payload["rows"] = [row.to_dict() for row in self.rows]
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "ResearchDataset":
+        rows = [ResearchDatasetRow.from_dict(item) for item in payload.get("rows", [])]
+        return cls(
+            dataset_id=_require_string(payload, "dataset_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            symbol=_require_string(payload, "symbol"),
+            row_count=int(payload.get("row_count", len(rows))),
+            leakage_status=payload.get("leakage_status", "unknown"),
+            leakage_findings=list(payload.get("leakage_findings", [])),
+            forecast_ids=list(payload.get("forecast_ids", [])),
+            score_ids=list(payload.get("score_ids", [])),
+            rows=rows,
+            decision_basis=payload.get("decision_basis", "legacy_research_dataset"),
+        )
+
+
+@dataclass(slots=True)
 class Forecast:
     forecast_id: str
     symbol: str

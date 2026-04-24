@@ -282,6 +282,7 @@ Current practical V1 path:
 - M3D adds a US ETF/stock CSV fixture path for `SPY`, `QQQ`, `TLT`, and `GLD`
 - M3E adds fixture-based macro event storage and calendar inspection
 - M3F adds independent per-symbol strategy decisions for registered assets
+- M4A adds leakage-checked research dataset artifacts built from scored forecasts
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation
@@ -322,6 +323,7 @@ V1 MVP should include:
 - US ETF/stock fixture import with adjusted close and market-calendar handling
 - macro event artifacts for CPI, PCE, FOMC, GDP, NFP, and unemployment
 - independent per-symbol decision generation through `decide-all`
+- research dataset artifacts with no-lookahead leakage checks
 - health-check output
 - Codex repair request artifacts
 - minimal CLI
@@ -364,6 +366,7 @@ correctness defects:
 - Taiwan ETF calendar/provider support remains deferred
 - macro events are visible as imported calendar artifacts, but do not yet drive research features or strategy decisions
 - per-symbol multi-asset decisions do not yet perform portfolio optimization or cross-asset allocation
+- research datasets are generated artifacts only; no model training or optimizer is included yet
 
 The repository is suitable for continued paper-only hourly research only when
 tests pass, active storage repair status is fresh, dashboard freshness is

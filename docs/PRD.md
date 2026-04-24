@@ -276,8 +276,9 @@ Initial data should come from publicly accessible sources.
 Current practical V1 path:
 
 - public crypto market data first
-- BTC-USD as the initial symbol
-- expand later after the loop is trustworthy
+- BTC-USD as the initial automation symbol
+- M3A registers `BTC-USD`, `ETH-USD`, `SPY`, `QQQ`, `TLT`, `GLD`, and `0050.TW`
+- ETF/stock/Taiwan provider and calendar support remain deferred
 
 ## 10.4 Automation
 

@@ -6,11 +6,13 @@ from pathlib import Path
 
 from forecast_loop.models import (
     BaselineEvaluation,
+    EquityCurvePoint,
     EvaluationSummary,
     Forecast,
     ForecastScore,
     HealthCheckResult,
     HealthFinding,
+    PaperFill,
     PaperOrder,
     PaperPortfolioSnapshot,
     Proposal,
@@ -75,8 +77,10 @@ def run_health_check(
         "proposals": _load_jsonl(storage_path / "proposals.jsonl", Proposal.from_dict, findings),
         "decisions": _load_jsonl(storage_path / "strategy_decisions.jsonl", StrategyDecision.from_dict, findings),
         "paper_orders": _load_jsonl(storage_path / "paper_orders.jsonl", PaperOrder.from_dict, findings),
+        "paper_fills": _load_jsonl(storage_path / "paper_fills.jsonl", PaperFill.from_dict, findings),
         "baselines": _load_jsonl(storage_path / "baseline_evaluations.jsonl", BaselineEvaluation.from_dict, findings),
         "portfolios": _load_jsonl(storage_path / "portfolio_snapshots.jsonl", PaperPortfolioSnapshot.from_dict, findings),
+        "equity_curve": _load_jsonl(storage_path / "equity_curve.jsonl", EquityCurvePoint.from_dict, findings),
         "evaluation_summaries": _load_jsonl(storage_path / "evaluation_summaries.jsonl", EvaluationSummary.from_dict, findings),
         "repair_requests": _load_jsonl(storage_path / "repair_requests.jsonl", RepairRequest.from_dict, findings),
     }
@@ -86,8 +90,10 @@ def run_health_check(
     proposals: list[Proposal] = artifact_rows["proposals"]
     decisions: list[StrategyDecision] = artifact_rows["decisions"]
     paper_orders: list[PaperOrder] = artifact_rows["paper_orders"]
+    paper_fills: list[PaperFill] = artifact_rows["paper_fills"]
     baselines: list[BaselineEvaluation] = artifact_rows["baselines"]
     portfolios: list[PaperPortfolioSnapshot] = artifact_rows["portfolios"]
+    equity_curve: list[EquityCurvePoint] = artifact_rows["equity_curve"]
     evaluation_summaries: list[EvaluationSummary] = artifact_rows["evaluation_summaries"]
     repair_requests: list[RepairRequest] = artifact_rows["repair_requests"]
 
@@ -97,8 +103,10 @@ def run_health_check(
     _check_duplicate_ids(proposals, "proposal_id", storage_path / "proposals.jsonl", findings)
     _check_duplicate_ids(decisions, "decision_id", storage_path / "strategy_decisions.jsonl", findings)
     _check_duplicate_ids(paper_orders, "order_id", storage_path / "paper_orders.jsonl", findings)
+    _check_duplicate_ids(paper_fills, "fill_id", storage_path / "paper_fills.jsonl", findings)
     _check_duplicate_ids(baselines, "baseline_id", storage_path / "baseline_evaluations.jsonl", findings)
     _check_duplicate_ids(portfolios, "snapshot_id", storage_path / "portfolio_snapshots.jsonl", findings)
+    _check_duplicate_ids(equity_curve, "point_id", storage_path / "equity_curve.jsonl", findings)
     _check_duplicate_ids(evaluation_summaries, "summary_id", storage_path / "evaluation_summaries.jsonl", findings)
     _check_duplicate_ids(repair_requests, "repair_request_id", storage_path / "repair_requests.jsonl", findings)
 

@@ -14,6 +14,7 @@ from forecast_loop.maintenance import repair_storage
 from forecast_loop.models import StrategyDecision
 from forecast_loop.orders import create_paper_order_from_decision
 from forecast_loop.pipeline import ForecastingLoop
+from forecast_loop.portfolio import create_portfolio_snapshot, fill_paper_order, save_portfolio_mark
 from forecast_loop.providers import CoinGeckoMarketDataProvider, build_sample_provider
 from forecast_loop.replay import ReplayRunner
 from forecast_loop.sqlite_repository import (
@@ -89,6 +90,21 @@ def main(argv: list[str] | None = None) -> int:
     paper_order.add_argument("--symbol", default="BTC-USD")
     paper_order.add_argument("--now")
 
+    paper_fill = subparsers.add_parser("paper-fill")
+    paper_fill.add_argument("--storage-dir", required=True)
+    paper_fill.add_argument("--order-id", required=True)
+    paper_fill.add_argument("--symbol", default="BTC-USD")
+    paper_fill.add_argument("--market-price", type=float, default=100.0)
+    paper_fill.add_argument("--fee-bps", type=float, default=5.0)
+    paper_fill.add_argument("--slippage-bps", type=float, default=10.0)
+    paper_fill.add_argument("--now")
+
+    portfolio_snapshot = subparsers.add_parser("portfolio-snapshot")
+    portfolio_snapshot.add_argument("--storage-dir", required=True)
+    portfolio_snapshot.add_argument("--symbol", default="BTC-USD")
+    portfolio_snapshot.add_argument("--market-price", type=float, default=100.0)
+    portfolio_snapshot.add_argument("--now")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -113,6 +129,10 @@ def main(argv: list[str] | None = None) -> int:
             return _db_health(args)
         if args.command == "paper-order":
             return _paper_order(args)
+        if args.command == "paper-fill":
+            return _paper_fill(args)
+        if args.command == "portfolio-snapshot":
+            return _portfolio_snapshot(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -403,6 +423,84 @@ def _paper_order(args) -> int:
         health_result=health_result,
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _paper_fill(args) -> int:
+    now = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    storage_dir = Path(args.storage_dir)
+    health_result = run_health_check(
+        storage_dir=storage_dir,
+        symbol=args.symbol,
+        now=now,
+        create_repair_request=True,
+    )
+    if health_result.severity == "blocking" or health_result.repair_required:
+        print(
+            json.dumps(
+                {
+                    "status": "skipped",
+                    "reason": "health_blocking",
+                    "order_id": None if args.order_id == "latest" else args.order_id,
+                    "fill_id": None,
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 0
+    repository = JsonFileRepository(storage_dir)
+    result = fill_paper_order(
+        repository=repository,
+        order_id=args.order_id,
+        now=now,
+        market_price=args.market_price,
+        fee_bps=args.fee_bps,
+        slippage_bps=args.slippage_bps,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _portfolio_snapshot(args) -> int:
+    now = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    storage_dir = Path(args.storage_dir)
+    health_result = run_health_check(
+        storage_dir=storage_dir,
+        symbol=args.symbol,
+        now=now,
+        create_repair_request=True,
+    )
+    if health_result.severity == "blocking" or health_result.repair_required:
+        print(
+            json.dumps(
+                {
+                    "status": "skipped",
+                    "reason": "health_blocking",
+                    "snapshot_id": None,
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 0
+    repository = JsonFileRepository(storage_dir)
+    snapshot = create_portfolio_snapshot(
+        repository=repository,
+        now=now,
+        market_price=args.market_price,
+        symbol=args.symbol,
+    )
+    point = save_portfolio_mark(repository, snapshot)
+    print(
+        json.dumps(
+            {
+                "status": "created",
+                "snapshot_id": snapshot.snapshot_id,
+                "equity_curve_point_id": point.point_id,
+                "portfolio_snapshot": snapshot.to_dict(),
+            },
+            ensure_ascii=False,
+        )
+    )
     return 0
 
 

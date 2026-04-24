@@ -28,6 +28,7 @@ This version intentionally includes only:
   - `run-once`
   - `replay-range`
   - `render-dashboard`
+  - `repair-storage`
 
 This version intentionally excludes:
 
@@ -224,6 +225,10 @@ It only reads:
 - `last_run_meta.json`
 - `last_replay_meta.json`
 
+`render-dashboard` expects an existing storage directory. This is intentional:
+if the path is mistyped, the command fails instead of creating an empty artifact
+tree that could be mistaken for a real system state.
+
 ### Dashboard Command
 
 Generate the current dashboard:
@@ -259,7 +264,7 @@ The loop degrades conservatively:
 Run tests:
 
 ```powershell
-pytest -q
+python -m pytest -q
 ```
 
 Run one sample cycle:
@@ -285,6 +290,17 @@ Render a dashboard for an existing storage directory:
 ```powershell
 python run_forecast_loop.py render-dashboard --storage-dir .\paper_storage\manual-replay
 ```
+
+Repair and summarize a storage directory after legacy artifact pollution or
+before resuming hourly automation:
+
+```powershell
+python run_forecast_loop.py repair-storage --storage-dir .\paper_storage\manual-replay
+```
+
+The repair command writes `storage_repair_report.json` with a fresh
+`generated_at_utc`, active forecast count, latest forecast id, and quarantine
+status. Treat that report as a point-in-time audit record, not a live monitor.
 
 ## Remaining Gaps Intentionally Left for the Next Stage
 

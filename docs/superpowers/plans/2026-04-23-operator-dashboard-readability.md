@@ -2,6 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Current status, 2026-04-24:** This plan has been implemented and later
+> hardened. The live dashboard is Traditional Chinese, read-only, static HTML;
+> it prioritizes the operator summary and current forecast, keeps raw metadata
+> collapsed, shows dashboard/automation freshness, and refuses to render from a
+> missing storage directory. Treat the detailed unchecked steps below as the
+> historical implementation plan, not the current gap list.
+
 **Goal:** Turn the current static inspector into an operator-readable, read-only dashboard that answers “what mode is the system in, what is the latest forecast, how fresh is replay context, and what should I trust first” without forcing the user to parse raw metadata.
 
 **Architecture:** Keep the current `render-dashboard` command and static HTML output. Improve the `DashboardSnapshot` model to compute operator-facing status and readability helpers, then restructure `render_dashboard_html()` so the first screen prioritizes mode, latest forecast, and replay freshness while demoting raw metadata into collapsed debug details. Preserve the paper-only contract and avoid adding a server or interactive controls.

@@ -1,6 +1,8 @@
 from datetime import UTC, datetime, timedelta
 import json
 
+import pytest
+
 from forecast_loop.cli import main
 from forecast_loop.config import LoopConfig
 from forecast_loop.models import Forecast, MarketCandle
@@ -319,3 +321,27 @@ def test_coingecko_provider_maps_public_prices_to_hourly_boundaries():
     assert candles[1].timestamp == datetime(2024, 4, 21, 13, 0, tzinfo=UTC)
     assert candles[0].close == 103.5
     assert candles[1].close == 101.25
+
+
+def test_cli_run_once_rejects_unsupported_coingecko_symbol(tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "run-once",
+                "--provider",
+                "coingecko",
+                "--symbol",
+                "DOGE-USD",
+                "--storage-dir",
+                str(tmp_path),
+                "--now",
+                "2026-04-21T12:00:00+00:00",
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exc_info.value.code == 2
+    assert "unsupported symbol for coingecko: DOGE-USD" in captured.err
+    assert "Traceback" not in captured.err
+    assert not (tmp_path / "forecasts.jsonl").exists()

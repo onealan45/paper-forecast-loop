@@ -44,14 +44,17 @@ def main(argv: list[str] | None = None) -> int:
     repair_storage_cmd.add_argument("--storage-dir", required=True)
 
     args = parser.parse_args(argv)
-    if args.command == "run-once":
-        return _run_once(args)
-    if args.command == "replay-range":
-        return _replay_range(args)
-    if args.command == "render-dashboard":
-        return _render_dashboard(args)
-    if args.command == "repair-storage":
-        return _repair_storage(args)
+    try:
+        if args.command == "run-once":
+            return _run_once(args)
+        if args.command == "replay-range":
+            return _replay_range(args)
+        if args.command == "render-dashboard":
+            return _render_dashboard(args)
+        if args.command == "repair-storage":
+            return _repair_storage(args)
+    except ValueError as exc:
+        parser.error(str(exc))
     return 1
 
 
@@ -93,6 +96,12 @@ def _run_once(args) -> int:
 def _build_data_provider(provider_name: str, now: datetime, symbol: str):
     if provider_name == "sample":
         return build_sample_provider(now, symbol)
+    if symbol not in CoinGeckoMarketDataProvider.SYMBOL_MAP:
+        supported_symbols = ", ".join(sorted(CoinGeckoMarketDataProvider.SYMBOL_MAP))
+        raise ValueError(
+            f"unsupported symbol for coingecko: {symbol}. "
+            f"Supported symbols: {supported_symbols}."
+        )
     return CoinGeckoMarketDataProvider()
 
 
@@ -174,8 +183,11 @@ def _repair_storage(args) -> int:
         json.dumps(
             {
                 "storage_dir": str(result.storage_dir.resolve()),
+                "generated_at_utc": result.generated_at_utc.isoformat(),
                 "quarantined_forecast_count": result.quarantined_forecast_count,
                 "kept_forecast_count": result.kept_forecast_count,
+                "active_forecast_count": result.active_forecast_count,
+                "latest_forecast_id": result.latest_forecast_id,
                 "status": result.status,
             }
         )
@@ -239,9 +251,18 @@ def _write_last_replay_meta(
 
 
 def _parse_datetime(value: str) -> datetime:
-    parsed = datetime.fromisoformat(value)
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(
+            f"invalid datetime '{value}'. Expected ISO 8601 with timezone, "
+            "for example 2026-04-21T12:00:00+00:00."
+        ) from exc
     if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise ValueError("datetimes must be timezone-aware")
+        raise ValueError(
+            f"invalid datetime '{value}'. Datetimes must be timezone-aware, "
+            "for example 2026-04-21T12:00:00+00:00."
+        )
     return parsed.astimezone(UTC)
 
 

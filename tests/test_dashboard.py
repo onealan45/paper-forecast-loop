@@ -2,6 +2,8 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from forecast_loop.cli import main
 from forecast_loop.evaluation import build_evaluation_summary
 from forecast_loop.models import Forecast, ForecastScore, Proposal, Review
@@ -160,6 +162,7 @@ def test_render_dashboard_includes_latest_artifacts(tmp_path):
     assert 'main {\n      padding: 28px 32px 42px;\n      display: grid;\n      grid-template-columns: minmax(0, 1fr);' in html
     assert "操作摘要" in html
     assert "目前預測" in html
+    assert 'nav aria-label="儀表板區段"' in html
     assert "本輪判讀與建議" in html
     assert "支撐依據" in html
     assert "歷史脈絡" in html
@@ -352,7 +355,39 @@ def test_render_dashboard_marks_stale_replay_context(tmp_path):
     assert "historical" in snapshot.replay_freshness_label.lower()
     assert "產生時間" in html
     assert "僅供歷史脈絡參考" in html
+    assert "落後最新預測 29 小時" in html
+    assert "behind latest forecast" not in html
     assert 'secondary-panel' in html
+
+
+def test_render_dashboard_translates_failure_status_reasons(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    repository.save_forecast(
+        Forecast(
+            forecast_id="forecast:missing",
+            symbol="BTC-USD",
+            created_at=datetime(2026, 4, 21, 9, 0, tzinfo=UTC),
+            anchor_time=datetime(2026, 4, 21, 9, 0, tzinfo=UTC),
+            target_window_start=datetime(2026, 4, 21, 9, 0, tzinfo=UTC),
+            target_window_end=datetime(2026, 4, 21, 11, 0, tzinfo=UTC),
+            candle_interval_minutes=60,
+            expected_candle_count=3,
+            status="unscorable",
+            status_reason="missing_expected_candles",
+            predicted_regime="trend_up",
+            confidence=0.55,
+            provider_data_through=datetime(2026, 4, 21, 11, 0, tzinfo=UTC),
+            observed_candle_count=2,
+        )
+    )
+
+    html = render_dashboard_html(build_dashboard_snapshot(tmp_path))
+
+    assert "無法評分（unscorable）" in html
+    assert "缺少必要 K 線（missing_expected_candles）" in html
+    assert '<span class="tag">missing_expected_candles</span>' not in html
 
 
 def test_cli_render_dashboard_writes_html_file(tmp_path):
@@ -371,3 +406,19 @@ def test_cli_render_dashboard_writes_html_file(tmp_path):
     html = output_path.read_text(encoding="utf-8")
     assert "Paper Forecast Loop" in html
     assert "操作摘要" in html
+
+
+def test_cli_render_dashboard_rejects_missing_storage_dir_without_creating_it(tmp_path):
+    missing_storage = tmp_path / "typo-storage"
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "render-dashboard",
+                "--storage-dir",
+                str(missing_storage),
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    assert not missing_storage.exists()

@@ -462,14 +462,16 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
       <div class="brand">Paper-Only Inspector</div>
       <h1>Paper Forecast Loop</h1>
       <p class="subtitle">以最新預測為優先的靜態操作視圖，方便先看當前判讀，再對照 replay 與原始中繼資料。</p>
-      <ul class="nav-list">
-        <li><a href="#summary">操作摘要</a></li>
-        <li><a href="#forecast">目前預測</a></li>
-        <li><a href="#decision">本輪判讀與建議</a></li>
-        <li><a href="#evidence">證據快照</a></li>
-        <li><a href="#replay">歷史脈絡</a></li>
-        <li><a href="#raw">原始中繼資料</a></li>
-      </ul>
+      <nav aria-label="儀表板區段">
+        <ul class="nav-list">
+          <li><a href="#summary">操作摘要</a></li>
+          <li><a href="#forecast">目前預測</a></li>
+          <li><a href="#decision">本輪判讀與建議</a></li>
+          <li><a href="#evidence">證據快照</a></li>
+          <li><a href="#replay">歷史脈絡</a></li>
+          <li><a href="#raw">原始中繼資料</a></li>
+        </ul>
+      </nav>
     </aside>
     <main id="main-content">
       <section class="panel hero" id="summary">
@@ -757,9 +759,15 @@ def render_replay_panel(snapshot: DashboardSnapshot, summary: EvaluationSummary 
 
 
 def write_dashboard_html(storage_dir: Path | str, output_path: Path | str | None = None) -> Path:
-    snapshot = build_dashboard_snapshot(storage_dir)
+    storage_path = Path(storage_dir)
+    if not storage_path.exists():
+        raise ValueError(f"storage dir does not exist: {storage_path}")
+    if not storage_path.is_dir():
+        raise ValueError(f"storage dir is not a directory: {storage_path}")
+
+    snapshot = build_dashboard_snapshot(storage_path)
     html = render_dashboard_html(snapshot)
-    output_path = Path(output_path) if output_path is not None else Path(storage_dir) / "dashboard.html"
+    output_path = Path(output_path) if output_path is not None else storage_path / "dashboard.html"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(html, encoding="utf-8")
     return output_path
@@ -959,6 +967,9 @@ def _display_replay_freshness(label: str) -> str:
         return "replay 與最新預測視窗大致對齊"
     if label.startswith("Replay is historical (") and label.endswith(")"):
         detail = label.removeprefix("Replay is historical (").removesuffix(")")
+        if detail.endswith("h behind latest forecast"):
+            hours = detail.removesuffix("h behind latest forecast").strip()
+            detail = f"落後最新預測 {hours} 小時"
         return f"replay 僅供歷史脈絡參考（{detail}）"
     return label
 
@@ -984,6 +995,8 @@ def _display_status_reason(reason: str) -> str:
         "missing_expected_candles": "缺少必要 K 線（missing_expected_candles）",
         "empty_realized_window": "實際觀測視窗為空（empty_realized_window）",
         "insufficient_realized_candles": "實際 K 線不足（insufficient_realized_candles）",
+        "legacy_unscorable": "舊版無法評分狀態（legacy_unscorable）",
+        "legacy_status": "舊版狀態（legacy_status）",
     }
     return mapping.get(reason, reason)
 

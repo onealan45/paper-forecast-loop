@@ -4,6 +4,11 @@ version = "0.1.0"
 description = "Paper-only public-data forecasting and strategy-research loop"
 requires-python = ">=3.13"
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]

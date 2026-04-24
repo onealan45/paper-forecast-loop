@@ -64,6 +64,9 @@ def test_repair_storage_quarantines_legacy_off_boundary_forecasts(tmp_path):
     assert [item["forecast_id"] for item in quarantined] == ["legacy-1"]
     assert report["quarantined_forecast_count"] == 1
     assert report["kept_forecast_count"] == 1
+    assert datetime.fromisoformat(report["generated_at_utc"]).tzinfo is not None
+    assert report["active_forecast_count"] == 1
+    assert report["latest_forecast_id"] == "current-1"
 
 
 def test_repair_storage_is_idempotent_on_second_run(tmp_path):
@@ -88,6 +91,8 @@ def test_repair_storage_is_idempotent_on_second_run(tmp_path):
     assert len(quarantined) == 1
     assert report["quarantined_forecast_count"] == 0
     assert report["kept_forecast_count"] == 0
+    assert report["active_forecast_count"] == 0
+    assert report["latest_forecast_id"] is None
 
 
 def test_repair_storage_reports_clean_storage_without_changes(tmp_path):
@@ -98,4 +103,7 @@ def test_repair_storage_reports_clean_storage_without_changes(tmp_path):
     assert exit_code == 0
     assert report["quarantined_forecast_count"] == 0
     assert report["kept_forecast_count"] == 0
+    assert report["active_forecast_count"] == 0
+    assert report["latest_forecast_id"] is None
+    assert datetime.fromisoformat(report["generated_at_utc"]).tzinfo is not None
     assert report["status"] == "no_legacy_forecasts_found"

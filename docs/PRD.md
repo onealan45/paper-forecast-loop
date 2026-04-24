@@ -303,14 +303,24 @@ V1 should be considered product-ready for internal iteration only when:
 
 ## 13. Known Gaps Before Full V1 Confidence
 
-Current implementation gaps already identified during review:
+The current implementation has closed the earlier correctness gaps around
+provider-aligned forecast anchors, complete target-window coverage before
+scoring, incomplete realized windows, replay determinism, and dashboard
+operator-state framing.
 
-- forecast resolution may occur before market data fully covers the forecast horizon
-- forecast timestamps are not aligned to provider candle boundaries
-- empty or incomplete candle windows can crash classification
-- tests do not yet cover the incomplete-data resolve failure mode
+Remaining gaps are now product and operations scope, not known loop-blocking
+correctness defects:
 
-These issues mean the current repository is suitable for review, but not yet sufficient to claim a trustworthy closed forecasting loop.
+- strategy and regime classification remain intentionally simple
+- the current read-only UX is static HTML, not a live operator application
+- automation is local and paper-only, with manual evidence checks before any resume
+- there is no portfolio, NAV, PnL, or live execution layer
+- CoinGecko replay remains disabled until a deterministic historical data source exists
+
+The repository is suitable for continued paper-only hourly research only when
+tests pass, active storage repair status is fresh, dashboard freshness is
+visible, and `last_run_meta.json.new_forecast.forecast_id` matches the newest
+forecast tail record.
 
 ## 14. Decision Log: Prior Q&A
 
@@ -356,4 +366,3 @@ This section records the earlier product questions and the answers that shaped t
 - Desired loop: `Predict -> Wait -> Validate -> Review -> Adjust -> Predict`
 - Hourly prediction automation is the preferred runtime cadence
 - Development automation should only exist as a fallback repair mode
-

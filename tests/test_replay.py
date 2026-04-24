@@ -1037,8 +1037,8 @@ def test_cli_replay_range_scopes_summary_to_requested_window(tmp_path):
     assert summaries["review_ids"] == payload["evaluation_summary"]["review_ids"]
 
 
-def test_cli_replay_range_rejects_naive_datetimes(tmp_path):
-    with pytest.raises(ValueError, match="timezone-aware"):
+def test_cli_replay_range_rejects_naive_datetimes(tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc_info:
         main(
             [
                 "replay-range",
@@ -1057,9 +1057,15 @@ def test_cli_replay_range_rejects_naive_datetimes(tmp_path):
             ]
         )
 
+    captured = capsys.readouterr()
 
-def test_cli_run_once_rejects_naive_now(tmp_path):
-    with pytest.raises(ValueError, match="datetimes must be timezone-aware"):
+    assert exc_info.value.code == 2
+    assert "timezone-aware" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_cli_run_once_rejects_naive_now(tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc_info:
         main(
             [
                 "run-once",
@@ -1074,6 +1080,34 @@ def test_cli_run_once_rejects_naive_now(tmp_path):
             ]
         )
 
+    captured = capsys.readouterr()
+
+    assert exc_info.value.code == 2
+    assert "timezone-aware" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_cli_run_once_rejects_malformed_datetime(tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "run-once",
+                "--provider",
+                "sample",
+                "--symbol",
+                "BTC-USD",
+                "--storage-dir",
+                str(tmp_path),
+                "--now",
+                "not-a-date",
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exc_info.value.code == 2
+    assert "invalid datetime" in captured.err
+    assert "Traceback" not in captured.err
 
 def test_cli_replay_range_does_not_leak_stale_empty_score_proposals(tmp_path):
     first_exit_code = main(

@@ -80,6 +80,7 @@ This version intentionally includes:
   - `import-macro-events`
   - `macro-calendar`
   - `build-research-dataset`
+  - `research-report`
   - `backtest`
   - `walk-forward`
 
@@ -680,6 +681,17 @@ boundaries, runs paper-only validation and test backtests, writes
 `walk_forward_validations.jsonl`, and reports aggregate validation return, test
 return, benchmark return, excess return, test win rate, and overfit-risk flags.
 
+Generate a Markdown research report from existing artifacts:
+
+```powershell
+python run_forecast_loop.py research-report --storage-dir .\paper_storage\manual-replay --symbol BTC-USD --created-at 2026-04-24T12:00:00+00:00
+```
+
+The M4E report is written under `reports/research/` by default and summarizes
+data coverage, model vs baselines, backtest metrics, walk-forward metrics,
+drawdown, overfit risk, and the latest strategy decision gate result. Generated
+reports are runtime outputs and are ignored by git.
+
 Render a dashboard for an existing storage directory:
 
 ```powershell
@@ -741,3 +753,4 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - research datasets are artifact builders only; no model training or optimizer is included yet
 - backtests are local paper simulations over stored candles; no broker or live execution path is involved
 - walk-forward validation is a research artifact only; it does not yet gate BUY/SELL decisions
+- research reports summarize existing artifacts only; they do not create new strategy gates

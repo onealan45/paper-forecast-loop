@@ -28,6 +28,7 @@ from forecast_loop.portfolio import create_portfolio_snapshot, fill_paper_order,
 from forecast_loop.providers import CoinGeckoMarketDataProvider, build_sample_provider
 from forecast_loop.replay import ReplayRunner
 from forecast_loop.research_dataset import build_research_dataset
+from forecast_loop.research_report import generate_research_report
 from forecast_loop.risk import evaluate_risk
 from forecast_loop.market_calendar import parse_date
 from forecast_loop.stock_data import (
@@ -198,6 +199,12 @@ def main(argv: list[str] | None = None) -> int:
     build_research_dataset_cmd.add_argument("--symbol", default="BTC-USD")
     build_research_dataset_cmd.add_argument("--created-at")
 
+    research_report_cmd = subparsers.add_parser("research-report")
+    research_report_cmd.add_argument("--storage-dir", required=True)
+    research_report_cmd.add_argument("--symbol", default="BTC-USD")
+    research_report_cmd.add_argument("--created-at")
+    research_report_cmd.add_argument("--output-dir", default=str(Path("reports") / "research"))
+
     backtest_cmd = subparsers.add_parser("backtest")
     backtest_cmd.add_argument("--storage-dir", required=True)
     backtest_cmd.add_argument("--symbol", default="BTC-USD")
@@ -276,6 +283,8 @@ def main(argv: list[str] | None = None) -> int:
             return _macro_calendar(args)
         if args.command == "build-research-dataset":
             return _build_research_dataset(args)
+        if args.command == "research-report":
+            return _research_report(args)
         if args.command == "backtest":
             return _backtest(args)
         if args.command == "walk-forward":
@@ -863,6 +872,18 @@ def _build_research_dataset(args) -> int:
         storage_dir=args.storage_dir,
         symbol=args.symbol,
         created_at=created_at,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _research_report(args) -> int:
+    created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
+    result = generate_research_report(
+        storage_dir=args.storage_dir,
+        symbol=args.symbol,
+        created_at=created_at,
+        output_dir=args.output_dir,
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0

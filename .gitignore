@@ -8,6 +8,7 @@ htmlcov/
 
 debug_resolve_copy/
 output/
+reports/
 paper_storage/
 public_run/
 public_run_seq/

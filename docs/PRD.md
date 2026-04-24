@@ -311,6 +311,7 @@ V1 MVP should include:
 - minimal paper portfolio snapshots
 - local paper order ledger
 - local paper fills and equity curve artifacts
+- local paper risk snapshots and risk gates
 - health-check output
 - Codex repair request artifacts
 - minimal CLI
@@ -344,7 +345,7 @@ correctness defects:
 - strategy and regime classification remain intentionally simple
 - the current read-only UX is static HTML, not a live operator application
 - automation is local and paper-only, with manual evidence checks before any resume
-- paper portfolio accounting is a local simulation and not broker reconciliation or external execution
+- paper portfolio accounting and risk gates are local simulations and not broker reconciliation or external execution
 - SQLite repository migration/export now exists, while the hourly loop and dashboard still use JSONL artifacts by default until later M2 integration
 - health-check creates repair requests, but there is no autonomous repair daemon in this repo
 - there is no live execution layer, and live broker/exchange integration remains explicitly unavailable

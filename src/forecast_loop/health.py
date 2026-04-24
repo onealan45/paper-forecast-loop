@@ -17,6 +17,7 @@ from forecast_loop.models import (
     PaperPortfolioSnapshot,
     Proposal,
     RepairRequest,
+    RiskSnapshot,
     Review,
     StrategyDecision,
 )
@@ -81,6 +82,7 @@ def run_health_check(
         "baselines": _load_jsonl(storage_path / "baseline_evaluations.jsonl", BaselineEvaluation.from_dict, findings),
         "portfolios": _load_jsonl(storage_path / "portfolio_snapshots.jsonl", PaperPortfolioSnapshot.from_dict, findings),
         "equity_curve": _load_jsonl(storage_path / "equity_curve.jsonl", EquityCurvePoint.from_dict, findings),
+        "risk_snapshots": _load_jsonl(storage_path / "risk_snapshots.jsonl", RiskSnapshot.from_dict, findings),
         "evaluation_summaries": _load_jsonl(storage_path / "evaluation_summaries.jsonl", EvaluationSummary.from_dict, findings),
         "repair_requests": _load_jsonl(storage_path / "repair_requests.jsonl", RepairRequest.from_dict, findings),
     }
@@ -94,6 +96,7 @@ def run_health_check(
     baselines: list[BaselineEvaluation] = artifact_rows["baselines"]
     portfolios: list[PaperPortfolioSnapshot] = artifact_rows["portfolios"]
     equity_curve: list[EquityCurvePoint] = artifact_rows["equity_curve"]
+    risk_snapshots: list[RiskSnapshot] = artifact_rows["risk_snapshots"]
     evaluation_summaries: list[EvaluationSummary] = artifact_rows["evaluation_summaries"]
     repair_requests: list[RepairRequest] = artifact_rows["repair_requests"]
 
@@ -107,6 +110,7 @@ def run_health_check(
     _check_duplicate_ids(baselines, "baseline_id", storage_path / "baseline_evaluations.jsonl", findings)
     _check_duplicate_ids(portfolios, "snapshot_id", storage_path / "portfolio_snapshots.jsonl", findings)
     _check_duplicate_ids(equity_curve, "point_id", storage_path / "equity_curve.jsonl", findings)
+    _check_duplicate_ids(risk_snapshots, "risk_id", storage_path / "risk_snapshots.jsonl", findings)
     _check_duplicate_ids(evaluation_summaries, "summary_id", storage_path / "evaluation_summaries.jsonl", findings)
     _check_duplicate_ids(repair_requests, "repair_request_id", storage_path / "repair_requests.jsonl", findings)
 

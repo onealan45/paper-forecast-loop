@@ -6,7 +6,17 @@ import pytest
 
 from forecast_loop.cli import main
 from forecast_loop.evaluation import build_evaluation_summary
-from forecast_loop.models import BaselineEvaluation, Forecast, ForecastScore, Proposal, Review, StrategyDecision
+from forecast_loop.models import (
+    BaselineEvaluation,
+    Forecast,
+    ForecastScore,
+    PaperPortfolioSnapshot,
+    PaperPosition,
+    Proposal,
+    Review,
+    RiskSnapshot,
+    StrategyDecision,
+)
 from forecast_loop.storage import JsonFileRepository
 
 
@@ -511,3 +521,62 @@ def test_dashboard_prioritizes_strategy_decision_and_health_status(tmp_path):
     assert "預測品質 vs 基準線" in html
     assert "forecast 偏多且模型證據打贏 baseline。" in html
     assert "需要修復" not in html.split('id="strategy"', 1)[1].split("</section>", 1)[0]
+
+
+def test_dashboard_renders_portfolio_nav_pnl_and_risk(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    position = PaperPosition(
+        symbol="BTC-USD",
+        quantity=10.0,
+        avg_price=100.0,
+        market_price=105.0,
+        market_value=1_050.0,
+        unrealized_pnl=50.0,
+        position_pct=0.105,
+    )
+    portfolio = PaperPortfolioSnapshot(
+        snapshot_id="portfolio:risk-dashboard",
+        created_at=now,
+        equity=10_000.0,
+        cash=8_950.0,
+        gross_exposure_pct=0.105,
+        net_exposure_pct=0.105,
+        max_drawdown_pct=0.02,
+        positions=[position],
+        realized_pnl=25.0,
+        unrealized_pnl=50.0,
+        nav=10_000.0,
+    )
+    risk = RiskSnapshot(
+        risk_id="risk:dashboard",
+        created_at=now,
+        symbol="BTC-USD",
+        status="REDUCE_RISK",
+        severity="warning",
+        current_drawdown_pct=0.06,
+        max_drawdown_pct=0.06,
+        gross_exposure_pct=0.105,
+        net_exposure_pct=0.105,
+        position_pct=0.105,
+        max_position_pct=0.15,
+        max_gross_exposure_pct=0.20,
+        reduce_risk_drawdown_pct=0.05,
+        stop_new_entries_drawdown_pct=0.10,
+        findings=["current_drawdown 6.00% >= reduce-risk threshold 5.00%"],
+        recommended_action="REDUCE_RISK",
+        decision_basis="test",
+    )
+    repository.save_portfolio_snapshot(portfolio)
+    repository.save_risk_snapshot(risk)
+
+    html = render_dashboard_html(build_dashboard_snapshot(tmp_path))
+
+    assert 'id="portfolio"' in html
+    assert "Paper NAV / 風險" in html
+    assert "NAV / Equity" in html
+    assert "已實現 / 未實現 PnL" in html
+    assert "降低風險（REDUCE_RISK）" in html
+    assert "Gross exposure：10.50%" in html

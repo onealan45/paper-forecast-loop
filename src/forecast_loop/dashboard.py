@@ -17,6 +17,7 @@ from forecast_loop.models import (
     HealthFinding,
     PaperPortfolioSnapshot,
     Proposal,
+    RiskSnapshot,
     Review,
     StrategyDecision,
 )
@@ -36,6 +37,7 @@ class DashboardSnapshot:
     latest_strategy_decision: StrategyDecision | None
     latest_baseline_evaluation: BaselineEvaluation | None
     latest_portfolio_snapshot: PaperPortfolioSnapshot | None
+    latest_risk_snapshot: RiskSnapshot | None
     latest_replay_summary: EvaluationSummary | None
     forecast_count: int
     score_count: int
@@ -74,6 +76,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
     strategy_decisions = repository.load_strategy_decisions()
     baseline_evaluations = repository.load_baseline_evaluations()
     portfolio_snapshots = repository.load_portfolio_snapshots()
+    risk_snapshots = repository.load_risk_snapshots()
     replay_summaries = repository.load_evaluation_summaries()
     latest_forecast = forecasts[-1] if forecasts else None
     latest_review = reviews[-1] if reviews else None
@@ -105,6 +108,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         latest_strategy_decision=strategy_decisions[-1] if strategy_decisions else None,
         latest_baseline_evaluation=baseline_evaluations[-1] if baseline_evaluations else None,
         latest_portfolio_snapshot=portfolio_snapshots[-1] if portfolio_snapshots else None,
+        latest_risk_snapshot=risk_snapshots[-1] if risk_snapshots else None,
         latest_replay_summary=latest_replay_summary,
         forecast_count=len(forecasts),
         score_count=len(scores),
@@ -502,6 +506,7 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
         <ul class="nav-list">
           <li><a href="#strategy">明日決策</a></li>
           <li><a href="#summary">操作摘要</a></li>
+          <li><a href="#portfolio">投資組合與風險</a></li>
           <li><a href="#forecast">目前預測</a></li>
           <li><a href="#decision">本輪判讀與建議</a></li>
           <li><a href="#evidence">證據快照</a></li>
@@ -516,6 +521,9 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
       </section>
       <section class="panel hero" id="summary">
         {render_operator_summary(snapshot)}
+      </section>
+      <section class="panel hero" id="portfolio">
+        {render_portfolio_risk_panel(snapshot)}
       </section>
       <section class="panel hero primary-card" id="forecast">
         {render_forecast_panel(latest_forecast)}
@@ -592,6 +600,7 @@ def render_strategy_panel(snapshot: DashboardSnapshot) -> str:
     decision = snapshot.latest_strategy_decision
     baseline = snapshot.latest_baseline_evaluation
     portfolio = snapshot.latest_portfolio_snapshot
+    risk = snapshot.latest_risk_snapshot
     repair_copy = (
         "需要 Codex 修復，暫停新進場。"
         if snapshot.repair_required
@@ -626,7 +635,12 @@ def render_strategy_panel(snapshot: DashboardSnapshot) -> str:
     portfolio_copy = (
         "目前沒有 paper 投資組合快照。"
         if portfolio is None
-        else f"paper 權益 {portfolio.equity:.2f}，淨曝險 {portfolio.net_exposure_pct:.2%}。"
+        else f"NAV {portfolio.nav or portfolio.equity:.2f}，淨曝險 {portfolio.net_exposure_pct:.2%}。"
+    )
+    risk_copy = (
+        "尚無 risk-check 快照。"
+        if risk is None
+        else f"風險狀態 {_display_risk_status(risk.status)}；最大回撤 {risk.max_drawdown_pct:.2%}。"
     )
     blocked_copy = _display_blocked_reason(decision.blocked_reason)
     return f"""
@@ -653,6 +667,7 @@ def render_strategy_panel(snapshot: DashboardSnapshot) -> str:
         <div class="evidence-block">
           <h3>Paper 投資組合 / 修復狀態</h3>
           <p class="micro-copy">{escape(portfolio_copy)}</p>
+          <p class="micro-copy">{escape(risk_copy)}</p>
           <p class="micro-copy">{escape(repair_copy)}</p>
         </div>
       </div>
@@ -668,6 +683,47 @@ def render_strategy_panel(snapshot: DashboardSnapshot) -> str:
         </dl>
         <pre>{escape(json.dumps(decision.to_dict(), ensure_ascii=False, indent=2))}</pre>
       </details>
+    """
+
+
+def render_portfolio_risk_panel(snapshot: DashboardSnapshot) -> str:
+    portfolio = snapshot.latest_portfolio_snapshot
+    risk = snapshot.latest_risk_snapshot
+    if portfolio is None:
+        return """
+      <div class="kicker">投資組合與風險</div>
+      <h2>Paper NAV / 風險</h2>
+      <p class="lead">目前還沒有 paper 投資組合快照。請先用 <code>portfolio-snapshot</code> 或 paper fill 產生 NAV 資料。</p>
+      <p class="empty">沒有 portfolio snapshot。</p>
+    """
+
+    nav = portfolio.nav if portfolio.nav is not None else portfolio.equity
+    risk_status = "尚無 risk-check 快照。" if risk is None else _display_risk_status(risk.status)
+    risk_copy = (
+        "請執行 risk-check 產生 drawdown 與 exposure gate。"
+        if risk is None
+        else "；".join(risk.findings) if risk.findings else "目前沒有 drawdown 或曝險超標 finding。"
+    )
+    return f"""
+      <div class="kicker">投資組合與風險</div>
+      <h2>Paper NAV / 風險</h2>
+      <p class="lead">這裡只顯示 paper-only 投資組合、PnL、drawdown 和曝險，不代表任何真實帳戶或外部 broker 狀態。</p>
+      <div class="primary-grid">
+        <div class="summary-card"><div class="summary-label">NAV / Equity</div><div class="summary-value">{nav:.2f}</div><div class="summary-copy">paper-only 淨值，不是真實資金。</div></div>
+        <div class="summary-card"><div class="summary-label">現金</div><div class="summary-value">{portfolio.cash:.2f}</div><div class="summary-copy">內部 paper ledger 現金。</div></div>
+        <div class="summary-card"><div class="summary-label">已實現 / 未實現 PnL</div><div class="summary-value">{portfolio.realized_pnl:.2f} / {portfolio.unrealized_pnl:.2f}</div><div class="summary-copy">由 local paper fills 與 mark-to-market 推導。</div></div>
+        <div class="summary-card"><div class="summary-label">風險狀態</div><div class="summary-value">{escape(risk_status)}</div><div class="summary-copy">{escape(risk_copy)}</div></div>
+      </div>
+      <div class="evidence-grid">
+        <div class="evidence-block">
+          <h3>曝險</h3>
+          <p class="micro-copy">Gross exposure：{portfolio.gross_exposure_pct:.2%}；Net exposure：{portfolio.net_exposure_pct:.2%}。</p>
+        </div>
+        <div class="evidence-block">
+          <h3>Drawdown Gate</h3>
+          <p class="micro-copy">{escape(_risk_threshold_copy(risk))}</p>
+        </div>
+      </div>
     """
 
 
@@ -1054,6 +1110,16 @@ def _display_strategy_reason(decision: StrategyDecision) -> str:
         return "證據方向偏正面，但強度不足以支持買進或賣出。"
     if decision.blocked_reason == "unknown_forecast_regime":
         return "最新 forecast regime 方向性不足，不應產生買進或賣出。"
+    if decision.blocked_reason == "risk_stop_new_entries":
+        return "風險檢查觸發停止新進場 gate；暫停方向性 paper order。"
+    if decision.blocked_reason == "risk_reduce_required_but_no_position":
+        return "風險檢查要求降低風險，但目前沒有可降低的 paper 部位。"
+    if decision.blocked_reason == "risk_snapshot_missing":
+        return "缺少 risk-check 快照，方向性買進/賣出被停止。"
+    if decision.blocked_reason == "risk_snapshot_stale":
+        return "risk-check 快照已過期，方向性買進/賣出被停止。"
+    if decision.blocked_reason == "risk_snapshot_symbol_mismatch":
+        return "risk-check 快照 symbol 不一致，方向性買進/賣出被停止。"
     if decision.action == "BUY":
         return "最新 forecast 偏多，且模型證據在品質足夠時打贏 baseline。"
     if decision.action == "SELL":
@@ -1086,6 +1152,25 @@ def _display_risk_level(level: str) -> str:
     return mapping.get(level, level)
 
 
+def _display_risk_status(status: str) -> str:
+    mapping = {
+        "OK": "正常（OK）",
+        "REDUCE_RISK": "降低風險（REDUCE_RISK）",
+        "STOP_NEW_ENTRIES": "停止新進場（STOP_NEW_ENTRIES）",
+    }
+    return mapping.get(status, status)
+
+
+def _risk_threshold_copy(risk: RiskSnapshot | None) -> str:
+    if risk is None:
+        return "尚未執行 risk-check，因此沒有 drawdown gate 快照。"
+    return (
+        f"目前回撤 {risk.current_drawdown_pct:.2%}；最大回撤 {risk.max_drawdown_pct:.2%}；"
+        f"降低風險門檻 {risk.reduce_risk_drawdown_pct:.2%}；"
+        f"停止新進場門檻 {risk.stop_new_entries_drawdown_pct:.2%}。"
+    )
+
+
 def _display_health_status(status: str, repair_required: bool) -> str:
     if repair_required:
         return "需要修復（repair required）"
@@ -1107,6 +1192,11 @@ def _display_blocked_reason(reason: str | None) -> str:
         "model_not_beating_baseline": "模型沒有打贏基準線，買進/賣出被擋住。",
         "evidence_grade_too_weak_for_directional_action": "證據等級不足，不能支持買進或賣出。",
         "unknown_forecast_regime": "forecast regime 方向性不足。",
+        "risk_stop_new_entries": "風險 gate 觸發停止新進場。",
+        "risk_reduce_required_but_no_position": "風險 gate 要求降風險，但目前沒有可降低的 paper 部位。",
+        "risk_snapshot_missing": "缺少 risk-check 快照，方向性買進/賣出被停止。",
+        "risk_snapshot_stale": "risk-check 快照已過期，方向性買進/賣出被停止。",
+        "risk_snapshot_symbol_mismatch": "risk-check 快照 symbol 不一致，方向性買進/賣出被停止。",
     }
     return mapping.get(reason, reason or "未被決策 gate 阻擋")
 

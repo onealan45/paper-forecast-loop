@@ -16,6 +16,7 @@ from forecast_loop.models import (
     Proposal,
     RepairRequest,
     Review,
+    RiskSnapshot,
     StrategyDecision,
 )
 from forecast_loop.sqlite_repository import DEFAULT_DB_FILENAME, SQLiteRepository
@@ -219,6 +220,28 @@ def _equity_point(now: datetime) -> EquityCurvePoint:
     )
 
 
+def _risk_snapshot(now: datetime) -> RiskSnapshot:
+    return RiskSnapshot(
+        risk_id="risk:sqlite",
+        created_at=now,
+        symbol="BTC-USD",
+        status="OK",
+        severity="none",
+        current_drawdown_pct=0.0,
+        max_drawdown_pct=0.0,
+        gross_exposure_pct=0.1,
+        net_exposure_pct=0.1,
+        position_pct=0.1,
+        max_position_pct=0.15,
+        max_gross_exposure_pct=0.20,
+        reduce_risk_drawdown_pct=0.05,
+        stop_new_entries_drawdown_pct=0.10,
+        findings=[],
+        recommended_action="HOLD",
+        decision_basis="test",
+    )
+
+
 def _seed_repository(repository) -> dict:
     now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
     forecast = _forecast(now)
@@ -232,6 +255,7 @@ def _seed_repository(repository) -> dict:
     fill = _paper_fill(now, order)
     snapshot = PaperPortfolioSnapshot.empty(created_at=now)
     equity_point = _equity_point(now)
+    risk_snapshot = _risk_snapshot(now)
     repair_request = _repair_request(now)
 
     repository.save_forecast(forecast)
@@ -245,6 +269,7 @@ def _seed_repository(repository) -> dict:
     repository.save_paper_fill(fill)
     repository.save_portfolio_snapshot(snapshot)
     repository.save_equity_curve_point(equity_point)
+    repository.save_risk_snapshot(risk_snapshot)
     repository.save_repair_request(repair_request)
     return {
         "forecast": forecast,
@@ -258,6 +283,7 @@ def _seed_repository(repository) -> dict:
         "fill": fill,
         "snapshot": snapshot,
         "equity_point": equity_point,
+        "risk_snapshot": risk_snapshot,
         "repair_request": repair_request,
     }
 
@@ -279,6 +305,7 @@ def test_sqlite_repository_round_trips_and_dedupes_m1_artifacts(tmp_path):
     assert repository.load_paper_fills() == [artifacts["fill"]]
     assert repository.load_portfolio_snapshots() == [artifacts["snapshot"]]
     assert repository.load_equity_curve_points() == [artifacts["equity_point"]]
+    assert repository.load_risk_snapshots() == [artifacts["risk_snapshot"]]
     assert repository.load_repair_requests() == [artifacts["repair_request"]]
     assert repository.artifact_counts()["forecasts"] == 1
 
@@ -330,6 +357,7 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert health_result["artifact_counts"]["paper_orders"] == 1
     assert health_result["artifact_counts"]["paper_fills"] == 1
     assert health_result["artifact_counts"]["equity_curve"] == 1
+    assert health_result["artifact_counts"]["risk_snapshots"] == 1
 
 
 def test_export_jsonl_writes_compatibility_artifacts(tmp_path, capsys):
@@ -350,3 +378,4 @@ def test_export_jsonl_writes_compatibility_artifacts(tmp_path, capsys):
     assert exported_repository.load_paper_orders() == [artifacts["order"]]
     assert exported_repository.load_paper_fills() == [artifacts["fill"]]
     assert exported_repository.load_equity_curve_points() == [artifacts["equity_point"]]
+    assert exported_repository.load_risk_snapshots() == [artifacts["risk_snapshot"]]

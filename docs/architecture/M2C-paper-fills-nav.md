@@ -70,5 +70,5 @@ not contact any broker, exchange, sandbox, or testnet.
 - cancellation lifecycle;
 - external paper/sandbox broker reconciliation;
 - market calendar logic;
-- risk gates that affect decisions;
-- dashboard portfolio/risk panels beyond the existing static inspection layer.
+- risk gates that affect decisions, deferred to M2D;
+- dashboard portfolio/risk panels, deferred to M2D.

@@ -17,6 +17,7 @@ from forecast_loop.pipeline import ForecastingLoop
 from forecast_loop.portfolio import create_portfolio_snapshot, fill_paper_order, save_portfolio_mark
 from forecast_loop.providers import CoinGeckoMarketDataProvider, build_sample_provider
 from forecast_loop.replay import ReplayRunner
+from forecast_loop.risk import evaluate_risk
 from forecast_loop.sqlite_repository import (
     export_sqlite_to_jsonl,
     initialize_sqlite_database,
@@ -105,6 +106,15 @@ def main(argv: list[str] | None = None) -> int:
     portfolio_snapshot.add_argument("--market-price", type=float, default=100.0)
     portfolio_snapshot.add_argument("--now")
 
+    risk_check = subparsers.add_parser("risk-check")
+    risk_check.add_argument("--storage-dir", required=True)
+    risk_check.add_argument("--symbol", default="BTC-USD")
+    risk_check.add_argument("--now")
+    risk_check.add_argument("--max-position-pct", type=float, default=0.15)
+    risk_check.add_argument("--max-gross-exposure-pct", type=float, default=0.20)
+    risk_check.add_argument("--reduce-risk-drawdown-pct", type=float, default=0.05)
+    risk_check.add_argument("--stop-new-entries-drawdown-pct", type=float, default=0.10)
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -133,6 +143,8 @@ def main(argv: list[str] | None = None) -> int:
             return _paper_fill(args)
         if args.command == "portfolio-snapshot":
             return _portfolio_snapshot(args)
+        if args.command == "risk-check":
+            return _risk_check(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -195,12 +207,20 @@ def _run_once(args) -> int:
             now=now,
             create_repair_request=True,
         )
+        risk_snapshot = None
+        if not health_result.repair_required:
+            risk_snapshot = evaluate_risk(
+                repository=repository,
+                symbol=args.symbol,
+                now=now,
+            )
         decision = generate_strategy_decision(
             repository=repository,
             symbol=args.symbol,
             horizon_hours=args.horizon_hours,
             now=now,
             health_result=health_result,
+            risk_snapshot=risk_snapshot,
         )
     print(
         json.dumps(
@@ -342,12 +362,20 @@ def _decide(args) -> int:
         return 0
 
     repository = JsonFileRepository(storage_dir)
+    risk_snapshot = None
+    if not health_result.repair_required:
+        risk_snapshot = evaluate_risk(
+            repository=repository,
+            symbol=args.symbol,
+            now=now,
+        )
     decision = generate_strategy_decision(
         repository=repository,
         symbol=args.symbol,
         horizon_hours=args.horizon_hours,
         now=now,
         health_result=health_result,
+        risk_snapshot=risk_snapshot,
     )
     print(json.dumps(decision.to_dict(), ensure_ascii=False))
     return 0
@@ -502,6 +530,27 @@ def _portfolio_snapshot(args) -> int:
         )
     )
     return 0
+
+
+def _risk_check(args) -> int:
+    now = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    storage_dir = Path(args.storage_dir)
+    if not storage_dir.exists():
+        raise ValueError(f"storage directory does not exist: {storage_dir}")
+    if not storage_dir.is_dir():
+        raise ValueError(f"storage path is not a directory: {storage_dir}")
+    repository = JsonFileRepository(storage_dir)
+    snapshot = evaluate_risk(
+        repository=repository,
+        symbol=args.symbol,
+        now=now,
+        max_position_pct=args.max_position_pct,
+        max_gross_exposure_pct=args.max_gross_exposure_pct,
+        reduce_risk_drawdown_pct=args.reduce_risk_drawdown_pct,
+        stop_new_entries_drawdown_pct=args.stop_new_entries_drawdown_pct,
+    )
+    print(json.dumps(snapshot.to_dict(), ensure_ascii=False))
+    return 0 if snapshot.severity != "blocking" else 2
 
 
 def _write_last_run_meta(*, storage_dir: Path, now_utc: datetime, symbol: str, provider: str, result) -> None:

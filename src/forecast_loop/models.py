@@ -682,6 +682,77 @@ class EquityCurvePoint:
 
 
 @dataclass(slots=True)
+class RiskSnapshot:
+    risk_id: str
+    created_at: datetime
+    symbol: str
+    status: str
+    severity: str
+    current_drawdown_pct: float
+    max_drawdown_pct: float
+    gross_exposure_pct: float
+    net_exposure_pct: float
+    position_pct: float
+    max_position_pct: float
+    max_gross_exposure_pct: float
+    reduce_risk_drawdown_pct: float
+    stop_new_entries_drawdown_pct: float
+    findings: list[str]
+    recommended_action: str
+    decision_basis: str
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        created_at: datetime,
+        symbol: str,
+        status: str,
+        current_drawdown_pct: float,
+        gross_exposure_pct: float,
+        findings: list[str],
+    ) -> str:
+        return _stable_artifact_id(
+            "risk",
+            {
+                "created_at": created_at.isoformat(),
+                "symbol": symbol,
+                "status": status,
+                "current_drawdown_pct": round(current_drawdown_pct, 8),
+                "gross_exposure_pct": round(gross_exposure_pct, 8),
+                "findings": sorted(findings),
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "RiskSnapshot":
+        return cls(
+            risk_id=payload["risk_id"],
+            created_at=datetime.fromisoformat(payload["created_at"]),
+            symbol=payload["symbol"],
+            status=payload.get("status", "OK"),
+            severity=payload.get("severity", "none"),
+            current_drawdown_pct=payload.get("current_drawdown_pct", 0.0),
+            max_drawdown_pct=payload.get("max_drawdown_pct", 0.0),
+            gross_exposure_pct=payload.get("gross_exposure_pct", 0.0),
+            net_exposure_pct=payload.get("net_exposure_pct", 0.0),
+            position_pct=payload.get("position_pct", 0.0),
+            max_position_pct=payload.get("max_position_pct", 0.15),
+            max_gross_exposure_pct=payload.get("max_gross_exposure_pct", 0.20),
+            reduce_risk_drawdown_pct=payload.get("reduce_risk_drawdown_pct", 0.05),
+            stop_new_entries_drawdown_pct=payload.get("stop_new_entries_drawdown_pct", 0.10),
+            findings=payload.get("findings", []),
+            recommended_action=payload.get("recommended_action", payload.get("status", "OK")),
+            decision_basis=payload.get("decision_basis", "legacy_risk_snapshot"),
+        )
+
+
+@dataclass(slots=True)
 class StrategyDecision:
     decision_id: str
     created_at: datetime

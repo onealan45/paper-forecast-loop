@@ -115,7 +115,7 @@ handling, real broker client, or real order path is allowed in M1.
 ## Deferred
 
 - Switching the hourly loop from JSONL-default execution to SQLite-backed execution.
-- Risk gates and dashboard integration for paper portfolio state.
+- M2D now adds first-pass risk gates and dashboard integration for paper portfolio state; later work still needs operator controls and multi-asset risk aggregation.
 - Broker/exchange live adapters.
 - Multi-asset strategy allocation.
 - Macro and ETF/stock ingestion.

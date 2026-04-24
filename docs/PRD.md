@@ -280,6 +280,7 @@ Current practical V1 path:
 - M3A registers `BTC-USD`, `ETH-USD`, `SPY`, `QQQ`, `TLT`, `GLD`, and `0050.TW`
 - M3C adds deterministic stored hourly candle snapshots for replay
 - M3D adds a US ETF/stock CSV fixture path for `SPY`, `QQQ`, `TLT`, and `GLD`
+- M3E adds fixture-based macro event storage and calendar inspection
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation
@@ -318,6 +319,7 @@ V1 MVP should include:
 - provider run audit artifacts
 - stored market candle artifacts for deterministic replay
 - US ETF/stock fixture import with adjusted close and market-calendar handling
+- macro event artifacts for CPI, PCE, FOMC, GDP, NFP, and unemployment
 - health-check output
 - Codex repair request artifacts
 - minimal CLI
@@ -358,6 +360,7 @@ correctness defects:
 - CoinGecko moving-window replay remains disabled; replay can now use imported stored candles
 - ETF/stock support is fixture-only and US-calendar-only; no live stock API or paid provider is wired
 - Taiwan ETF calendar/provider support remains deferred
+- macro events are visible as imported calendar artifacts, but do not yet drive research features or strategy decisions
 
 The repository is suitable for continued paper-only hourly research only when
 tests pass, active storage repair status is fresh, dashboard freshness is

@@ -10,6 +10,7 @@ from forecast_loop.models import (
     EvaluationSummary,
     Forecast,
     ForecastScore,
+    MacroEvent,
     MarketCandleRecord,
     PaperFill,
     PaperOrder,
@@ -27,6 +28,10 @@ class ArtifactRepository(Protocol):
     def save_market_candle(self, candle: MarketCandleRecord) -> None: ...
 
     def load_market_candles(self) -> list[MarketCandleRecord]: ...
+
+    def save_macro_event(self, event: MacroEvent) -> None: ...
+
+    def load_macro_events(self) -> list[MacroEvent]: ...
 
     def save_forecast(self, forecast: Forecast) -> None: ...
 
@@ -96,6 +101,7 @@ class JsonFileRepository:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.market_candles_path = self.root / "market_candles.jsonl"
+        self.macro_events_path = self.root / "macro_events.jsonl"
         self.forecasts_path = self.root / "forecasts.jsonl"
         self.scores_path = self.root / "scores.jsonl"
         self.reviews_path = self.root / "reviews.jsonl"
@@ -120,6 +126,16 @@ class JsonFileRepository:
 
     def load_market_candles(self) -> list[MarketCandleRecord]:
         return self._load_lines(self.market_candles_path, MarketCandleRecord.from_dict)
+
+    def save_macro_event(self, event: MacroEvent) -> None:
+        self._append_unique(
+            self.macro_events_path,
+            event.to_dict(),
+            identity_key="event_id",
+        )
+
+    def load_macro_events(self) -> list[MacroEvent]:
+        return self._load_lines(self.macro_events_path, MacroEvent.from_dict)
 
     def save_forecast(self, forecast: Forecast) -> None:
         forecasts = self.load_forecasts()

@@ -13,6 +13,7 @@ from forecast_loop.models import (
     EvaluationSummary,
     Forecast,
     ForecastScore,
+    MacroEvent,
     MarketCandleRecord,
     PaperFill,
     PaperOrder,
@@ -41,6 +42,7 @@ class ArtifactSpec:
 
 ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("market_candles", "market_candles.jsonl", "candle_id", MarketCandleRecord.from_dict),
+    ArtifactSpec("macro_events", "macro_events.jsonl", "event_id", MacroEvent.from_dict),
     ArtifactSpec("forecasts", "forecasts.jsonl", "forecast_id", Forecast.from_dict),
     ArtifactSpec("scores", "scores.jsonl", "score_id", ForecastScore.from_dict),
     ArtifactSpec("reviews", "reviews.jsonl", "review_id", Review.from_dict),
@@ -114,6 +116,12 @@ class SQLiteRepository:
 
     def load_market_candles(self) -> list[MarketCandleRecord]:
         return self._load("market_candles", MarketCandleRecord.from_dict)
+
+    def save_macro_event(self, event: MacroEvent) -> None:
+        self._save_unique("macro_events", event.event_id, event.to_dict())
+
+    def load_macro_events(self) -> list[MacroEvent]:
+        return self._load("macro_events", MacroEvent.from_dict)
 
     def save_forecast(self, forecast: Forecast) -> None:
         self._save_unique("forecasts", forecast.forecast_id, forecast.to_dict())
@@ -296,6 +304,8 @@ def migrate_jsonl_to_sqlite(storage_dir: Path | str, db_path: Path | str | None 
 
     for candle in json_repository.load_market_candles():
         sqlite_repository.save_market_candle(candle)
+    for event in json_repository.load_macro_events():
+        sqlite_repository.save_macro_event(event)
     for forecast in json_repository.load_forecasts():
         sqlite_repository.save_forecast(forecast)
     for score in json_repository.load_scores():

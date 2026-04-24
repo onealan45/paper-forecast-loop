@@ -12,6 +12,29 @@ def _write_meta(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def _write_automation(codex_home: Path, automation_id: str, *, status: str, updated_at: int = 1777030175608) -> None:
+    automation_dir = codex_home / "automations" / automation_id
+    automation_dir.mkdir(parents=True)
+    (automation_dir / "automation.toml").write_text(
+        "\n".join(
+            [
+                "version = 1",
+                f'id = "{automation_id}"',
+                'kind = "heartbeat"',
+                f'name = "{automation_id}"',
+                'prompt = "test"',
+                f'status = "{status}"',
+                'rrule = "FREQ=HOURLY;INTERVAL=1"',
+                'target_thread_id = "test-thread"',
+                "created_at = 1776961384325",
+                f"updated_at = {updated_at}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_render_dashboard_handles_empty_storage(tmp_path):
     from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
 
@@ -21,8 +44,14 @@ def test_render_dashboard_handles_empty_storage(tmp_path):
     assert snapshot.latest_forecast is None
     assert snapshot.latest_review is None
     assert snapshot.latest_replay_summary is None
-    assert "No forecasts yet" in html
-    assert "No replay summary yet" in html
+    assert 'lang="zh-Hant"' in html
+    assert "操作摘要" in html
+    assert "等待第一筆預測循環" in html
+    assert html.count("等待第一筆預測循環") == 1
+    assert "目前預測" in html
+    assert "目前還沒有預測資料" in html
+    assert "目前還沒有 replay 摘要" in html
+    assert "Dashboard 產生時間" in html
 
 
 def test_render_dashboard_includes_latest_artifacts(tmp_path):
@@ -127,11 +156,146 @@ def test_render_dashboard_includes_latest_artifacts(tmp_path):
     assert snapshot.latest_forecast is not None
     assert snapshot.latest_review is not None
     assert snapshot.latest_replay_summary is not None
+    assert 'grid-template-columns: 190px minmax(0, 1fr);' in html
+    assert 'main {\n      padding: 28px 32px 42px;\n      display: grid;\n      grid-template-columns: minmax(0, 1fr);' in html
+    assert "操作摘要" in html
+    assert "目前預測" in html
+    assert "本輪判讀與建議" in html
+    assert "支撐依據" in html
+    assert "歷史脈絡" in html
     assert "BTC-USD" in html
     assert "scored" in html
     assert review.summary in html
     assert proposal.proposal_id in html
     assert summary.summary_id in html
+    assert 'id="decision"' in html
+    assert 'class="panel half secondary-panel" id="replay"' in html
+    assert 'id="evidence"' in html
+    assert 'id="system"' not in html
+    assert "證據快照" in html
+    assert html.index('id="summary"') < html.index('id="forecast"') < html.index('id="decision"') < html.index('id="evidence"') < html.index('id="replay"') < html.index('id="raw"')
+    assert html.index('class="summary-grid"') < html.index('class="summary-tags"') < html.index('class="summary-note"')
+    assert "<details open>" not in html
+    forecast_section = html.split('id="forecast"', 1)[1].split("</section>", 1)[0]
+    forecast_surface = forecast_section.split("<details>", 1)[0]
+    assert "forecast:a" not in forecast_surface
+    assert "Provider Through" not in forecast_surface
+    assert "Anchor" not in forecast_surface
+    assert "<details>" in forecast_section
+    decision_section = html.split('id="decision"', 1)[1].split("</section>", 1)[0]
+    decision_surface = decision_section.split("<details>", 1)[0]
+    assert review.summary in decision_surface
+    assert "review:a" not in decision_surface
+    assert "proposal:a" not in decision_surface
+    assert "Forecast IDs" not in decision_surface
+    assert "Score IDs" not in decision_surface
+    replay_section = html.split('id="replay"', 1)[1].split("</section>", 1)[0]
+    assert "<details>" in replay_section
+    assert "Summary ID" in replay_section
+    raw_section = html.split('id="raw"', 1)[1].split("</section>", 1)[0]
+    assert raw_section.count("<details>") == 2
+    assert "<pre>" not in raw_section.split("<details>", 1)[0]
+    assert 'grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));' in html
+
+
+def test_render_dashboard_uses_only_proposal_for_latest_review(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    old_review = Review(
+        review_id="review:old",
+        created_at=datetime(2026, 4, 21, 10, 0, tzinfo=UTC),
+        score_ids=["score:old"],
+        forecast_ids=["forecast:old"],
+        average_score=0.2,
+        threshold_used=0.6,
+        decision_basis="old basis",
+        summary="Old review requested a proposal.",
+        proposal_recommended=True,
+        proposal_reason="average_score_below_threshold",
+    )
+    latest_review = Review(
+        review_id="review:latest",
+        created_at=datetime(2026, 4, 21, 11, 0, tzinfo=UTC),
+        score_ids=["score:latest"],
+        forecast_ids=["forecast:latest"],
+        average_score=1.0,
+        threshold_used=0.6,
+        decision_basis="latest basis",
+        summary="Latest review keeps current settings.",
+        proposal_recommended=False,
+        proposal_reason="average_score_at_or_above_threshold",
+    )
+    old_proposal = Proposal(
+        proposal_id="proposal:old",
+        created_at=datetime(2026, 4, 21, 10, 5, tzinfo=UTC),
+        review_id=old_review.review_id,
+        score_ids=["score:old"],
+        proposal_type="risk_adjustment",
+        changes={"max_position_pct": 0.10},
+        threshold_used=0.6,
+        decision_basis="old basis",
+        rationale="old proposal should not be shown as current",
+    )
+
+    repository.save_review(old_review)
+    repository.save_review(latest_review)
+    repository.save_proposal(old_proposal)
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+    html = render_dashboard_html(snapshot)
+    decision_section = html.split('id="decision"', 1)[1].split("</section>", 1)[0]
+
+    assert snapshot.latest_review == latest_review
+    assert snapshot.latest_proposal is None
+    assert latest_review.summary in decision_section
+    assert "proposal:old" not in decision_section
+    assert "old proposal should not be shown as current" not in decision_section
+
+
+def test_render_dashboard_labels_waiting_for_data_as_coverage_wait(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    repository.save_forecast(
+        Forecast(
+            forecast_id="forecast:waiting",
+            symbol="BTC-USD",
+            created_at=datetime(2026, 4, 21, 9, 0, tzinfo=UTC),
+            anchor_time=datetime(2026, 4, 21, 9, 0, tzinfo=UTC),
+            target_window_start=datetime(2026, 4, 21, 9, 0, tzinfo=UTC),
+            target_window_end=datetime(2026, 4, 21, 11, 0, tzinfo=UTC),
+            candle_interval_minutes=60,
+            expected_candle_count=3,
+            status="waiting_for_data",
+            status_reason="awaiting_provider_coverage",
+            predicted_regime="trend_up",
+            confidence=0.55,
+            provider_data_through=datetime(2026, 4, 21, 10, 0, tzinfo=UTC),
+            observed_candle_count=2,
+        )
+    )
+
+    html = render_dashboard_html(build_dashboard_snapshot(tmp_path))
+
+    assert "等待資料覆蓋" in html
+    assert "等待 provider 補齊目標視窗" in html
+    assert '<div class="summary-value">已結束</div>' not in html
+
+
+def test_render_dashboard_reports_automation_freshness(tmp_path, monkeypatch):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    codex_home = tmp_path / ".codex"
+    _write_automation(codex_home, "hourly-paper-forecast", status="PAUSED")
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+
+    html = render_dashboard_html(build_dashboard_snapshot(tmp_path / "storage"))
+
+    assert "每小時：已暫停（PAUSED）" in html
+    assert "Dashboard 產生時間" in html
+    assert "Automation 狀態來源" in html
+    assert "1970-" not in html
 
 
 def test_render_dashboard_marks_stale_replay_context(tmp_path):
@@ -186,7 +350,9 @@ def test_render_dashboard_marks_stale_replay_context(tmp_path):
 
     assert snapshot.replay_is_stale is True
     assert "historical" in snapshot.replay_freshness_label.lower()
-    assert "Generated At" in html
+    assert "產生時間" in html
+    assert "僅供歷史脈絡參考" in html
+    assert 'secondary-panel' in html
 
 
 def test_cli_render_dashboard_writes_html_file(tmp_path):
@@ -204,4 +370,4 @@ def test_cli_render_dashboard_writes_html_file(tmp_path):
     assert output_path.exists()
     html = output_path.read_text(encoding="utf-8")
     assert "Paper Forecast Loop" in html
-    assert "System State" in html
+    assert "操作摘要" in html

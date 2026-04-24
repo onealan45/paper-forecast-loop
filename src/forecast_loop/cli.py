@@ -28,7 +28,7 @@ def main(argv: list[str] | None = None) -> int:
     run_once.add_argument("--now")
 
     replay_range = subparsers.add_parser("replay-range")
-    replay_range.add_argument("--provider", choices=["sample", "coingecko"], default="sample")
+    replay_range.add_argument("--provider", choices=["sample"], default="sample")
     replay_range.add_argument("--symbol", default="BTC-USD")
     replay_range.add_argument("--storage-dir", required=True)
     replay_range.add_argument("--start", required=True)
@@ -292,7 +292,8 @@ def _build_replay_scoped_summary(
         proposal
         for proposal in repository.load_proposals()
         if proposal.review_id in review_ids
-        and (not proposal.score_ids or set(proposal.score_ids).issubset(score_ids))
+        and proposal.score_ids
+        and set(proposal.score_ids).issubset(score_ids)
     ]
     return build_evaluation_summary(
         replay_id=replay_id,

@@ -72,8 +72,9 @@ class ForecastingLoop:
             predicted_regime=predicted_regime,
             confidence=0.55,
             provider_data_through=anchor_time,
-            observed_candle_count=len(lookback_candles),
+            observed_candle_count=0,
         )
+        forecast.observed_candle_count = self._observed_candle_count(forecast, anchor_time)
         forecasts.append(forecast)
         return forecast
 

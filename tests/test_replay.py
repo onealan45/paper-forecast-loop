@@ -961,6 +961,29 @@ def test_cli_replay_range_writes_evaluation_summary(tmp_path):
     assert payload["evaluation_summary"]["resolved_count"] == 3
 
 
+def test_cli_replay_range_rejects_coingecko_provider(tmp_path):
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "replay-range",
+                "--provider",
+                "coingecko",
+                "--symbol",
+                "BTC-USD",
+                "--storage-dir",
+                str(tmp_path),
+                "--start",
+                "2026-04-21T04:00:00+00:00",
+                "--end",
+                "2026-04-21T08:00:00+00:00",
+                "--horizon-hours",
+                "2",
+            ]
+        )
+
+    assert exc_info.value.code == 2
+
+
 def test_cli_replay_range_scopes_summary_to_requested_window(tmp_path):
     first_exit_code = main(
         [
@@ -1113,6 +1136,73 @@ def test_cli_replay_range_does_not_leak_stale_empty_score_proposals(tmp_path):
     assert payload["evaluation_summary"]["proposal_ids"] == []
     assert summary_row["forecast_count"] == 2
     assert summary_row["proposal_ids"] == []
+
+
+def test_cli_replay_range_excludes_empty_score_proposal_even_when_review_matches(tmp_path):
+    first_exit_code = main(
+        [
+            "replay-range",
+            "--provider",
+            "sample",
+            "--symbol",
+            "BTC-USD",
+            "--storage-dir",
+            str(tmp_path),
+            "--start",
+            "2026-04-21T04:00:00+00:00",
+            "--end",
+            "2026-04-21T08:00:00+00:00",
+            "--horizon-hours",
+            "2",
+        ]
+    )
+
+    replay_storage = _replay_storage_dir(
+        storage_dir=tmp_path,
+        provider="sample",
+        symbol="BTC-USD",
+        start_utc=datetime(2026, 4, 21, 4, 0, tzinfo=UTC),
+        end_utc=datetime(2026, 4, 21, 8, 0, tzinfo=UTC),
+    )
+    repository = JsonFileRepository(replay_storage)
+    review = repository.load_reviews()[0]
+    repository.save_proposal(
+        Proposal(
+            proposal_id="proposal:empty-evidence",
+            created_at=datetime(2026, 4, 21, 9, 30, tzinfo=UTC),
+            review_id=review.review_id,
+            score_ids=[],
+            proposal_type="risk_adjustment",
+            changes={"max_position_pct": 0.10, "new_entry_enabled": False},
+            threshold_used=0.6,
+            decision_basis="empty evidence proposal",
+            rationale="should not be included because score_ids is empty",
+        )
+    )
+
+    second_exit_code = main(
+        [
+            "replay-range",
+            "--provider",
+            "sample",
+            "--symbol",
+            "BTC-USD",
+            "--storage-dir",
+            str(tmp_path),
+            "--start",
+            "2026-04-21T04:00:00+00:00",
+            "--end",
+            "2026-04-21T08:00:00+00:00",
+            "--horizon-hours",
+            "2",
+        ]
+    )
+
+    payload = json.loads((tmp_path / "last_replay_meta.json").read_text(encoding="utf-8"))
+
+    assert first_exit_code == 0
+    assert second_exit_code == 0
+    assert "proposal:empty-evidence" not in payload["evaluation_summary"]["proposal_ids"]
 
 
 def test_cli_replay_range_scopes_to_requested_symbol_in_reused_storage(tmp_path):

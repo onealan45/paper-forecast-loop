@@ -15,6 +15,7 @@ from forecast_loop.storage import JsonFileRepository
 @dataclass(slots=True)
 class DashboardSnapshot:
     storage_dir: Path
+    dashboard_generated_at: datetime
     last_run_meta: dict | None
     last_replay_meta: dict | None
     latest_forecast: Forecast | None
@@ -29,11 +30,19 @@ class DashboardSnapshot:
     replay_summary_count: int
     current_mode: str
     hourly_status: str
+    hourly_status_source_at: datetime | None
     building_status: str
+    building_status_source_at: datetime | None
     mode_reason: str
     replay_freshness_label: str
     replay_generated_at: datetime | None
     replay_is_stale: bool
+
+
+@dataclass(slots=True)
+class AutomationState:
+    status: str
+    updated_at: datetime | None
 
 
 def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
@@ -45,10 +54,12 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
     proposals = repository.load_proposals()
     replay_summaries = repository.load_evaluation_summaries()
     latest_forecast = forecasts[-1] if forecasts else None
+    latest_review = reviews[-1] if reviews else None
+    latest_proposal = _latest_proposal_for_review(proposals, latest_review)
     latest_replay_summary = replay_summaries[-1] if replay_summaries else None
-    hourly_status = _load_automation_status("hourly-paper-forecast")
-    building_status = _load_automation_status("loop-building-heartbeat")
-    current_mode, mode_reason = _derive_mode(hourly_status, building_status)
+    hourly_state = _load_automation_state("hourly-paper-forecast")
+    building_state = _load_automation_state("loop-building-heartbeat")
+    current_mode, mode_reason = _derive_mode(hourly_state.status, building_state.status)
     replay_freshness_label, replay_generated_at, replay_is_stale = _derive_replay_freshness(
         latest_replay_summary,
         latest_forecast,
@@ -56,12 +67,13 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
 
     return DashboardSnapshot(
         storage_dir=storage_dir,
+        dashboard_generated_at=datetime.now(tz=UTC),
         last_run_meta=_load_json(storage_dir / "last_run_meta.json"),
         last_replay_meta=_load_json(storage_dir / "last_replay_meta.json"),
         latest_forecast=latest_forecast,
         latest_score=scores[-1] if scores else None,
-        latest_review=reviews[-1] if reviews else None,
-        latest_proposal=proposals[-1] if proposals else None,
+        latest_review=latest_review,
+        latest_proposal=latest_proposal,
         latest_replay_summary=latest_replay_summary,
         forecast_count=len(forecasts),
         score_count=len(scores),
@@ -69,8 +81,10 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         proposal_count=len(proposals),
         replay_summary_count=len(replay_summaries),
         current_mode=current_mode,
-        hourly_status=hourly_status,
-        building_status=building_status,
+        hourly_status=hourly_state.status,
+        hourly_status_source_at=hourly_state.updated_at,
+        building_status=building_state.status,
+        building_status_source_at=building_state.updated_at,
         mode_reason=mode_reason,
         replay_freshness_label=replay_freshness_label,
         replay_generated_at=replay_generated_at,
@@ -85,11 +99,11 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
     latest_replay = snapshot.latest_replay_summary
 
     return f"""<!DOCTYPE html>
-<html lang="en">
+<html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Paper Forecast Loop Dashboard</title>
+  <title>Paper Forecast Loop 儀表板</title>
   <style>
     html {{ color-scheme: dark; }}
     :root {{
@@ -133,13 +147,13 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
     }}
     .shell {{
       display: grid;
-      grid-template-columns: 280px 1fr;
+      grid-template-columns: 190px minmax(0, 1fr);
       min-height: 100vh;
     }}
     .sidebar {{
       border-right: 1px solid var(--line);
-      background: rgba(5, 12, 19, 0.82);
-      padding: 28px 22px;
+      background: rgba(5, 12, 19, 0.62);
+      padding: 20px 14px;
       position: sticky;
       top: 0;
       height: 100vh;
@@ -160,7 +174,7 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
     .subtitle {{
       color: var(--muted);
       margin: 0 0 24px;
-      font-size: 0.95rem;
+      font-size: 0.84rem;
       line-height: 1.5;
       overflow-wrap: anywhere;
     }}
@@ -173,12 +187,13 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
     }}
     .nav-list a {{
       display: block;
-      padding: 10px 12px;
+      padding: 8px 10px;
       border: 1px solid transparent;
-      border-radius: 12px;
+      border-radius: 10px;
       color: var(--muted);
       text-decoration: none;
       background: transparent;
+      font-size: 0.92rem;
     }}
     .nav-list a:hover {{
       color: var(--text);
@@ -193,9 +208,10 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
       border-color: var(--accent);
     }}
     main {{
-      padding: 34px 40px 48px;
+      padding: 28px 32px 42px;
       display: grid;
-      gap: 22px;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 18px;
     }}
     section[id] {{
       scroll-margin-top: 24px;
@@ -213,9 +229,8 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
       backdrop-filter: blur(18px);
       box-shadow: 0 10px 35px rgba(0, 0, 0, 0.18);
     }}
-    .hero {{ grid-column: span 12; }}
-    .half {{ grid-column: span 6; }}
-    .third {{ grid-column: span 4; }}
+    .hero,
+    .half {{ grid-column: 1 / -1; }}
     .panel h2 {{
       margin: 0 0 8px;
       font-size: 1.05rem;
@@ -223,15 +238,77 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
       text-wrap: balance;
       overflow-wrap: anywhere;
     }}
+    .panel h3 {{
+      margin: 0 0 8px;
+      font-size: 0.98rem;
+      letter-spacing: 0.01em;
+    }}
     .meta {{
       color: var(--muted);
       font-size: 0.9rem;
       margin-bottom: 14px;
       overflow-wrap: anywhere;
     }}
+    .lead {{
+      margin: 0 0 18px;
+      font-size: 1rem;
+      line-height: 1.55;
+      color: var(--text);
+      max-width: 72ch;
+    }}
+    .summary-grid {{
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 18px 0;
+    }}
+    .summary-card {{
+      padding: 16px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+    }}
+    .summary-label {{
+      font-size: 0.74rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+    }}
+    .summary-value {{
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }}
+    .summary-copy {{
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 0.92rem;
+    }}
+    .summary-tags {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 12px;
+    }}
+    .summary-note {{
+      color: var(--muted);
+      line-height: 1.55;
+      margin: 0;
+      max-width: 70ch;
+    }}
+    .primary-card {{
+      padding: 26px;
+    }}
+    .primary-grid {{
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin: 18px 0 0;
+    }}
     .stat-grid {{
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
       gap: 12px;
       margin-top: 18px;
     }}
@@ -240,6 +317,61 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
       border: 1px solid var(--line);
       border-radius: 14px;
       background: var(--panel-2);
+    }}
+    .secondary-panel {{
+      background: rgba(9, 19, 30, 0.72);
+      border-color: rgba(116, 150, 181, 0.16);
+    }}
+    .evidence-grid {{
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+      gap: 16px;
+      margin-top: 18px;
+    }}
+    .evidence-block {{
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel-2);
+    }}
+    .micro-copy {{
+      margin: 0 0 14px;
+      color: var(--muted);
+      line-height: 1.55;
+    }}
+    .decision-grid {{
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+      gap: 16px;
+      margin-top: 18px;
+    }}
+    .decision-block {{
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel-2);
+    }}
+    .decision-emphasis {{
+      margin: 0;
+      font-size: 1rem;
+      line-height: 1.65;
+      color: var(--text);
+    }}
+    .drawer-stack {{
+      display: grid;
+      gap: 14px;
+    }}
+    .command-tags {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }}
+    .drawer-intro {{
+      margin: 0 0 14px;
+      color: var(--muted);
+      line-height: 1.55;
+      max-width: 72ch;
     }}
     .stat-label {{
       font-size: 0.75rem;
@@ -313,83 +445,59 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
     @media (max-width: 980px) {{
       .shell {{ grid-template-columns: 1fr; }}
       .sidebar {{ position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }}
-      .half, .third {{ grid-column: span 12; }}
+      .half {{ grid-column: span 12; }}
+      .summary-grid,
+      .primary-grid,
       .stat-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+      .decision-grid,
+      .evidence-grid {{ grid-template-columns: 1fr; }}
       main {{ padding: 24px 18px 32px; }}
     }}
   </style>
 </head>
 <body>
-  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <a class="skip-link" href="#main-content">跳到主要內容</a>
   <div class="shell">
     <aside class="sidebar">
       <div class="brand">Paper-Only Inspector</div>
       <h1>Paper Forecast Loop</h1>
-      <p class="subtitle">A read-only operator view for the current forecast loop, replay summaries, and artifact provenance.</p>
+      <p class="subtitle">以最新預測為優先的靜態操作視圖，方便先看當前判讀，再對照 replay 與原始中繼資料。</p>
       <ul class="nav-list">
-        <li><a href="#system">System State</a></li>
-        <li><a href="#forecast">Latest Forecast</a></li>
-        <li><a href="#review">Review & Proposal</a></li>
-        <li><a href="#replay">Replay Summary</a></li>
-        <li><a href="#raw">Raw Metadata</a></li>
+        <li><a href="#summary">操作摘要</a></li>
+        <li><a href="#forecast">目前預測</a></li>
+        <li><a href="#decision">本輪判讀與建議</a></li>
+        <li><a href="#evidence">證據快照</a></li>
+        <li><a href="#replay">歷史脈絡</a></li>
+        <li><a href="#raw">原始中繼資料</a></li>
       </ul>
     </aside>
     <main id="main-content">
-      <section class="panel hero" id="system">
-        <div class="kicker">Current Mode</div>
-        <h2>System State</h2>
-        <div class="meta">
-          <span class="tag">{escape(snapshot.current_mode)}</span>
-          <span class="tag">{escape(f"Hourly: {snapshot.hourly_status}")}</span>
-          <span class="tag">{escape(f"Building: {snapshot.building_status}")}</span>
-          <span class="tag {'warn' if snapshot.replay_is_stale else 'ok'}">{escape(snapshot.replay_freshness_label)}</span>
-        </div>
-        <div class="meta">Storage: {escape(str(snapshot.storage_dir.resolve()))}</div>
-        <div class="meta">{escape(snapshot.mode_reason)}</div>
-        <div class="stat-grid">
-          <div class="stat"><div class="stat-label">Forecasts</div><div class="stat-value">{snapshot.forecast_count}</div></div>
-          <div class="stat"><div class="stat-label">Scores</div><div class="stat-value">{snapshot.score_count}</div></div>
-          <div class="stat"><div class="stat-label">Reviews</div><div class="stat-value">{snapshot.review_count}</div></div>
-          <div class="stat"><div class="stat-label">Proposals</div><div class="stat-value">{snapshot.proposal_count}</div></div>
-          <div class="stat"><div class="stat-label">Replay Summaries</div><div class="stat-value">{snapshot.replay_summary_count}</div></div>
-        </div>
+      <section class="panel hero" id="summary">
+        {render_operator_summary(snapshot)}
       </section>
-      <div class="grid">
-        <section class="panel half" id="forecast">
-          <div class="kicker">Latest Forecast</div>
-          {render_forecast_panel(latest_forecast)}
-        </section>
-        <section class="panel half" id="review">
-          <div class="kicker">Latest Review</div>
-          {render_review_panel(latest_review, latest_proposal)}
-        </section>
-        <section class="panel third">
-          <div class="kicker">Latest Score</div>
-          {render_score_panel(snapshot.latest_score)}
-        </section>
-        <section class="panel third" id="replay">
-          <div class="kicker">Latest Replay</div>
-          {render_replay_panel(latest_replay)}
-        </section>
-        <section class="panel third">
-          <div class="kicker">Main Program</div>
-          <dl>
-            <dt>run-once</dt><dd><span class="tag">available</span></dd>
-            <dt>replay-range</dt><dd><span class="tag">available</span></dd>
-            <dt>render-dashboard</dt><dd><span class="tag">available</span></dd>
-          </dl>
-        </section>
-      </div>
+      <section class="panel hero primary-card" id="forecast">
+        {render_forecast_panel(latest_forecast)}
+      </section>
+      <section class="panel" id="decision">
+        {render_decision_panel(latest_review, latest_proposal)}
+      </section>
+      <section class="panel" id="evidence">
+        {render_evidence_panel(snapshot)}
+      </section>
+      <section class="panel half secondary-panel" id="replay">
+        {render_replay_panel(snapshot, latest_replay)}
+      </section>
       <section class="panel" id="raw">
-        <div class="kicker">Raw Metadata</div>
-        <h2>Inspector Inputs</h2>
-        <details open>
+        <div class="kicker">Audit / Debug</div>
+        <h2>原始中繼資料</h2>
+        <p class="drawer-intro">只有在比對 dashboard 所用來源、追查欄位映射或人工稽核原始 JSON 時，才需要展開下面兩個 debug drawer。日常操作請以前面的預測、檢討與證據區為主。</p>
+        <details>
           <summary>last_run_meta.json</summary>
-          <pre>{escape(json.dumps(snapshot.last_run_meta, ensure_ascii=False, indent=2) if snapshot.last_run_meta else "No run metadata yet.")}</pre>
+          <pre>{escape(json.dumps(snapshot.last_run_meta, ensure_ascii=False, indent=2) if snapshot.last_run_meta else "目前還沒有執行中繼資料。")}</pre>
         </details>
         <details>
           <summary>last_replay_meta.json</summary>
-          <pre>{escape(json.dumps(snapshot.last_replay_meta, ensure_ascii=False, indent=2) if snapshot.last_replay_meta else "No replay metadata yet.")}</pre>
+          <pre>{escape(json.dumps(snapshot.last_replay_meta, ensure_ascii=False, indent=2) if snapshot.last_replay_meta else "目前還沒有 replay 中繼資料。")}</pre>
         </details>
       </section>
     </main>
@@ -398,84 +506,253 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
 </html>"""
 
 
-def render_forecast_panel(forecast: Forecast | None) -> str:
-    if forecast is None:
-        return '<p class="empty">No forecasts yet.</p>'
+def render_operator_summary(snapshot: DashboardSnapshot) -> str:
+    health_label, health_copy = _summarize_health(snapshot)
+    judgment_copy = _summarize_judgment(snapshot)
+    replay_tag_class = "warn" if snapshot.replay_is_stale else "ok"
+    replay_copy = (
+        "僅供歷史脈絡參考。replay 落後於最新預測時，不應覆蓋目前預測卡的判讀。"
+        if snapshot.replay_is_stale
+        else "replay 與最新預測足夠接近，可作為目前操作判讀的補充脈絡。"
+    )
 
     return f"""
-      <h2>{escape(forecast.symbol)}</h2>
-      <div class="meta"><span class="tag">{escape(forecast.status)}</span> <span class="tag">{escape(forecast.status_reason)}</span></div>
-      <dl>
-        <dt>Anchor</dt><dd>{escape(forecast.anchor_time.isoformat())}</dd>
-        <dt>Target Window</dt><dd>{escape(forecast.target_window_start.isoformat())} → {escape(forecast.target_window_end.isoformat())}</dd>
-        <dt>Predicted Regime</dt><dd>{escape(str(forecast.predicted_regime))}</dd>
-        <dt>Confidence</dt><dd>{escape(str(forecast.confidence))}</dd>
-        <dt>Provider Through</dt><dd>{escape(str(forecast.provider_data_through.isoformat()) if forecast.provider_data_through else "None")}</dd>
-        <dt>Observed Candles</dt><dd>{forecast.observed_candle_count} / {forecast.expected_candle_count}</dd>
-      </dl>
+      <div class="kicker">操作摘要</div>
+      <h2>操作摘要</h2>
+      <div class="summary-grid">
+        <div class="summary-card">
+          <div class="summary-label">健康度</div>
+          <div class="summary-value">{escape(_display_health_label(health_label))}</div>
+          <div class="summary-copy">{escape(_display_health_copy(health_label, health_copy))}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">模式</div>
+          <div class="summary-value">{escape(_display_mode(snapshot.current_mode))}</div>
+          <div class="summary-copy">{escape(_display_mode_reason(snapshot.current_mode, snapshot.mode_reason))}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">判斷</div>
+          <div class="summary-value">{escape(_display_judgment_label(_judgment_label(snapshot)))}</div>
+          <div class="summary-copy">{escape(_display_judgment_copy(snapshot, judgment_copy))}</div>
+        </div>
+      </div>
+      <div class="summary-tags">
+        <span class="tag">{escape(f"每小時：{_display_automation_status(snapshot.hourly_status)}")}</span>
+        <span class="tag">{escape(f"建置心跳：{_display_automation_status(snapshot.building_status)}")}</span>
+        <span class="tag {replay_tag_class}">{escape(_display_replay_freshness(snapshot.replay_freshness_label))}</span>
+      </div>
+      <div class="meta">{escape(_dashboard_freshness_copy(snapshot))}</div>
+      <p class="summary-note">{escape(replay_copy)}</p>
+    """
+
+
+def render_forecast_panel(forecast: Forecast | None) -> str:
+    if forecast is None:
+        return """
+      <div class="kicker">主要視圖</div>
+      <h2>目前預測</h2>
+      <p class="lead">目前還沒有預測資料。當預測循環寫入新產物後，這個面板會成為操作員優先查看的主卡片。</p>
+      <p class="empty">目前還沒有預測資料。</p>
+    """
+
+    return f"""
+      <div class="kicker">主要視圖</div>
+      <h2>目前預測</h2>
+      <p class="lead">{escape(forecast.symbol)} 是目前的即時操作視圖。解讀 replay 或原始中繼資料前，請先讀這張卡片。</p>
+      <div class="meta"><span class="tag">{escape(_display_forecast_status(forecast.status))}</span> <span class="tag">{escape(_display_status_reason(forecast.status_reason))}</span></div>
+      <div class="primary-grid">
+        <div class="summary-card"><div class="summary-label">預測 regime</div><div class="summary-value">{escape(_display_regime(forecast.predicted_regime))}</div><div class="summary-copy">這一輪對市場狀態的判讀。</div></div>
+        <div class="summary-card"><div class="summary-label">信心值</div><div class="summary-value">{escape(str(forecast.confidence))}</div><div class="summary-copy">模型對這筆預測的信心。</div></div>
+        <div class="summary-card"><div class="summary-label">已觀測 K 線</div><div class="summary-value">{forecast.observed_candle_count} / {forecast.expected_candle_count}</div><div class="summary-copy">目前已捕捉到的覆蓋進度。</div></div>
+        <div class="summary-card"><div class="summary-label">目標視窗</div><div class="summary-value">{escape(_format_window_label(forecast.target_window_start, forecast.target_window_end))}</div><div class="summary-copy">這筆預測目前對應的觀察區間。</div></div>
+      </div>
+      <details>
+        <summary>展開 forecast 詳細欄位</summary>
+        <dl>
+          <dt>Forecast ID</dt><dd>{escape(forecast.forecast_id)}</dd>
+          <dt>Anchor</dt><dd>{escape(forecast.anchor_time.isoformat())}</dd>
+          <dt>目標視窗</dt><dd>{escape(forecast.target_window_start.isoformat())} → {escape(forecast.target_window_end.isoformat())}</dd>
+          <dt>建立時間</dt><dd>{escape(forecast.created_at.isoformat())}</dd>
+          <dt>K 線間隔</dt><dd>{forecast.candle_interval_minutes} 分鐘</dd>
+          <dt>Provider Through</dt><dd>{escape(str(forecast.provider_data_through.isoformat()) if forecast.provider_data_through else "None")}</dd>
+        </dl>
+        <pre>{escape(json.dumps(forecast.to_dict(), ensure_ascii=False, indent=2))}</pre>
+      </details>
     """
 
 
 def render_score_panel(score: ForecastScore | None) -> str:
     if score is None:
-        return '<p class="empty">No scores yet.</p>'
+        return """
+      <div class="kicker">最新評分</div>
+      <h2>評分快照</h2>
+      <p class="empty">目前還沒有評分資料。</p>
+    """
 
     return f"""
-      <h2>{escape(score.score_id)}</h2>
-      <div class="meta">{escape(score.predicted_regime)} → {escape(score.actual_regime)}</div>
+      <div class="kicker">最新評分</div>
+      <h2>評分快照</h2>
+      <div class="meta">{escape(_display_regime(score.predicted_regime))} → {escape(_display_regime(score.actual_regime))}</div>
       <dl>
-        <dt>Score</dt><dd>{score.score:.2f}</dd>
-        <dt>Forecast</dt><dd>{escape(score.forecast_id)}</dd>
-        <dt>Observed Candles</dt><dd>{score.observed_candle_count} / {score.expected_candle_count}</dd>
+        <dt>Score ID</dt><dd>{escape(score.score_id)}</dd>
+        <dt>分數</dt><dd>{score.score:.2f}</dd>
+        <dt>對應預測</dt><dd>{escape(score.forecast_id)}</dd>
+        <dt>已觀測 K 線</dt><dd>{score.observed_candle_count} / {score.expected_candle_count}</dd>
         <dt>Provider Through</dt><dd>{escape(score.provider_data_through.isoformat())}</dd>
       </dl>
     """
 
 
-def render_review_panel(review: Review | None, proposal: Proposal | None) -> str:
-    if review is None:
-        return '<p class="empty">No reviews yet.</p>'
+def render_evidence_panel(snapshot: DashboardSnapshot) -> str:
+    latest_score = snapshot.latest_score
+    evidence_lead = _summarize_evidence(snapshot)
+    score_html = (
+        f"""
+      <dl>
+        <dt>Score ID</dt><dd>{escape(latest_score.score_id)}</dd>
+        <dt>分數</dt><dd>{latest_score.score:.2f}</dd>
+        <dt>對應預測</dt><dd>{escape(latest_score.forecast_id)}</dd>
+        <dt>已觀測 K 線</dt><dd>{latest_score.observed_candle_count} / {latest_score.expected_candle_count}</dd>
+      </dl>
+        """
+        if latest_score is not None
+        else '<p class="empty">最新評分尚未產生；這不影響目前預測主卡的閱讀順序。</p>'
+    )
+    score_detail_html = (
+        f"""
+        <details>
+          <summary>展開最新 score 詳細欄位</summary>
+          <pre>{escape(json.dumps(latest_score.to_dict(), ensure_ascii=False, indent=2))}</pre>
+        </details>
+        """
+        if latest_score is not None
+        else ""
+    )
+    return f"""
+      <div class="kicker">證據鏈</div>
+      <h2>支撐依據</h2>
+      <p class="lead">{escape(evidence_lead)}</p>
+      <div class="evidence-grid">
+        <div class="evidence-block">
+          <h3>已儲存產物</h3>
+          <div class="meta">儲存位置：{escape(str(snapshot.storage_dir.resolve()))}</div>
+          <div class="stat-grid">
+            <div class="stat"><div class="stat-label">預測</div><div class="stat-value">{snapshot.forecast_count}</div></div>
+            <div class="stat"><div class="stat-label">評分</div><div class="stat-value">{snapshot.score_count}</div></div>
+            <div class="stat"><div class="stat-label">檢討</div><div class="stat-value">{snapshot.review_count}</div></div>
+            <div class="stat"><div class="stat-label">提案</div><div class="stat-value">{snapshot.proposal_count}</div></div>
+            <div class="stat"><div class="stat-label">Replay 摘要</div><div class="stat-value">{snapshot.replay_summary_count}</div></div>
+          </div>
+        </div>
+        <div class="evidence-block">
+          <h3>最新評分與唯讀指令</h3>
+          <p class="micro-copy">評分只作為檢討證據補充。即使這裡有新資料，操作員也不應跳過上方的目前預測與檢討主卡。</p>
+          {score_html}
+          {score_detail_html}
+          <div class="command-tags">
+            <span class="tag">run-once</span>
+            <span class="tag">replay-range</span>
+            <span class="tag">render-dashboard</span>
+          </div>
+        </div>
+      </div>
+    """
 
+
+def render_decision_panel(review: Review | None, proposal: Proposal | None) -> str:
+    if review is None:
+        return """
+      <div class="kicker">操作判讀</div>
+      <h2>本輪判讀與建議</h2>
+      <p class="lead">目前還沒有 review/proposal 產物，因此這一區暫時只能維持「等待檢討」狀態。</p>
+      <p class="empty">目前還沒有檢討資料。</p>
+    """
+
+    proposal_summary = _summarize_proposal_surface(proposal)
     proposal_html = (
         f"""
-        <details open>
-          <summary>Latest Proposal</summary>
+        <details>
+          <summary>最新提案</summary>
           <pre>{escape(json.dumps(proposal.to_dict(), ensure_ascii=False, indent=2))}</pre>
         </details>
         """
         if proposal is not None
-        else '<p class="empty">No proposal generated.</p>'
+        else '<p class="empty">目前沒有產生提案。</p>'
     )
     return f"""
-      <h2>{escape(review.review_id)}</h2>
-      <div class="meta">{escape(review.summary)}</div>
-      <dl>
-        <dt>Average Score</dt><dd>{review.average_score:.2f}</dd>
-        <dt>Threshold</dt><dd>{review.threshold_used:.2f}</dd>
-        <dt>Forecast IDs</dt><dd>{escape(", ".join(review.forecast_ids) or "None")}</dd>
-        <dt>Score IDs</dt><dd>{escape(", ".join(review.score_ids) or "None")}</dd>
-        <dt>Proposal Recommended</dt><dd>{escape(str(review.proposal_recommended))}</dd>
-      </dl>
-      {proposal_html}
+      <div class="kicker">操作判讀</div>
+      <h2>本輪判讀與建議</h2>
+      <p class="lead">{escape(review.summary)}</p>
+      <div class="decision-grid">
+        <div class="decision-block">
+          <h3>本輪結論</h3>
+          <p class="decision-emphasis">{escape(_display_decision_surface(review, proposal))}</p>
+        </div>
+        <div class="decision-block">
+          <h3>操作面建議</h3>
+          <div class="meta">{escape(proposal_summary)}</div>
+          <div class="stat-grid">
+            <div class="stat"><div class="stat-label">平均分數</div><div class="stat-value">{review.average_score:.2f}</div></div>
+            <div class="stat"><div class="stat-label">門檻值</div><div class="stat-value">{review.threshold_used:.2f}</div></div>
+            <div class="stat"><div class="stat-label">需要提案</div><div class="stat-value">{escape(_display_boolean(review.proposal_recommended))}</div></div>
+          </div>
+        </div>
+      </div>
+      <details>
+        <summary>展開 review / proposal 詳細欄位</summary>
+        <div class="drawer-stack">
+          <dl>
+            <dt>Review ID</dt><dd>{escape(review.review_id)}</dd>
+            <dt>Forecast IDs</dt><dd>{escape(", ".join(review.forecast_ids) or "None")}</dd>
+            <dt>Score IDs</dt><dd>{escape(", ".join(review.score_ids) or "None")}</dd>
+            <dt>Decision Basis</dt><dd>{escape(review.decision_basis)}</dd>
+            <dt>Proposal Reason</dt><dd>{escape(review.proposal_reason)}</dd>
+          </dl>
+          <pre>{escape(json.dumps(review.to_dict(), ensure_ascii=False, indent=2))}</pre>
+          {proposal_html}
+        </div>
+      </details>
     """
 
 
-def render_replay_panel(summary: EvaluationSummary | None) -> str:
+def render_replay_panel(snapshot: DashboardSnapshot, summary: EvaluationSummary | None) -> str:
     if summary is None:
-        return '<p class="empty">No replay summary yet.</p>'
+        return """
+      <div class="kicker">歷史脈絡</div>
+      <h2>歷史脈絡</h2>
+      <p class="empty">目前還沒有 replay 摘要。</p>
+    """
+
+    replay_copy = (
+        "僅供歷史脈絡參考。replay 落後最新預測時，仍應以目前預測卡為主。"
+        if snapshot.replay_is_stale
+        else "replay 證據足夠新，可補充操作脈絡，但仍是次要參考。"
+    )
+    replay_tag_class = "warn" if snapshot.replay_is_stale else "ok"
 
     return f"""
-      <h2>{escape(summary.summary_id)}</h2>
-      <div class="meta">Historical replay evidence for the current scoped artifacts.</div>
+      <div class="kicker">歷史脈絡</div>
+      <h2>歷史脈絡</h2>
+      <p class="micro-copy">{escape(replay_copy)}</p>
+      <div class="summary-tags">
+        <span class="tag {replay_tag_class}">{escape(_display_replay_freshness(snapshot.replay_freshness_label))}</span>
+        <span class="tag">產生時間：{escape(summary.generated_at.isoformat())}</span>
+      </div>
       <dl>
-        <dt>Generated At</dt><dd>{escape(summary.generated_at.isoformat())}</dd>
-        <dt>Forecast Count</dt><dd>{summary.forecast_count}</dd>
-        <dt>Resolved</dt><dd>{summary.resolved_count}</dd>
-        <dt>Waiting</dt><dd>{summary.waiting_for_data_count}</dd>
-        <dt>Unscorable</dt><dd>{summary.unscorable_count}</dd>
-        <dt>Average Score</dt><dd>{escape("None" if summary.average_score is None else f"{summary.average_score:.2f}")}</dd>
-        <dt>Window</dt><dd>{escape(str(summary.replay_window_start.isoformat()) if summary.replay_window_start else "None")} → {escape(str(summary.replay_window_end.isoformat()) if summary.replay_window_end else "None")}</dd>
+        <dt>Forecast 數量</dt><dd>{summary.forecast_count}</dd>
+        <dt>已完成</dt><dd>{summary.resolved_count}</dd>
+        <dt>等待中</dt><dd>{summary.waiting_for_data_count}</dd>
+        <dt>無法評分</dt><dd>{summary.unscorable_count}</dd>
+        <dt>平均分數</dt><dd>{escape("無" if summary.average_score is None else f"{summary.average_score:.2f}")}</dd>
       </dl>
+      <details>
+        <summary>展開 replay 詳細資料</summary>
+        <dl>
+          <dt>Summary ID</dt><dd>{escape(summary.summary_id)}</dd>
+          <dt>產生時間</dt><dd>{escape(summary.generated_at.isoformat())}</dd>
+          <dt>視窗</dt><dd>{escape(str(summary.replay_window_start.isoformat()) if summary.replay_window_start else "None")} → {escape(str(summary.replay_window_end.isoformat()) if summary.replay_window_end else "None")}</dd>
+        </dl>
+      </details>
     """
 
 
@@ -494,13 +771,28 @@ def _load_json(path: Path) -> dict | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _load_automation_status(automation_id: str) -> str:
+def _latest_proposal_for_review(proposals: list[Proposal], review: Review | None) -> Proposal | None:
+    if review is None:
+        return None
+    return next((proposal for proposal in reversed(proposals) if proposal.review_id == review.review_id), None)
+
+
+def _load_automation_state(automation_id: str) -> AutomationState:
     codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
     path = codex_home / "automations" / automation_id / "automation.toml"
     if not path.exists():
-        return "NOT_FOUND"
+        return AutomationState(status="NOT_FOUND", updated_at=None)
     payload = tomllib.loads(path.read_text(encoding="utf-8"))
-    return payload.get("status", "UNKNOWN")
+    return AutomationState(
+        status=payload.get("status", "UNKNOWN"),
+        updated_at=_automation_timestamp(payload.get("updated_at")),
+    )
+
+
+def _automation_timestamp(raw_value) -> datetime | None:
+    if not isinstance(raw_value, int | float):
+        return None
+    return datetime.fromtimestamp(raw_value / 1000, tz=UTC)
 
 
 def _derive_mode(hourly_status: str, building_status: str) -> tuple[str, str]:
@@ -526,3 +818,231 @@ def _derive_replay_freshness(
         hours = int(delta.total_seconds() // 3600)
         return f"Replay is historical ({hours}h behind latest forecast)", summary.generated_at, True
     return "Replay aligns with the latest forecast window", summary.generated_at, False
+
+
+def _summarize_health(snapshot: DashboardSnapshot) -> tuple[str, str]:
+    if snapshot.latest_forecast is None:
+        return "Waiting", "Waiting for the first forecast cycle."
+    status = snapshot.latest_forecast.status
+    if status == "pending":
+        return "Open Forecast", "Current forecast is still open, so operator attention should stay on the live forecast card."
+    if status == "waiting_for_data":
+        return "Waiting For Data", "The forecast horizon has ended, but provider coverage is not complete yet."
+    if status == "unscorable":
+        return "Unscorable", "The forecast horizon finished, but the realized candle window is incomplete or invalid."
+    if snapshot.latest_review is not None:
+        return "Reviewed", "Latest resolved forecast has review output recorded for operator follow-through."
+    if status == "resolved":
+        return "Resolved", "Latest forecast has resolved, but downstream review output has not been recorded yet."
+    return "Needs Attention", "Latest forecast is in a terminal or degraded state that should be inspected before relying on it."
+
+
+def _judgment_label(snapshot: DashboardSnapshot) -> str:
+    if snapshot.latest_review is not None:
+        if snapshot.latest_review.proposal_recommended:
+            return "Change Recommended"
+        return "Keep Current Setup"
+    if snapshot.latest_forecast is None:
+        return "No Judgment Yet"
+    if snapshot.latest_forecast.status == "pending":
+        return "Awaiting Horizon End"
+    if snapshot.latest_forecast.status == "waiting_for_data":
+        return "Waiting For Data"
+    if snapshot.latest_forecast.status == "unscorable":
+        return "Unscorable"
+    return "Awaiting Review"
+
+
+def _summarize_judgment(snapshot: DashboardSnapshot) -> str:
+    if snapshot.latest_review is not None:
+        return snapshot.latest_review.summary
+    if snapshot.latest_forecast is None:
+        return "No judgment is available yet because no forecast cycle has produced a current forecast artifact."
+    if snapshot.latest_forecast.status == "pending":
+        return "The current forecast window is still live, so replay should be treated as supporting history rather than the latest judgment."
+    if snapshot.latest_forecast.status == "waiting_for_data":
+        return "The forecast horizon has ended, but provider coverage is still incomplete."
+    if snapshot.latest_forecast.status == "unscorable":
+        return "The forecast horizon ended, but the realized window could not be scored."
+    return "The latest forecast has finished its window, but review and proposal artifacts have not been written yet."
+
+
+def _display_mode(mode: str) -> str:
+    mapping = {
+        "Building Mode": "建置模式",
+        "Hourly Research Mode": "每小時研究模式",
+        "Paused Prediction Mode": "暫停預測模式",
+        "Manual Mode": "手動模式",
+    }
+    return mapping.get(mode, mode)
+
+
+def _display_mode_reason(mode: str, reason: str) -> str:
+    mapping = {
+        "Building Mode": "Loop Building Heartbeat 目前啟用，系統仍在調整與建置中。",
+        "Hourly Research Mode": "Hourly Paper Forecast 目前啟用，系統正在執行 paper-only 預測循環。",
+        "Paused Prediction Mode": "Hourly Paper Forecast 目前暫停，系統處於人工檢查狀態。",
+        "Manual Mode": "這個工作區目前沒有已知的自動化正在執行。",
+    }
+    return mapping.get(mode, reason)
+
+
+def _display_automation_status(status: str) -> str:
+    mapping = {
+        "ACTIVE": "啟用中（ACTIVE）",
+        "PAUSED": "已暫停（PAUSED）",
+        "NOT_FOUND": "未找到（NOT_FOUND）",
+        "UNKNOWN": "未知（UNKNOWN）",
+    }
+    return mapping.get(status, status)
+
+
+def _display_health_label(label: str) -> str:
+    mapping = {
+        "Waiting": "等待中",
+        "Open Forecast": "進行中預測",
+        "Waiting For Data": "等待資料覆蓋",
+        "Unscorable": "無法評分",
+        "Reviewed": "已檢討",
+        "Resolved": "已結束",
+        "Needs Attention": "需要檢查",
+    }
+    return mapping.get(label, label)
+
+
+def _display_health_copy(label: str, copy: str) -> str:
+    mapping = {
+        "Waiting": "等待第一筆預測循環。",
+        "Open Forecast": "目前這筆預測仍在開放視窗內，操作注意力應優先放在即時預測卡。",
+        "Waiting For Data": "預測視窗已結束，但仍在等待 provider 補齊目標視窗資料。",
+        "Unscorable": "目標視窗資料不完整或無效，這筆預測不能被當成已正常評分。",
+        "Reviewed": "最新已結束的預測已留下檢討輸出，可直接往後續追蹤。",
+        "Resolved": "最新預測已結束，但下游檢討輸出尚未寫入。",
+        "Needs Attention": "最新預測處於需要人工確認的狀態，先檢查詳細欄位再判斷。",
+    }
+    return mapping.get(label, copy)
+
+
+def _display_judgment_label(label: str) -> str:
+    mapping = {
+        "Change Recommended": "建議調整",
+        "Keep Current Setup": "維持目前設定",
+        "No Judgment Yet": "尚無判斷",
+        "Awaiting Horizon End": "等待視窗結束",
+        "Waiting For Data": "等待資料覆蓋",
+        "Unscorable": "無法評分",
+        "Awaiting Review": "等待檢討",
+    }
+    return mapping.get(label, label)
+
+
+def _display_judgment_copy(snapshot: DashboardSnapshot, copy: str) -> str:
+    if snapshot.latest_review is not None:
+        return copy
+    if snapshot.latest_forecast is None:
+        return "目前還沒有可供判讀的預測產物，因此暫時沒有判斷結果。"
+    if snapshot.latest_forecast.status == "pending":
+        return "目前預測視窗仍在進行中，因此 replay 應視為輔助歷史，而不是最新判斷。"
+    if snapshot.latest_forecast.status == "waiting_for_data":
+        return "預測視窗已結束，但仍在等待 provider 補齊目標視窗資料。"
+    if snapshot.latest_forecast.status == "unscorable":
+        return "目標視窗資料不完整或無效，這筆預測不能作為正常評分依據。"
+    return "最新預測已完成視窗，但檢討與提案產物尚未寫出。"
+
+
+def _display_replay_freshness(label: str) -> str:
+    if label == "No replay summary yet":
+        return "目前還沒有 replay 摘要"
+    if label == "Historical replay available":
+        return "已有歷史 replay 可供參考"
+    if label == "Replay aligns with the latest forecast window":
+        return "replay 與最新預測視窗大致對齊"
+    if label.startswith("Replay is historical (") and label.endswith(")"):
+        detail = label.removeprefix("Replay is historical (").removesuffix(")")
+        return f"replay 僅供歷史脈絡參考（{detail}）"
+    return label
+
+
+def _display_forecast_status(status: str) -> str:
+    mapping = {
+        "pending": "待完成（pending）",
+        "resolved": "已完成（resolved）",
+        "waiting_for_data": "等待資料覆蓋（waiting_for_data）",
+        "unscorable": "無法評分（unscorable）",
+        "failed": "失敗（failed）",
+        "cancelled": "已取消（cancelled）",
+    }
+    return mapping.get(status, status)
+
+
+def _display_status_reason(reason: str) -> str:
+    mapping = {
+        "awaiting_horizon_end": "等待視窗結束（awaiting_horizon_end）",
+        "awaiting_provider_coverage": "等待 provider 補齊目標視窗（awaiting_provider_coverage）",
+        "scored": "已評分（scored）",
+        "score_already_recorded": "評分已存在（score_already_recorded）",
+        "missing_expected_candles": "缺少必要 K 線（missing_expected_candles）",
+        "empty_realized_window": "實際觀測視窗為空（empty_realized_window）",
+        "insufficient_realized_candles": "實際 K 線不足（insufficient_realized_candles）",
+    }
+    return mapping.get(reason, reason)
+
+
+def _dashboard_freshness_copy(snapshot: DashboardSnapshot) -> str:
+    hourly_source = _format_optional_timestamp(snapshot.hourly_status_source_at)
+    building_source = _format_optional_timestamp(snapshot.building_status_source_at)
+    return (
+        f"Dashboard 產生時間：{snapshot.dashboard_generated_at.isoformat()}；"
+        f"Automation 狀態來源：hourly {hourly_source}，building {building_source}。"
+    )
+
+
+def _format_optional_timestamp(value: datetime | None) -> str:
+    if value is None:
+        return "未找到"
+    return value.isoformat()
+
+
+def _display_regime(regime: str | None) -> str:
+    mapping = {
+        "trend_up": "上行趨勢（trend_up）",
+        "trend_down": "下行趨勢（trend_down）",
+        "range": "區間盤整（range）",
+    }
+    if regime is None:
+        return "無"
+    return mapping.get(regime, regime)
+
+
+def _display_boolean(value: bool) -> str:
+    return "是" if value else "否"
+
+
+def _format_window_label(start: datetime, end: datetime) -> str:
+    return f"{start.strftime('%m-%d %H:%M')} → {end.strftime('%m-%d %H:%M')}"
+
+
+def _display_decision_surface(review: Review, proposal: Proposal | None) -> str:
+    if review.proposal_recommended and proposal is not None:
+        return "目前判讀偏向需要調整 paper-only 參數，請先讀提案摘要，再決定是否進入人工覆核。"
+    if review.proposal_recommended:
+        return "review 判定需要調整，但目前只看到檢討結果，尚未看到完整提案內容。"
+    return "目前判讀偏向維持既有設定，除非後續新 evidence 推翻這次 review。"
+
+
+def _summarize_proposal_surface(proposal: Proposal | None) -> str:
+    if proposal is None:
+        return "目前沒有額外 proposal，代表這輪 review 沒有提出新的調整單。"
+    change_keys = ", ".join(sorted(proposal.changes))
+    return f"提案類型為 {proposal.proposal_type}，目前涉及 {change_keys}。"
+
+
+def _summarize_evidence(snapshot: DashboardSnapshot) -> str:
+    latest_score = snapshot.latest_score
+    if latest_score is None:
+        return "這一區用來確認目前操作判讀背後的證據鏈是否完整。若最新 score 尚未產生，代表證據鏈仍在補齊中。"
+    return (
+        f"目前最新 score 為 {latest_score.score:.2f}，"
+        f"對應 { _display_regime(latest_score.predicted_regime) } 與 { _display_regime(latest_score.actual_regime) }。"
+        " 這些產物數量與最新 score 共同支撐上方的本輪判讀。"
+    )

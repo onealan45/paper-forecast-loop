@@ -197,6 +197,11 @@ Current form:
 - generated from existing persisted artifacts
 - no live controls
 - no trading actions
+- first screen emphasizes:
+  - operator summary
+  - current forecast
+  - historical replay context
+- raw metadata stays collapsed by default so the inspector remains readable before drill-down
 
 ### Dashboard Contract
 

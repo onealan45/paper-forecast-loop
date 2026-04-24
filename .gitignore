@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 
 debug_resolve_copy/
+output/
 paper_storage/
 public_run/
 public_run_seq/

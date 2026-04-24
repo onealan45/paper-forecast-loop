@@ -77,6 +77,7 @@ def test_run_cycle_aligns_forecast_to_latest_available_hourly_boundary(tmp_path)
     assert result.new_forecast.status == "pending"
     assert result.new_forecast.status_reason == "awaiting_horizon_end"
     assert result.new_forecast.provider_data_through == datetime(2026, 4, 21, 11, 0, tzinfo=UTC)
+    assert result.new_forecast.observed_candle_count == 1
 
 
 def test_run_cycle_keeps_matured_forecast_waiting_when_provider_coverage_is_incomplete(tmp_path):

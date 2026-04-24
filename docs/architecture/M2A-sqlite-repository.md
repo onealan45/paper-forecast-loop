@@ -5,8 +5,8 @@
 M2A introduces a SQLite repository for canonical M2 state while preserving JSONL
 as the compatibility and audit export format.
 
-This stage does not implement paper orders, fills, NAV, risk gates, multi-asset
-support, or broker integration.
+This stage does not implement paper order creation, fills, NAV, risk gates,
+multi-asset support, or broker integration.
 
 ## Decision
 

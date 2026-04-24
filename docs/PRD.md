@@ -309,6 +309,7 @@ V1 MVP should include:
 - baseline evaluation artifacts
 - strategy decision artifacts
 - minimal paper portfolio snapshots
+- local paper order ledger
 - health-check output
 - Codex repair request artifacts
 - minimal CLI
@@ -342,7 +343,7 @@ correctness defects:
 - strategy and regime classification remain intentionally simple
 - the current read-only UX is static HTML, not a live operator application
 - automation is local and paper-only, with manual evidence checks before any resume
-- paper portfolio support is a minimal snapshot, not a full ledger, NAV, or PnL engine
+- paper portfolio support is a minimal snapshot plus local order ledger, not fills, positions, NAV, or a PnL engine
 - SQLite repository migration/export now exists, while the hourly loop and dashboard still use JSONL artifacts by default until later M2 integration
 - health-check creates repair requests, but there is no autonomous repair daemon in this repo
 - there is no live execution layer, and live broker/exchange integration remains explicitly unavailable

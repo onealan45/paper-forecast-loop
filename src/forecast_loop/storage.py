@@ -9,6 +9,7 @@ from forecast_loop.models import (
     EvaluationSummary,
     Forecast,
     ForecastScore,
+    PaperOrder,
     PaperPortfolioSnapshot,
     Proposal,
     RepairRequest,
@@ -50,6 +51,10 @@ class ArtifactRepository(Protocol):
 
     def load_strategy_decisions(self) -> list[StrategyDecision]: ...
 
+    def save_paper_order(self, order: PaperOrder) -> None: ...
+
+    def load_paper_orders(self) -> list[PaperOrder]: ...
+
     def save_portfolio_snapshot(self, snapshot: PaperPortfolioSnapshot) -> None: ...
 
     def load_portfolio_snapshots(self) -> list[PaperPortfolioSnapshot]: ...
@@ -70,6 +75,7 @@ class JsonFileRepository:
         self.evaluation_summaries_path = self.root / "evaluation_summaries.jsonl"
         self.baseline_evaluations_path = self.root / "baseline_evaluations.jsonl"
         self.strategy_decisions_path = self.root / "strategy_decisions.jsonl"
+        self.paper_orders_path = self.root / "paper_orders.jsonl"
         self.portfolio_snapshots_path = self.root / "portfolio_snapshots.jsonl"
         self.repair_requests_path = self.root / "repair_requests.jsonl"
 
@@ -153,6 +159,16 @@ class JsonFileRepository:
 
     def load_strategy_decisions(self) -> list[StrategyDecision]:
         return self._load_lines(self.strategy_decisions_path, StrategyDecision.from_dict)
+
+    def save_paper_order(self, order: PaperOrder) -> None:
+        self._append_unique(
+            self.paper_orders_path,
+            order.to_dict(),
+            identity_key="order_id",
+        )
+
+    def load_paper_orders(self) -> list[PaperOrder]:
+        return self._load_lines(self.paper_orders_path, PaperOrder.from_dict)
 
     def save_portfolio_snapshot(self, snapshot: PaperPortfolioSnapshot) -> None:
         self._append_unique(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
+from enum import StrEnum
 import json
 from hashlib import sha1
 
@@ -473,6 +474,78 @@ class PaperPortfolioSnapshot:
             net_exposure_pct=payload.get("net_exposure_pct", 0.0),
             max_drawdown_pct=payload.get("max_drawdown_pct"),
             positions=[PaperPosition.from_dict(item) for item in payload.get("positions", [])],
+        )
+
+
+class PaperOrderStatus(StrEnum):
+    CREATED = "CREATED"
+    CANCELLED = "CANCELLED"
+    REJECTED = "REJECTED"
+
+
+class PaperOrderSide(StrEnum):
+    BUY = "BUY"
+    SELL = "SELL"
+
+
+class PaperOrderType(StrEnum):
+    TARGET_PERCENT = "TARGET_PERCENT"
+
+
+@dataclass(slots=True)
+class PaperOrder:
+    order_id: str
+    created_at: datetime
+    decision_id: str
+    symbol: str
+    side: str
+    order_type: str
+    status: str
+    target_position_pct: float | None
+    current_position_pct: float | None
+    max_position_pct: float
+    rationale: str
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        decision_id: str,
+        symbol: str,
+        side: str,
+        target_position_pct: float | None,
+        order_type: str,
+    ) -> str:
+        return _stable_artifact_id(
+            "paper-order",
+            {
+                "decision_id": decision_id,
+                "symbol": symbol,
+                "side": side,
+                "target_position_pct": target_position_pct,
+                "order_type": order_type,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "PaperOrder":
+        return cls(
+            order_id=payload["order_id"],
+            created_at=datetime.fromisoformat(payload["created_at"]),
+            decision_id=payload["decision_id"],
+            symbol=payload["symbol"],
+            side=payload["side"],
+            order_type=payload.get("order_type", PaperOrderType.TARGET_PERCENT.value),
+            status=payload.get("status", PaperOrderStatus.CREATED.value),
+            target_position_pct=payload.get("target_position_pct"),
+            current_position_pct=payload.get("current_position_pct"),
+            max_position_pct=payload.get("max_position_pct", 0.0),
+            rationale=payload.get("rationale", "legacy_paper_order"),
         )
 
 

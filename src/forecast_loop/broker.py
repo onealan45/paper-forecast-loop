@@ -31,18 +31,18 @@ class PaperBrokerAdapter:
             "symbol": symbol,
             "side": side,
             "quantity": quantity,
-            "reason": "M1 strategy research is paper-only and does not execute orders.",
+            "reason": "Use the local paper-order ledger; broker submit is unavailable until a later paper execution stage.",
         }
 
     def cancel_order(self, *, order_id: str) -> dict:
         return {
             "status": "paper_noop",
             "order_id": order_id,
-            "reason": "No live or paper order ledger exists in M1.",
+            "reason": "Paper order cancellation is not implemented until the order lifecycle stage.",
         }
 
 
 def build_broker_adapter(mode: str = "paper") -> BrokerAdapter:
     if mode == "paper":
         return PaperBrokerAdapter()
-    raise ValueError(f"broker mode '{mode}' is unavailable in M1; only paper mode is supported")
+    raise ValueError(f"broker mode '{mode}' is unavailable; only paper mode is supported as internal paper mode")

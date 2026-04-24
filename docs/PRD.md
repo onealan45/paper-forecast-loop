@@ -286,6 +286,7 @@ Current practical V1 path:
 - M4B records expanded baseline suite results for research audit
 - M4C adds a paper-only backtest engine over stored candles
 - M4D adds rolling walk-forward validation artifacts with train/validation/test boundaries
+- M4E adds generated Markdown research reports from existing research artifacts
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation
@@ -333,6 +334,8 @@ V1 MVP should include:
   Sharpe, turnover, and win-rate metrics
 - walk-forward validation artifacts with rolling boundaries, aggregate metrics,
   and overfit-risk flags
+- Markdown research reports covering data coverage, model vs baselines,
+  backtests, walk-forward metrics, drawdown, overfit risk, and decision gates
 - health-check output
 - Codex repair request artifacts
 - minimal CLI
@@ -378,6 +381,7 @@ correctness defects:
 - research datasets are generated artifacts only; no model training or optimizer is included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved
 - walk-forward validation does not yet influence production decision gates
+- research reports summarize available artifacts only and do not change strategy behavior
 
 The repository is suitable for continued paper-only hourly research only when
 tests pass, active storage repair status is fresh, dashboard freshness is

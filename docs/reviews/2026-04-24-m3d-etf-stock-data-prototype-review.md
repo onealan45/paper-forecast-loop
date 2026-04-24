@@ -68,6 +68,15 @@ Result:
 - `market_candles.jsonl` stored `adjusted_close` values.
 - Manual smoke storage/input/export paths are ignored by `.gitignore`.
 
+## CI Remediation
+
+Initial GitHub Actions checks failed before tests because the Windows runner did
+not have IANA timezone data for `ZoneInfo("America/New_York")`.
+
+Remediation:
+
+- added `tzdata>=2025.2` as a Windows-only project dependency.
+
 ## Known Deferrals
 
 - live stock or ETF provider;

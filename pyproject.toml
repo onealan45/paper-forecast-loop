@@ -3,6 +3,9 @@ name = "forecast-loop"
 version = "0.1.0"
 description = "Paper-only public-data forecasting and strategy-research loop"
 requires-python = ">=3.13"
+dependencies = [
+    "tzdata>=2025.2; platform_system == 'Windows'",
+]
 
 [project.optional-dependencies]
 dev = [

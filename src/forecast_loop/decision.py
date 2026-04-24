@@ -7,6 +7,7 @@ from forecast_loop.models import (
     BaselineEvaluation,
     HealthCheckResult,
     PaperPortfolioSnapshot,
+    RiskSnapshot,
     Review,
     StrategyDecision,
 )
@@ -23,8 +24,10 @@ def generate_strategy_decision(
     horizon_hours: int,
     now: datetime,
     health_result: HealthCheckResult | None = None,
+    risk_snapshot: RiskSnapshot | None = None,
     max_position_pct: float = 0.15,
     stale_after_hours: int = 48,
+    risk_stale_after_hours: int = 2,
 ) -> StrategyDecision:
     if health_result is not None and health_result.repair_required:
         decision = StrategyDecision.build_fail_closed(
@@ -54,6 +57,13 @@ def generate_strategy_decision(
     repository.save_baseline_evaluation(baseline)
     portfolio = _latest_or_empty_portfolio(repository, now)
     current_position_pct = portfolio.position_pct_for(symbol)
+    risk_snapshot = risk_snapshot or _latest_risk_snapshot(repository, symbol)
+    risk_blocked_reason = _risk_blocked_reason(
+        risk_snapshot=risk_snapshot,
+        symbol=symbol,
+        now=now,
+        risk_stale_after_hours=risk_stale_after_hours,
+    )
     latest_forecast = forecasts[-1] if forecasts else None
     linked_review_ids = _review_ids_for_baseline(reviews, baseline)
 
@@ -68,6 +78,7 @@ def generate_strategy_decision(
     invalidation_conditions = [
         "新的 provider 資料推翻最新 forecast regime。",
         "health-check 回報 storage、scoring 或 dashboard integrity 的 blocking 問題。",
+        "risk-check 缺少或過期，無法確認 drawdown 與曝險 gate。",
         "近期模型分數跌破決策門檻。",
     ]
 
@@ -87,6 +98,20 @@ def generate_strategy_decision(
         risk_level = "HIGH"
         evidence_grade = "INSUFFICIENT"
         recommended_position_pct = min(current_position_pct, max_position_pct)
+    elif risk_snapshot is not None and risk_snapshot.status == "STOP_NEW_ENTRIES":
+        action = "STOP_NEW_ENTRIES"
+        tradeable = False
+        blocked_reason = "risk_stop_new_entries"
+        reason_summary = "風險檢查觸發停止新進場 gate；暫停方向性 paper order。"
+        risk_level = "HIGH"
+        recommended_position_pct = min(current_position_pct, max_position_pct)
+    elif risk_snapshot is not None and risk_snapshot.status == "REDUCE_RISK":
+        action = "REDUCE_RISK"
+        tradeable = current_position_pct > 0
+        blocked_reason = None if tradeable else "risk_reduce_required_but_no_position"
+        reason_summary = "風險檢查偵測 drawdown 或曝險超標，建議先降低 paper 風險。"
+        risk_level = "HIGH"
+        recommended_position_pct = max(0.0, min(current_position_pct, max_position_pct) * 0.5)
     elif baseline.evidence_grade == "INSUFFICIENT":
         action = "HOLD"
         tradeable = False
@@ -113,17 +138,33 @@ def generate_strategy_decision(
         reason_summary = "證據方向偏正面，但強度不足以支持買進或賣出。"
         risk_level = "MEDIUM"
     elif latest_forecast.predicted_regime in BULLISH_REGIMES:
-        action = "BUY"
-        tradeable = True
-        reason_summary = "最新 forecast 偏多，且模型證據在品質足夠時打贏 baseline。"
-        risk_level = "MEDIUM"
-        recommended_position_pct = max_position_pct
+        if risk_blocked_reason is not None:
+            action = "STOP_NEW_ENTRIES"
+            tradeable = False
+            blocked_reason = risk_blocked_reason
+            reason_summary = "方向性買進需要新鮮 risk-check；缺少風險證據時停止新進場。"
+            risk_level = "HIGH"
+            recommended_position_pct = min(current_position_pct, max_position_pct)
+        else:
+            action = "BUY"
+            tradeable = True
+            reason_summary = "最新 forecast 偏多，且模型證據在品質足夠時打贏 baseline。"
+            risk_level = "MEDIUM"
+            recommended_position_pct = max_position_pct
     elif latest_forecast.predicted_regime in BEARISH_REGIMES:
-        action = "SELL"
-        tradeable = True
-        reason_summary = "最新 forecast 偏空，且模型證據在品質足夠時打贏 baseline。"
-        risk_level = "MEDIUM"
-        recommended_position_pct = 0.0
+        if risk_blocked_reason is not None:
+            action = "STOP_NEW_ENTRIES"
+            tradeable = False
+            blocked_reason = risk_blocked_reason
+            reason_summary = "方向性賣出需要新鮮 risk-check；缺少風險證據時停止新進場。"
+            risk_level = "HIGH"
+            recommended_position_pct = min(current_position_pct, max_position_pct)
+        else:
+            action = "SELL"
+            tradeable = True
+            reason_summary = "最新 forecast 偏空，且模型證據在品質足夠時打贏 baseline。"
+            risk_level = "MEDIUM"
+            recommended_position_pct = 0.0
     else:
         action = "HOLD"
         tradeable = False
@@ -132,7 +173,12 @@ def generate_strategy_decision(
         risk_level = "UNKNOWN"
 
     forecast_ids = [latest_forecast.forecast_id] if latest_forecast else []
-    decision_basis = _decision_basis(action=action, baseline=baseline, blocked_reason=blocked_reason)
+    decision_basis = _decision_basis(
+        action=action,
+        baseline=baseline,
+        blocked_reason=blocked_reason,
+        risk_snapshot=risk_snapshot,
+    )
     decision_id = StrategyDecision.build_id(
         symbol=symbol,
         horizon_hours=horizon_hours,
@@ -178,6 +224,27 @@ def _latest_or_empty_portfolio(repository, now: datetime) -> PaperPortfolioSnaps
     return snapshot
 
 
+def _latest_risk_snapshot(repository, symbol: str) -> RiskSnapshot | None:
+    snapshots = [snapshot for snapshot in repository.load_risk_snapshots() if snapshot.symbol == symbol]
+    return snapshots[-1] if snapshots else None
+
+
+def _risk_blocked_reason(
+    *,
+    risk_snapshot: RiskSnapshot | None,
+    symbol: str,
+    now: datetime,
+    risk_stale_after_hours: int,
+) -> str | None:
+    if risk_snapshot is None:
+        return "risk_snapshot_missing"
+    if risk_snapshot.symbol != symbol:
+        return "risk_snapshot_symbol_mismatch"
+    if now - risk_snapshot.created_at > timedelta(hours=risk_stale_after_hours):
+        return "risk_snapshot_stale"
+    return None
+
+
 def _review_ids_for_baseline(reviews: list[Review], baseline: BaselineEvaluation) -> list[str]:
     baseline_score_ids = set(baseline.score_ids)
     return [
@@ -187,9 +254,17 @@ def _review_ids_for_baseline(reviews: list[Review], baseline: BaselineEvaluation
     ]
 
 
-def _decision_basis(*, action: str, baseline: BaselineEvaluation, blocked_reason: str | None) -> str:
+def _decision_basis(
+    *,
+    action: str,
+    baseline: BaselineEvaluation,
+    blocked_reason: str | None,
+    risk_snapshot: RiskSnapshot | None,
+) -> str:
+    risk_basis = "none" if risk_snapshot is None else f"{risk_snapshot.risk_id}:{risk_snapshot.status}"
     return (
         f"action={action}; evidence_grade={baseline.evidence_grade}; "
         f"sample_size={baseline.sample_size}; model_edge={baseline.model_edge}; "
-        f"recent_score={baseline.recent_score}; blocked_reason={blocked_reason or 'none'}"
+        f"recent_score={baseline.recent_score}; risk={risk_basis}; "
+        f"blocked_reason={blocked_reason or 'none'}"
     )

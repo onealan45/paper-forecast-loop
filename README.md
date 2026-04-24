@@ -36,6 +36,7 @@ This version intentionally includes only:
     - `paper_orders.jsonl`
     - `paper_fills.jsonl`
     - `equity_curve.jsonl`
+    - `risk_snapshots.jsonl`
     - `repair_requests.jsonl`
 - CLI execution via:
   - `run-once`
@@ -51,6 +52,7 @@ This version intentionally includes only:
   - `paper-order`
   - `paper-fill`
   - `portfolio-snapshot`
+  - `risk-check`
 
 This version intentionally excludes:
 
@@ -272,6 +274,19 @@ research analysis.
 
 These are local accounting artifacts only. They do not imply external execution.
 
+### Risk Snapshot Artifact
+
+Each risk snapshot records:
+
+- current and max drawdown
+- gross and net exposure
+- per-symbol paper position percentage
+- configured drawdown and exposure thresholds
+- risk status: `OK`, `REDUCE_RISK`, or `STOP_NEW_ENTRIES`
+
+Risk snapshots are paper-only gates. They can block or reduce later paper
+decisions, but they do not submit broker or exchange orders.
+
 ### Repair Request Artifact
 
 Each repair request records:
@@ -390,6 +405,7 @@ It only reads:
 - `evaluation_summaries.jsonl`
 - `baseline_evaluations.jsonl`
 - `portfolio_snapshots.jsonl`
+- `risk_snapshots.jsonl`
 - `strategy_decisions.jsonl`
 - `repair_requests.jsonl`
 - `last_run_meta.json`
@@ -483,6 +499,12 @@ Mark the paper portfolio to market:
 python run_forecast_loop.py portfolio-snapshot --storage-dir .\paper_storage\manual-coingecko --market-price 105
 ```
 
+Run paper-only risk gates against the latest portfolio state:
+
+```powershell
+python run_forecast_loop.py risk-check --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD
+```
+
 Run a health audit and create a Codex repair request if blocking issues exist:
 
 ```powershell
@@ -543,7 +565,7 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - the current hourly loop still writes JSONL artifacts by default while M2A proves SQLite migration and export parity
 - regime classification is still intentionally simple
 - only `BTC-USD` is supported
-- paper portfolio accounting is basic local simulation, not broker reconciliation
+- paper portfolio accounting and risk gates are basic local simulations, not broker reconciliation
 - order lifecycle is minimal: created orders can be filled locally, but cancellation and partial fill lifecycle are deferred
 - proposal logic is still heuristic and conservative
 - health-check creates repair requests, but there is no autonomous repair daemon in this repo

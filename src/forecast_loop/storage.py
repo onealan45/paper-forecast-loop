@@ -15,6 +15,7 @@ from forecast_loop.models import (
     PaperPortfolioSnapshot,
     Proposal,
     RepairRequest,
+    RiskSnapshot,
     Review,
     StrategyDecision,
 )
@@ -71,6 +72,10 @@ class ArtifactRepository(Protocol):
 
     def load_equity_curve_points(self) -> list[EquityCurvePoint]: ...
 
+    def save_risk_snapshot(self, snapshot: RiskSnapshot) -> None: ...
+
+    def load_risk_snapshots(self) -> list[RiskSnapshot]: ...
+
     def save_repair_request(self, repair_request: RepairRequest) -> None: ...
 
     def load_repair_requests(self) -> list[RepairRequest]: ...
@@ -91,6 +96,7 @@ class JsonFileRepository:
         self.paper_fills_path = self.root / "paper_fills.jsonl"
         self.portfolio_snapshots_path = self.root / "portfolio_snapshots.jsonl"
         self.equity_curve_path = self.root / "equity_curve.jsonl"
+        self.risk_snapshots_path = self.root / "risk_snapshots.jsonl"
         self.repair_requests_path = self.root / "repair_requests.jsonl"
 
     def save_forecast(self, forecast: Forecast) -> None:
@@ -218,6 +224,16 @@ class JsonFileRepository:
 
     def load_equity_curve_points(self) -> list[EquityCurvePoint]:
         return self._load_lines(self.equity_curve_path, EquityCurvePoint.from_dict)
+
+    def save_risk_snapshot(self, snapshot: RiskSnapshot) -> None:
+        self._append_unique(
+            self.risk_snapshots_path,
+            snapshot.to_dict(),
+            identity_key="risk_id",
+        )
+
+    def load_risk_snapshots(self) -> list[RiskSnapshot]:
+        return self._load_lines(self.risk_snapshots_path, RiskSnapshot.from_dict)
 
     def save_repair_request(self, repair_request: RepairRequest) -> None:
         self._append_unique(

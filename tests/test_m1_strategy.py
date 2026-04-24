@@ -16,6 +16,7 @@ from forecast_loop.models import (
     PaperPosition,
     PaperPortfolioSnapshot,
     Review,
+    RiskSnapshot,
 )
 from forecast_loop.storage import JsonFileRepository
 
@@ -85,6 +86,28 @@ def _seed_scores(repository: JsonFileRepository, *, actuals: list[str], hits: li
     return scores
 
 
+def _ok_risk(now: datetime, *, created_at: datetime | None = None) -> RiskSnapshot:
+    return RiskSnapshot(
+        risk_id=f"risk:{(created_at or now).isoformat()}",
+        created_at=created_at or now,
+        symbol="BTC-USD",
+        status="OK",
+        severity="none",
+        current_drawdown_pct=0.0,
+        max_drawdown_pct=0.0,
+        gross_exposure_pct=0.0,
+        net_exposure_pct=0.0,
+        position_pct=0.0,
+        max_position_pct=0.15,
+        max_gross_exposure_pct=0.20,
+        reduce_risk_drawdown_pct=0.05,
+        stop_new_entries_drawdown_pct=0.10,
+        findings=[],
+        recommended_action="HOLD",
+        decision_basis="test",
+    )
+
+
 def test_repository_round_trips_m1_artifacts(tmp_path):
     repository = JsonFileRepository(tmp_path)
     now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
@@ -137,6 +160,7 @@ def test_strategy_decision_holds_when_evidence_is_insufficient(tmp_path):
         symbol="BTC-USD",
         horizon_hours=24,
         now=now,
+        risk_snapshot=_ok_risk(now),
     )
 
     assert decision.action == "HOLD"
@@ -227,6 +251,7 @@ def test_strategy_decision_buys_only_when_evidence_beats_baseline(tmp_path):
         symbol="BTC-USD",
         horizon_hours=24,
         now=now,
+        risk_snapshot=_ok_risk(now),
     )
 
     assert decision.action == "BUY"
@@ -235,6 +260,54 @@ def test_strategy_decision_buys_only_when_evidence_beats_baseline(tmp_path):
     assert decision.recommended_position_pct == 0.15
     assert decision.baseline_ids
     assert decision.score_ids
+
+
+def test_strategy_decision_blocks_directional_buy_without_risk_snapshot(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    _seed_scores(
+        repository,
+        actuals=["trend_up", "trend_up", "trend_down", "trend_up", "trend_down", "trend_down"],
+        hits=[True, True, True, True, True, True],
+    )
+    latest = _forecast("forecast:latest", anchor_time=now, predicted_regime="trend_up", status="pending")
+    repository.save_forecast(latest)
+
+    decision = generate_strategy_decision(
+        repository=repository,
+        symbol="BTC-USD",
+        horizon_hours=24,
+        now=now,
+    )
+
+    assert decision.action == "STOP_NEW_ENTRIES"
+    assert decision.tradeable is False
+    assert decision.blocked_reason == "risk_snapshot_missing"
+    assert "risk=none" in decision.decision_basis
+
+
+def test_strategy_decision_blocks_directional_buy_with_stale_risk_snapshot(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    _seed_scores(
+        repository,
+        actuals=["trend_up", "trend_up", "trend_down", "trend_up", "trend_down", "trend_down"],
+        hits=[True, True, True, True, True, True],
+    )
+    latest = _forecast("forecast:latest", anchor_time=now, predicted_regime="trend_up", status="pending")
+    repository.save_forecast(latest)
+    repository.save_risk_snapshot(_ok_risk(now, created_at=now - timedelta(hours=3)))
+
+    decision = generate_strategy_decision(
+        repository=repository,
+        symbol="BTC-USD",
+        horizon_hours=24,
+        now=now,
+    )
+
+    assert decision.action == "STOP_NEW_ENTRIES"
+    assert decision.tradeable is False
+    assert decision.blocked_reason == "risk_snapshot_stale"
 
 
 def test_strategy_decision_stops_new_entries_when_health_requires_repair(tmp_path, monkeypatch):

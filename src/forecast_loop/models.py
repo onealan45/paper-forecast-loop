@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 import json
+import math
 from hashlib import sha1
 
 
@@ -30,6 +31,15 @@ def _require_string(payload: dict, key: str) -> str:
     if key not in payload or not isinstance(payload[key], str) or not payload[key]:
         raise ValueError(f"missing required string field: {key}")
     return payload[key]
+
+
+def _optional_float(value) -> float | None:
+    if value in (None, ""):
+        return None
+    result = float(value)
+    if not math.isfinite(result):
+        raise ValueError("numeric field must be finite")
+    return result
 
 
 def _evaluation_summary_identity(
@@ -180,6 +190,80 @@ class MarketCandleRecord:
             source=_require_string(payload, "source"),
             imported_at=_require_aware_datetime(payload, "imported_at"),
             adjusted_close=float(adjusted_close) if adjusted_close is not None else None,
+        )
+
+
+@dataclass(slots=True)
+class MacroEvent:
+    event_id: str
+    event_type: str
+    name: str
+    region: str
+    scheduled_at: datetime
+    source: str
+    imported_at: datetime
+    actual_value: float | None = None
+    consensus_value: float | None = None
+    previous_value: float | None = None
+    unit: str | None = None
+    importance: str = "medium"
+    notes: str | None = None
+
+    ALLOWED_TYPES = {"CPI", "PCE", "FOMC", "GDP", "NFP", "UNEMPLOYMENT"}
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        event_type: str,
+        region: str,
+        scheduled_at: datetime,
+        source: str,
+    ) -> str:
+        return _stable_artifact_id(
+            "macro-event",
+            {
+                "event_type": event_type.upper(),
+                "region": region.upper(),
+                "scheduled_at": scheduled_at.isoformat(),
+                "source": source,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["scheduled_at"] = self.scheduled_at.isoformat()
+        payload["imported_at"] = self.imported_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "MacroEvent":
+        event_type = _require_string(payload, "event_type").upper()
+        if event_type not in cls.ALLOWED_TYPES:
+            raise ValueError(f"unsupported macro event type: {event_type}")
+        scheduled_at = _require_aware_datetime(payload, "scheduled_at")
+        imported_at = _require_aware_datetime(payload, "imported_at")
+        payload_event_id = payload.get("event_id")
+        event_id = payload_event_id if isinstance(payload_event_id, str) and payload_event_id else cls.build_id(
+            event_type=event_type,
+            region=_require_string(payload, "region").upper(),
+            scheduled_at=scheduled_at,
+            source=_require_string(payload, "source"),
+        )
+        return cls(
+            event_id=event_id,
+            event_type=event_type,
+            name=_require_string(payload, "name"),
+            region=_require_string(payload, "region").upper(),
+            scheduled_at=scheduled_at,
+            source=_require_string(payload, "source"),
+            imported_at=imported_at,
+            actual_value=_optional_float(payload.get("actual_value")),
+            consensus_value=_optional_float(payload.get("consensus_value")),
+            previous_value=_optional_float(payload.get("previous_value")),
+            unit=payload.get("unit"),
+            importance=payload.get("importance", "medium"),
+            notes=payload.get("notes"),
         )
 
 

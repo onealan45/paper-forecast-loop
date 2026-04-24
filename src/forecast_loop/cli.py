@@ -17,6 +17,7 @@ from forecast_loop.dashboard import write_dashboard_html
 from forecast_loop.decision import generate_strategy_decision
 from forecast_loop.evaluation import build_evaluation_summary
 from forecast_loop.health import run_health_check
+from forecast_loop.macro_events import import_macro_events, macro_calendar
 from forecast_loop.maintenance import repair_storage
 from forecast_loop.models import StrategyDecision
 from forecast_loop.orders import create_paper_order_from_decision
@@ -170,6 +171,19 @@ def main(argv: list[str] | None = None) -> int:
     market_calendar.add_argument("--start-date", required=True)
     market_calendar.add_argument("--end-date", required=True)
 
+    import_macro_events_cmd = subparsers.add_parser("import-macro-events")
+    import_macro_events_cmd.add_argument("--storage-dir", required=True)
+    import_macro_events_cmd.add_argument("--input", required=True)
+    import_macro_events_cmd.add_argument("--source", default="macro-fixture")
+    import_macro_events_cmd.add_argument("--imported-at")
+
+    macro_calendar_cmd = subparsers.add_parser("macro-calendar")
+    macro_calendar_cmd.add_argument("--storage-dir", required=True)
+    macro_calendar_cmd.add_argument("--start", required=True)
+    macro_calendar_cmd.add_argument("--end", required=True)
+    macro_calendar_cmd.add_argument("--event-type")
+    macro_calendar_cmd.add_argument("--region")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -214,6 +228,10 @@ def main(argv: list[str] | None = None) -> int:
             return _stock_candle_health(args)
         if args.command == "market-calendar":
             return _market_calendar(args)
+        if args.command == "import-macro-events":
+            return _import_macro_events(args)
+        if args.command == "macro-calendar":
+            return _macro_calendar(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -710,6 +728,30 @@ def _market_calendar(args) -> int:
         market=args.market,
         start_date=parse_date(args.start_date, label="start-date"),
         end_date=parse_date(args.end_date, label="end-date"),
+    )
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
+def _import_macro_events(args) -> int:
+    imported_at = _parse_datetime(args.imported_at) if args.imported_at else datetime.now(tz=UTC)
+    result = import_macro_events(
+        storage_dir=args.storage_dir,
+        input_path=args.input,
+        source=args.source,
+        imported_at=imported_at,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _macro_calendar(args) -> int:
+    result = macro_calendar(
+        storage_dir=args.storage_dir,
+        start=_parse_datetime(args.start),
+        end=_parse_datetime(args.end),
+        event_type=args.event_type,
+        region=args.region,
     )
     print(json.dumps(result, ensure_ascii=False))
     return 0

@@ -36,6 +36,7 @@ This version intentionally includes:
   - SQLite repository for M2 canonical state migration
   - JSONL artifacts for audit export and backward compatibility:
     - `market_candles.jsonl`
+    - `macro_events.jsonl`
     - `forecasts.jsonl`
     - `scores.jsonl`
     - `reviews.jsonl`
@@ -71,6 +72,8 @@ This version intentionally includes:
   - `import-stock-csv`
   - `stock-candle-health`
   - `market-calendar`
+  - `import-macro-events`
+  - `macro-calendar`
 
 This version intentionally excludes:
 
@@ -602,6 +605,18 @@ are not expected sessions:
 python run_forecast_loop.py stock-candle-health --storage-dir .\paper_storage\manual-stock --symbol SPY --start-date 2026-04-02 --end-date 2026-04-06
 ```
 
+Import macro event fixtures:
+
+```powershell
+python run_forecast_loop.py import-macro-events --storage-dir .\paper_storage\manual-macro --input .\fixtures\macro-events.jsonl --source fixture
+```
+
+Inspect the imported macro calendar:
+
+```powershell
+python run_forecast_loop.py macro-calendar --storage-dir .\paper_storage\manual-macro --start 2026-04-01T00:00:00+00:00 --end 2026-04-30T23:59:00+00:00 --event-type CPI --region US
+```
+
 Render a dashboard for an existing storage directory:
 
 ```powershell
@@ -658,3 +673,4 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - replay still writes summary metadata into the base storage directory instead of a more formal run registry or database
 - US ETF/stock support is fixture-only; no live or paid data provider is wired
 - Taiwan ETF calendar/provider support remains deferred
+- macro events are calendar artifacts only; they do not yet influence decisions

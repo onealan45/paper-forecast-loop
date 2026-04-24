@@ -15,6 +15,12 @@ from forecast_loop.models import StrategyDecision
 from forecast_loop.pipeline import ForecastingLoop
 from forecast_loop.providers import CoinGeckoMarketDataProvider, build_sample_provider
 from forecast_loop.replay import ReplayRunner
+from forecast_loop.sqlite_repository import (
+    export_sqlite_to_jsonl,
+    initialize_sqlite_database,
+    migrate_jsonl_to_sqlite,
+    sqlite_db_health,
+)
 from forecast_loop.storage import JsonFileRepository
 
 
@@ -59,6 +65,23 @@ def main(argv: list[str] | None = None) -> int:
     health_check.add_argument("--now")
     health_check.add_argument("--stale-after-hours", type=int, default=48)
 
+    init_db = subparsers.add_parser("init-db")
+    init_db.add_argument("--storage-dir", required=True)
+    init_db.add_argument("--db-path")
+
+    migrate_jsonl = subparsers.add_parser("migrate-jsonl-to-sqlite")
+    migrate_jsonl.add_argument("--storage-dir", required=True)
+    migrate_jsonl.add_argument("--db-path")
+
+    export_jsonl = subparsers.add_parser("export-jsonl")
+    export_jsonl.add_argument("--storage-dir", required=True)
+    export_jsonl.add_argument("--output-dir", required=True)
+    export_jsonl.add_argument("--db-path")
+
+    db_health = subparsers.add_parser("db-health")
+    db_health.add_argument("--storage-dir", required=True)
+    db_health.add_argument("--db-path")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -73,6 +96,14 @@ def main(argv: list[str] | None = None) -> int:
             return _decide(args)
         if args.command == "health-check":
             return _health_check(args)
+        if args.command == "init-db":
+            return _init_db(args)
+        if args.command == "migrate-jsonl-to-sqlite":
+            return _migrate_jsonl_to_sqlite(args)
+        if args.command == "export-jsonl":
+            return _export_jsonl(args)
+        if args.command == "db-health":
+            return _db_health(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -304,6 +335,34 @@ def _health_check(args) -> int:
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0 if result.severity != "blocking" else 2
+
+
+def _init_db(args) -> int:
+    result = initialize_sqlite_database(args.storage_dir, db_path=args.db_path)
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
+def _migrate_jsonl_to_sqlite(args) -> int:
+    result = migrate_jsonl_to_sqlite(args.storage_dir, db_path=args.db_path)
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
+def _export_jsonl(args) -> int:
+    result = export_sqlite_to_jsonl(
+        args.storage_dir,
+        output_dir=args.output_dir,
+        db_path=args.db_path,
+    )
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
+def _db_health(args) -> int:
+    result = sqlite_db_health(args.storage_dir, db_path=args.db_path)
+    print(json.dumps(result, ensure_ascii=False))
+    return 0 if result["status"] == "healthy" else 2
 
 
 def _write_last_run_meta(*, storage_dir: Path, now_utc: datetime, symbol: str, provider: str, result) -> None:

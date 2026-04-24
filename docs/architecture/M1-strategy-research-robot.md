@@ -114,7 +114,7 @@ handling, real broker client, or real order path is allowed in M1.
 
 ## Deferred
 
-- SQLite canonical store implementation.
+- Switching the hourly loop from JSONL-default execution to SQLite-backed execution.
 - Paper order ledger and paper execution simulation.
 - Broker/exchange live adapters.
 - Multi-asset strategy allocation.

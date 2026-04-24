@@ -343,7 +343,7 @@ correctness defects:
 - the current read-only UX is static HTML, not a live operator application
 - automation is local and paper-only, with manual evidence checks before any resume
 - paper portfolio support is a minimal snapshot, not a full ledger, NAV, or PnL engine
-- SQLite is recommended as the future canonical store, while JSONL remains the active audit-compatible store in this milestone
+- SQLite repository migration/export now exists, while the hourly loop and dashboard still use JSONL artifacts by default until later M2 integration
 - health-check creates repair requests, but there is no autonomous repair daemon in this repo
 - there is no live execution layer, and live broker/exchange integration remains explicitly unavailable
 - CoinGecko replay remains disabled until a deterministic historical data source exists

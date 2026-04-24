@@ -16,6 +16,7 @@ from forecast_loop.models import (
     PaperOrder,
     PaperPortfolioSnapshot,
     Proposal,
+    ProviderRun,
     RepairRequest,
     RiskSnapshot,
     Review,
@@ -83,6 +84,7 @@ def run_health_check(
         "portfolios": _load_jsonl(storage_path / "portfolio_snapshots.jsonl", PaperPortfolioSnapshot.from_dict, findings),
         "equity_curve": _load_jsonl(storage_path / "equity_curve.jsonl", EquityCurvePoint.from_dict, findings),
         "risk_snapshots": _load_jsonl(storage_path / "risk_snapshots.jsonl", RiskSnapshot.from_dict, findings),
+        "provider_runs": _load_jsonl(storage_path / "provider_runs.jsonl", ProviderRun.from_dict, findings),
         "evaluation_summaries": _load_jsonl(storage_path / "evaluation_summaries.jsonl", EvaluationSummary.from_dict, findings),
         "repair_requests": _load_jsonl(storage_path / "repair_requests.jsonl", RepairRequest.from_dict, findings),
     }
@@ -97,6 +99,7 @@ def run_health_check(
     portfolios: list[PaperPortfolioSnapshot] = artifact_rows["portfolios"]
     equity_curve: list[EquityCurvePoint] = artifact_rows["equity_curve"]
     risk_snapshots: list[RiskSnapshot] = artifact_rows["risk_snapshots"]
+    provider_runs: list[ProviderRun] = artifact_rows["provider_runs"]
     evaluation_summaries: list[EvaluationSummary] = artifact_rows["evaluation_summaries"]
     repair_requests: list[RepairRequest] = artifact_rows["repair_requests"]
 
@@ -111,6 +114,7 @@ def run_health_check(
     _check_duplicate_ids(portfolios, "snapshot_id", storage_path / "portfolio_snapshots.jsonl", findings)
     _check_duplicate_ids(equity_curve, "point_id", storage_path / "equity_curve.jsonl", findings)
     _check_duplicate_ids(risk_snapshots, "risk_id", storage_path / "risk_snapshots.jsonl", findings)
+    _check_duplicate_ids(provider_runs, "provider_run_id", storage_path / "provider_runs.jsonl", findings)
     _check_duplicate_ids(evaluation_summaries, "summary_id", storage_path / "evaluation_summaries.jsonl", findings)
     _check_duplicate_ids(repair_requests, "repair_request_id", storage_path / "repair_requests.jsonl", findings)
 
@@ -141,6 +145,7 @@ def run_health_check(
         )
 
     _check_last_run_meta(storage_path, latest_forecast, findings)
+    _check_provider_runs(storage_path, symbol, now, provider_runs, findings)
     _check_links(storage_path, forecasts, scores, reviews, proposals, decisions, baselines, evaluation_summaries, findings)
     _check_dashboard(storage_path, findings)
 
@@ -224,6 +229,60 @@ def _check_last_run_meta(storage_path: Path, latest_forecast: Forecast | None, f
                 ),
                 artifact_path=str(meta_path),
                 repair_required=True,
+            )
+        )
+
+
+def _check_provider_runs(
+    storage_path: Path,
+    symbol: str,
+    now: datetime,
+    provider_runs: list[ProviderRun],
+    findings: list[HealthFinding],
+    stale_after_hours: int = 24,
+) -> None:
+    scoped_runs = [run for run in provider_runs if run.symbol == symbol]
+    if not scoped_runs:
+        return
+    latest_run = scoped_runs[-1]
+    if latest_run.status == "error":
+        findings.append(
+            HealthFinding(
+                code="provider_failure",
+                severity="blocking",
+                message=f"Latest provider run failed: {latest_run.error_type}: {latest_run.error_message}",
+                artifact_path=str(storage_path / "provider_runs.jsonl"),
+                repair_required=True,
+            )
+        )
+    elif latest_run.status == "empty":
+        findings.append(
+            HealthFinding(
+                code="provider_empty_data",
+                severity="blocking",
+                message=f"Latest provider run returned no data for {symbol}.",
+                artifact_path=str(storage_path / "provider_runs.jsonl"),
+                repair_required=True,
+            )
+        )
+    if latest_run.schema_version != "market_candles_v1":
+        findings.append(
+            HealthFinding(
+                code="provider_schema_drift",
+                severity="blocking",
+                message=f"Unexpected provider schema version: {latest_run.schema_version}.",
+                artifact_path=str(storage_path / "provider_runs.jsonl"),
+                repair_required=True,
+            )
+        )
+    if now - latest_run.completed_at > timedelta(hours=stale_after_hours):
+        findings.append(
+            HealthFinding(
+                code="provider_stale",
+                severity="warning",
+                message=f"Latest provider run is stale: completed_at={latest_run.completed_at.isoformat()}.",
+                artifact_path=str(storage_path / "provider_runs.jsonl"),
+                repair_required=False,
             )
         )
 

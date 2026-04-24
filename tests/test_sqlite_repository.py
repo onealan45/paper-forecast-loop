@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 import json
+import sqlite3
 
 from forecast_loop.cli import main
 from forecast_loop.models import (
@@ -14,6 +15,7 @@ from forecast_loop.models import (
     PaperOrderType,
     PaperPortfolioSnapshot,
     Proposal,
+    ProviderRun,
     RepairRequest,
     Review,
     RiskSnapshot,
@@ -242,6 +244,23 @@ def _risk_snapshot(now: datetime) -> RiskSnapshot:
     )
 
 
+def _provider_run(now: datetime) -> ProviderRun:
+    return ProviderRun(
+        provider_run_id="provider-run:sqlite",
+        created_at=now,
+        provider="sample",
+        symbol="BTC-USD",
+        operation="get_recent_candles",
+        status="success",
+        started_at=now,
+        completed_at=now,
+        candle_count=3,
+        data_start=now - timedelta(hours=2),
+        data_end=now,
+        schema_version="market_candles_v1",
+    )
+
+
 def _seed_repository(repository) -> dict:
     now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
     forecast = _forecast(now)
@@ -256,6 +275,7 @@ def _seed_repository(repository) -> dict:
     snapshot = PaperPortfolioSnapshot.empty(created_at=now)
     equity_point = _equity_point(now)
     risk_snapshot = _risk_snapshot(now)
+    provider_run = _provider_run(now)
     repair_request = _repair_request(now)
 
     repository.save_forecast(forecast)
@@ -270,6 +290,7 @@ def _seed_repository(repository) -> dict:
     repository.save_portfolio_snapshot(snapshot)
     repository.save_equity_curve_point(equity_point)
     repository.save_risk_snapshot(risk_snapshot)
+    repository.save_provider_run(provider_run)
     repository.save_repair_request(repair_request)
     return {
         "forecast": forecast,
@@ -284,6 +305,7 @@ def _seed_repository(repository) -> dict:
         "snapshot": snapshot,
         "equity_point": equity_point,
         "risk_snapshot": risk_snapshot,
+        "provider_run": provider_run,
         "repair_request": repair_request,
     }
 
@@ -306,6 +328,7 @@ def test_sqlite_repository_round_trips_and_dedupes_m1_artifacts(tmp_path):
     assert repository.load_portfolio_snapshots() == [artifacts["snapshot"]]
     assert repository.load_equity_curve_points() == [artifacts["equity_point"]]
     assert repository.load_risk_snapshots() == [artifacts["risk_snapshot"]]
+    assert repository.load_provider_runs() == [artifacts["provider_run"]]
     assert repository.load_repair_requests() == [artifacts["repair_request"]]
     assert repository.artifact_counts()["forecasts"] == 1
 
@@ -358,6 +381,33 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert health_result["artifact_counts"]["paper_fills"] == 1
     assert health_result["artifact_counts"]["equity_curve"] == 1
     assert health_result["artifact_counts"]["risk_snapshots"] == 1
+    assert health_result["artifact_counts"]["provider_runs"] == 1
+
+
+def test_db_health_flags_malformed_provider_run_payload(tmp_path, capsys):
+    repository = SQLiteRepository(tmp_path)
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    provider_run = _provider_run(now)
+    repository.save_provider_run(provider_run)
+    bad_payload = provider_run.to_dict()
+    bad_payload.pop("schema_version")
+    bad_payload.pop("completed_at")
+
+    with sqlite3.connect(tmp_path / DEFAULT_DB_FILENAME) as connection:
+        connection.execute(
+            """
+            UPDATE artifacts
+            SET payload_json = ?
+            WHERE artifact_type = 'provider_runs' AND artifact_id = ?
+            """,
+            (json.dumps(bad_payload, sort_keys=True), provider_run.provider_run_id),
+        )
+
+    assert main(["db-health", "--storage-dir", str(tmp_path)]) == 2
+    health_result = json.loads(capsys.readouterr().out)
+
+    assert health_result["status"] == "unhealthy"
+    assert "sqlite_bad_payload" in {finding["code"] for finding in health_result["findings"]}
 
 
 def test_export_jsonl_writes_compatibility_artifacts(tmp_path, capsys):
@@ -379,3 +429,4 @@ def test_export_jsonl_writes_compatibility_artifacts(tmp_path, capsys):
     assert exported_repository.load_paper_fills() == [artifacts["fill"]]
     assert exported_repository.load_equity_curve_points() == [artifacts["equity_point"]]
     assert exported_repository.load_risk_snapshots() == [artifacts["risk_snapshot"]]
+    assert exported_repository.load_provider_runs() == [artifacts["provider_run"]]

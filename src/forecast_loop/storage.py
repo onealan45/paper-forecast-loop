@@ -14,6 +14,7 @@ from forecast_loop.models import (
     PaperOrder,
     PaperPortfolioSnapshot,
     Proposal,
+    ProviderRun,
     RepairRequest,
     RiskSnapshot,
     Review,
@@ -76,6 +77,10 @@ class ArtifactRepository(Protocol):
 
     def load_risk_snapshots(self) -> list[RiskSnapshot]: ...
 
+    def save_provider_run(self, provider_run: ProviderRun) -> None: ...
+
+    def load_provider_runs(self) -> list[ProviderRun]: ...
+
     def save_repair_request(self, repair_request: RepairRequest) -> None: ...
 
     def load_repair_requests(self) -> list[RepairRequest]: ...
@@ -97,6 +102,7 @@ class JsonFileRepository:
         self.portfolio_snapshots_path = self.root / "portfolio_snapshots.jsonl"
         self.equity_curve_path = self.root / "equity_curve.jsonl"
         self.risk_snapshots_path = self.root / "risk_snapshots.jsonl"
+        self.provider_runs_path = self.root / "provider_runs.jsonl"
         self.repair_requests_path = self.root / "repair_requests.jsonl"
 
     def save_forecast(self, forecast: Forecast) -> None:
@@ -234,6 +240,16 @@ class JsonFileRepository:
 
     def load_risk_snapshots(self) -> list[RiskSnapshot]:
         return self._load_lines(self.risk_snapshots_path, RiskSnapshot.from_dict)
+
+    def save_provider_run(self, provider_run: ProviderRun) -> None:
+        self._append_unique(
+            self.provider_runs_path,
+            provider_run.to_dict(),
+            identity_key="provider_run_id",
+        )
+
+    def load_provider_runs(self) -> list[ProviderRun]:
+        return self._load_lines(self.provider_runs_path, ProviderRun.from_dict)
 
     def save_repair_request(self, repair_request: RepairRequest) -> None:
         self._append_unique(

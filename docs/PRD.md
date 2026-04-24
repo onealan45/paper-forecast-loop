@@ -313,6 +313,7 @@ V1 MVP should include:
 - local paper order ledger
 - local paper fills and equity curve artifacts
 - local paper risk snapshots and risk gates
+- provider run audit artifacts
 - health-check output
 - Codex repair request artifacts
 - minimal CLI
@@ -351,6 +352,7 @@ correctness defects:
 - health-check creates repair requests, but there is no autonomous repair daemon in this repo
 - there is no live execution layer, and live broker/exchange integration remains explicitly unavailable
 - CoinGecko replay remains disabled until a deterministic historical data source exists
+- provider audit exists, while deterministic stored candle replay remains deferred to M3C
 
 The repository is suitable for continued paper-only hourly research only when
 tests pass, active storage repair status is fresh, dashboard freshness is

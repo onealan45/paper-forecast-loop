@@ -45,6 +45,7 @@ This version intentionally includes:
     - `paper_fills.jsonl`
     - `equity_curve.jsonl`
     - `risk_snapshots.jsonl`
+    - `provider_runs.jsonl`
     - `repair_requests.jsonl`
 - CLI execution via:
   - `run-once`
@@ -296,6 +297,22 @@ Each risk snapshot records:
 Risk snapshots are paper-only gates. They can block or reduce later paper
 decisions, but they do not submit broker or exchange orders.
 
+### Provider Run Artifact
+
+Each provider run records:
+
+- provider name and operation
+- symbol
+- success, empty-data, or error status
+- candle count
+- observed data window
+- schema version
+- error type/message when the provider fails
+
+Provider runs are audit artifacts only. They make ingestion failures visible to
+health-check and the dashboard without adding new data providers or live
+execution.
+
 ### Repair Request Artifact
 
 Each repair request records:
@@ -416,6 +433,7 @@ It only reads:
 - `portfolio_snapshots.jsonl`
 - `risk_snapshots.jsonl`
 - `strategy_decisions.jsonl`
+- `provider_runs.jsonl`
 - `repair_requests.jsonl`
 - `last_run_meta.json`
 - `last_replay_meta.json`

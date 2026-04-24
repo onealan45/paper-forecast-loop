@@ -16,9 +16,17 @@ goal is the first **auditable strategy research robot**:
 
 ## Current Scope
 
-This version intentionally includes only:
+This version intentionally includes:
 
-- single symbol: `BTC-USD`
+- active paper research automation remains `BTC-USD` first
+- registered M3A asset universe:
+  - `BTC-USD`
+  - `ETH-USD`
+  - `SPY`
+  - `QQQ`
+  - `TLT`
+  - `GLD`
+  - `0050.TW`
 - hourly public market data
 - providers:
   - sample provider
@@ -53,6 +61,7 @@ This version intentionally includes only:
   - `paper-fill`
   - `portfolio-snapshot`
   - `risk-check`
+  - `list-assets`
 
 This version intentionally excludes:
 
@@ -505,6 +514,12 @@ Run paper-only risk gates against the latest portfolio state:
 python run_forecast_loop.py risk-check --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD
 ```
 
+List registered assets:
+
+```powershell
+python run_forecast_loop.py list-assets
+```
+
 Run a health audit and create a Codex repair request if blocking issues exist:
 
 ```powershell
@@ -564,7 +579,7 @@ This milestone improves correctness and auditability, but it does not yet solve 
 
 - the current hourly loop still writes JSONL artifacts by default while M2A proves SQLite migration and export parity
 - regime classification is still intentionally simple
-- only `BTC-USD` is supported
+- active automation remains `BTC-USD` first; registered non-BTC assets do not yet imply multi-asset decisions
 - paper portfolio accounting and risk gates are basic local simulations, not broker reconciliation
 - order lifecycle is minimal: created orders can be filled locally, but cancellation and partial fill lifecycle are deferred
 - proposal logic is still heuristic and conservative

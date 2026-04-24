@@ -5,6 +5,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+from forecast_loop.assets import list_assets
 from forecast_loop.config import LoopConfig
 from forecast_loop.dashboard import write_dashboard_html
 from forecast_loop.decision import generate_strategy_decision
@@ -115,6 +116,10 @@ def main(argv: list[str] | None = None) -> int:
     risk_check.add_argument("--reduce-risk-drawdown-pct", type=float, default=0.05)
     risk_check.add_argument("--stop-new-entries-drawdown-pct", type=float, default=0.10)
 
+    list_assets_cmd = subparsers.add_parser("list-assets")
+    list_assets_cmd.add_argument("--status", choices=["all", "active", "planned", "inactive"], default="all")
+    list_assets_cmd.add_argument("--format", choices=["json", "text"], default="json")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -145,6 +150,8 @@ def main(argv: list[str] | None = None) -> int:
             return _portfolio_snapshot(args)
         if args.command == "risk-check":
             return _risk_check(args)
+        if args.command == "list-assets":
+            return _list_assets(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -551,6 +558,17 @@ def _risk_check(args) -> int:
     )
     print(json.dumps(snapshot.to_dict(), ensure_ascii=False))
     return 0 if snapshot.severity != "blocking" else 2
+
+
+def _list_assets(args) -> int:
+    assets = list_assets(status=args.status)
+    if args.format == "text":
+        for asset in assets:
+            provider = asset.default_provider or "none"
+            print(f"{asset.symbol}\t{asset.asset_class}\t{asset.status}\t{asset.market}\t{provider}")
+    else:
+        print(json.dumps({"assets": [asset.to_dict() for asset in assets]}, ensure_ascii=False))
+    return 0
 
 
 def _write_last_run_meta(*, storage_dir: Path, now_utc: datetime, symbol: str, provider: str, result) -> None:

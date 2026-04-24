@@ -6,6 +6,8 @@ from typing import Protocol
 
 from forecast_loop.models import (
     BaselineEvaluation,
+    BacktestResult,
+    BacktestRun,
     EquityCurvePoint,
     EvaluationSummary,
     Forecast,
@@ -100,6 +102,14 @@ class ArtifactRepository(Protocol):
 
     def load_research_datasets(self) -> list[ResearchDataset]: ...
 
+    def save_backtest_run(self, run: BacktestRun) -> None: ...
+
+    def load_backtest_runs(self) -> list[BacktestRun]: ...
+
+    def save_backtest_result(self, result: BacktestResult) -> None: ...
+
+    def load_backtest_results(self) -> list[BacktestResult]: ...
+
 
 class JsonFileRepository:
     def __init__(self, root: Path | str) -> None:
@@ -122,6 +132,8 @@ class JsonFileRepository:
         self.provider_runs_path = self.root / "provider_runs.jsonl"
         self.repair_requests_path = self.root / "repair_requests.jsonl"
         self.research_datasets_path = self.root / "research_datasets.jsonl"
+        self.backtest_runs_path = self.root / "backtest_runs.jsonl"
+        self.backtest_results_path = self.root / "backtest_results.jsonl"
 
     def save_market_candle(self, candle: MarketCandleRecord) -> None:
         self._append_unique(
@@ -308,6 +320,26 @@ class JsonFileRepository:
 
     def load_research_datasets(self) -> list[ResearchDataset]:
         return self._load_lines(self.research_datasets_path, ResearchDataset.from_dict)
+
+    def save_backtest_run(self, run: BacktestRun) -> None:
+        self._append_unique(
+            self.backtest_runs_path,
+            run.to_dict(),
+            identity_key="backtest_id",
+        )
+
+    def load_backtest_runs(self) -> list[BacktestRun]:
+        return self._load_lines(self.backtest_runs_path, BacktestRun.from_dict)
+
+    def save_backtest_result(self, result: BacktestResult) -> None:
+        self._append_unique(
+            self.backtest_results_path,
+            result.to_dict(),
+            identity_key="result_id",
+        )
+
+    def load_backtest_results(self) -> list[BacktestResult]:
+        return self._load_lines(self.backtest_results_path, BacktestResult.from_dict)
 
     def _append(self, path: Path, payload: dict) -> None:
         with path.open("a", encoding="utf-8") as handle:

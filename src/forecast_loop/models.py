@@ -356,6 +356,142 @@ class ResearchDataset:
 
 
 @dataclass(slots=True)
+class BacktestRun:
+    backtest_id: str
+    created_at: datetime
+    symbol: str
+    start: datetime
+    end: datetime
+    strategy_name: str
+    initial_cash: float
+    fee_bps: float
+    slippage_bps: float
+    moving_average_window: int
+    candle_ids: list[str]
+    decision_basis: str
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        symbol: str,
+        start: datetime,
+        end: datetime,
+        strategy_name: str,
+        initial_cash: float,
+        fee_bps: float,
+        slippage_bps: float,
+        moving_average_window: int,
+        candle_ids: list[str],
+    ) -> str:
+        return _stable_artifact_id(
+            "backtest-run",
+            {
+                "symbol": symbol,
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                "strategy_name": strategy_name,
+                "initial_cash": round(initial_cash, 8),
+                "fee_bps": round(fee_bps, 8),
+                "slippage_bps": round(slippage_bps, 8),
+                "moving_average_window": moving_average_window,
+                "candle_ids": sorted(candle_ids),
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        for key in ("created_at", "start", "end"):
+            payload[key] = payload[key].isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "BacktestRun":
+        return cls(
+            backtest_id=_require_string(payload, "backtest_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            symbol=_require_string(payload, "symbol"),
+            start=_require_aware_datetime(payload, "start"),
+            end=_require_aware_datetime(payload, "end"),
+            strategy_name=payload.get("strategy_name", "moving_average_trend"),
+            initial_cash=float(payload.get("initial_cash", 0.0)),
+            fee_bps=float(payload.get("fee_bps", 0.0)),
+            slippage_bps=float(payload.get("slippage_bps", 0.0)),
+            moving_average_window=int(payload.get("moving_average_window", 0)),
+            candle_ids=list(payload.get("candle_ids", [])),
+            decision_basis=payload.get("decision_basis", "legacy_backtest_run"),
+        )
+
+
+@dataclass(slots=True)
+class BacktestResult:
+    result_id: str
+    backtest_id: str
+    created_at: datetime
+    symbol: str
+    start: datetime
+    end: datetime
+    initial_cash: float
+    final_equity: float
+    strategy_return: float
+    benchmark_return: float
+    max_drawdown: float
+    sharpe: float | None
+    turnover: float
+    win_rate: float | None
+    trade_count: int
+    equity_curve: list[dict[str, object]]
+    decision_basis: str
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        backtest_id: str,
+        final_equity: float,
+        trade_count: int,
+        strategy_return: float,
+    ) -> str:
+        return _stable_artifact_id(
+            "backtest-result",
+            {
+                "backtest_id": backtest_id,
+                "final_equity": round(final_equity, 8),
+                "trade_count": trade_count,
+                "strategy_return": round(strategy_return, 8),
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        for key in ("created_at", "start", "end"):
+            payload[key] = payload[key].isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "BacktestResult":
+        return cls(
+            result_id=_require_string(payload, "result_id"),
+            backtest_id=_require_string(payload, "backtest_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            symbol=_require_string(payload, "symbol"),
+            start=_require_aware_datetime(payload, "start"),
+            end=_require_aware_datetime(payload, "end"),
+            initial_cash=float(payload.get("initial_cash", 0.0)),
+            final_equity=float(payload.get("final_equity", 0.0)),
+            strategy_return=float(payload.get("strategy_return", 0.0)),
+            benchmark_return=float(payload.get("benchmark_return", 0.0)),
+            max_drawdown=float(payload.get("max_drawdown", 0.0)),
+            sharpe=_optional_float(payload.get("sharpe")),
+            turnover=float(payload.get("turnover", 0.0)),
+            win_rate=_optional_float(payload.get("win_rate")),
+            trade_count=int(payload.get("trade_count", 0)),
+            equity_curve=list(payload.get("equity_curve", [])),
+            decision_basis=payload.get("decision_basis", "legacy_backtest_result"),
+        )
+
+
+@dataclass(slots=True)
 class Forecast:
     forecast_id: str
     symbol: str

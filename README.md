@@ -51,6 +51,8 @@ This version intentionally includes:
     - `provider_runs.jsonl`
     - `repair_requests.jsonl`
     - `research_datasets.jsonl`
+    - `backtest_runs.jsonl`
+    - `backtest_results.jsonl`
 - CLI execution via:
   - `run-once`
   - `replay-range`
@@ -77,6 +79,7 @@ This version intentionally includes:
   - `import-macro-events`
   - `macro-calendar`
   - `build-research-dataset`
+  - `backtest`
 
 This version intentionally excludes:
 
@@ -651,6 +654,19 @@ The dataset builder fails closed if any feature timestamp is after the forecast
 decision timestamp, or if any label timestamp is not after the decision
 timestamp.
 
+Run a paper-only backtest from stored candles:
+
+```powershell
+python run_forecast_loop.py backtest --storage-dir .\paper_storage\manual-replay --symbol BTC-USD --start 2026-04-01T00:00:00+00:00 --end 2026-04-30T00:00:00+00:00
+```
+
+The M4C backtest engine uses stored candles only and writes
+`backtest_runs.jsonl` plus `backtest_results.jsonl`. It reports strategy
+return, buy-and-hold benchmark return, max drawdown, Sharpe, turnover, win
+rate, and trade count with configurable paper-only fee/slippage assumptions.
+The default fixed-rule strategy uses prior-candle signals only; it does not
+use the same candle to decide and fill a trade.
+
 Render a dashboard for an existing storage directory:
 
 ```powershell
@@ -710,3 +726,4 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - Taiwan ETF calendar/provider support remains deferred
 - macro events are calendar artifacts only; they do not yet influence decisions
 - research datasets are artifact builders only; no model training or optimizer is included yet
+- backtests are local paper simulations over stored candles; no broker or live execution path is involved

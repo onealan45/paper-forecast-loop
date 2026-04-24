@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from forecast_loop.assets import get_asset, list_assets
+from forecast_loop.backtest import run_backtest
 from forecast_loop.candle_store import (
     StoredCandleProvider,
     export_market_candles,
@@ -196,6 +197,17 @@ def main(argv: list[str] | None = None) -> int:
     build_research_dataset_cmd.add_argument("--symbol", default="BTC-USD")
     build_research_dataset_cmd.add_argument("--created-at")
 
+    backtest_cmd = subparsers.add_parser("backtest")
+    backtest_cmd.add_argument("--storage-dir", required=True)
+    backtest_cmd.add_argument("--symbol", default="BTC-USD")
+    backtest_cmd.add_argument("--start", required=True)
+    backtest_cmd.add_argument("--end", required=True)
+    backtest_cmd.add_argument("--created-at")
+    backtest_cmd.add_argument("--initial-cash", type=float, default=10_000.0)
+    backtest_cmd.add_argument("--fee-bps", type=float, default=5.0)
+    backtest_cmd.add_argument("--slippage-bps", type=float, default=10.0)
+    backtest_cmd.add_argument("--moving-average-window", type=int, default=3)
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -248,6 +260,8 @@ def main(argv: list[str] | None = None) -> int:
             return _macro_calendar(args)
         if args.command == "build-research-dataset":
             return _build_research_dataset(args)
+        if args.command == "backtest":
+            return _backtest(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -831,6 +845,23 @@ def _build_research_dataset(args) -> int:
         storage_dir=args.storage_dir,
         symbol=args.symbol,
         created_at=created_at,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _backtest(args) -> int:
+    created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
+    result = run_backtest(
+        storage_dir=args.storage_dir,
+        symbol=args.symbol,
+        start=_parse_datetime(args.start),
+        end=_parse_datetime(args.end),
+        created_at=created_at,
+        initial_cash=args.initial_cash,
+        fee_bps=args.fee_bps,
+        slippage_bps=args.slippage_bps,
+        moving_average_window=args.moving_average_window,
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0

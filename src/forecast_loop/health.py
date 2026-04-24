@@ -6,12 +6,15 @@ from pathlib import Path
 
 from forecast_loop.models import (
     BaselineEvaluation,
+    BacktestResult,
+    BacktestRun,
     EquityCurvePoint,
     EvaluationSummary,
     Forecast,
     ForecastScore,
     HealthCheckResult,
     HealthFinding,
+    MarketCandleRecord,
     PaperFill,
     PaperOrder,
     PaperPortfolioSnapshot,
@@ -89,6 +92,9 @@ def run_health_check(
         "evaluation_summaries": _load_jsonl(storage_path / "evaluation_summaries.jsonl", EvaluationSummary.from_dict, findings),
         "repair_requests": _load_jsonl(storage_path / "repair_requests.jsonl", RepairRequest.from_dict, findings),
         "research_datasets": _load_jsonl(storage_path / "research_datasets.jsonl", ResearchDataset.from_dict, findings),
+        "market_candles": _load_jsonl(storage_path / "market_candles.jsonl", MarketCandleRecord.from_dict, findings),
+        "backtest_runs": _load_jsonl(storage_path / "backtest_runs.jsonl", BacktestRun.from_dict, findings),
+        "backtest_results": _load_jsonl(storage_path / "backtest_results.jsonl", BacktestResult.from_dict, findings),
     }
     forecasts: list[Forecast] = artifact_rows["forecasts"]
     scores: list[ForecastScore] = artifact_rows["scores"]
@@ -105,6 +111,9 @@ def run_health_check(
     evaluation_summaries: list[EvaluationSummary] = artifact_rows["evaluation_summaries"]
     repair_requests: list[RepairRequest] = artifact_rows["repair_requests"]
     research_datasets: list[ResearchDataset] = artifact_rows["research_datasets"]
+    market_candles: list[MarketCandleRecord] = artifact_rows["market_candles"]
+    backtest_runs: list[BacktestRun] = artifact_rows["backtest_runs"]
+    backtest_results: list[BacktestResult] = artifact_rows["backtest_results"]
 
     _check_duplicate_ids(forecasts, "forecast_id", storage_path / "forecasts.jsonl", findings)
     _check_duplicate_ids(scores, "score_id", storage_path / "scores.jsonl", findings)
@@ -121,6 +130,9 @@ def run_health_check(
     _check_duplicate_ids(evaluation_summaries, "summary_id", storage_path / "evaluation_summaries.jsonl", findings)
     _check_duplicate_ids(repair_requests, "repair_request_id", storage_path / "repair_requests.jsonl", findings)
     _check_duplicate_ids(research_datasets, "dataset_id", storage_path / "research_datasets.jsonl", findings)
+    _check_duplicate_ids(market_candles, "candle_id", storage_path / "market_candles.jsonl", findings)
+    _check_duplicate_ids(backtest_runs, "backtest_id", storage_path / "backtest_runs.jsonl", findings)
+    _check_duplicate_ids(backtest_results, "result_id", storage_path / "backtest_results.jsonl", findings)
 
     scoped_forecasts = [forecast for forecast in forecasts if forecast.symbol == symbol]
     latest_forecast = scoped_forecasts[-1] if scoped_forecasts else None
@@ -160,6 +172,9 @@ def run_health_check(
         baselines,
         evaluation_summaries,
         research_datasets,
+        market_candles,
+        backtest_runs,
+        backtest_results,
         findings,
     )
     _check_research_dataset_leakage(storage_path, research_datasets, findings)
@@ -322,6 +337,9 @@ def _check_links(
     baselines: list[BaselineEvaluation],
     evaluation_summaries: list[EvaluationSummary],
     research_datasets: list[ResearchDataset],
+    market_candles: list[MarketCandleRecord],
+    backtest_runs: list[BacktestRun],
+    backtest_results: list[BacktestResult],
     findings: list[HealthFinding],
 ) -> None:
     forecast_ids = {forecast.forecast_id for forecast in forecasts}
@@ -329,6 +347,8 @@ def _check_links(
     review_ids = {review.review_id for review in reviews}
     proposal_ids = {proposal.proposal_id for proposal in proposals}
     baseline_ids = {baseline.baseline_id for baseline in baselines}
+    candle_ids = {candle.candle_id for candle in market_candles}
+    backtest_run_ids = {run.backtest_id for run in backtest_runs}
 
     for score in scores:
         if score.forecast_id not in forecast_ids:
@@ -445,6 +465,27 @@ def _check_links(
                 storage_path / "research_datasets.jsonl",
                 dataset.dataset_id,
                 ", ".join(sorted(set([*missing_scores, *missing_row_scores]))),
+                findings,
+            )
+
+    for result in backtest_results:
+        if result.backtest_id not in backtest_run_ids:
+            _add_link_finding(
+                "backtest_result_missing_run",
+                storage_path / "backtest_results.jsonl",
+                result.result_id,
+                result.backtest_id,
+                findings,
+            )
+
+    for run in backtest_runs:
+        missing_candles = [candle_id for candle_id in run.candle_ids if candle_id not in candle_ids]
+        if missing_candles:
+            _add_link_finding(
+                "backtest_run_missing_candle",
+                storage_path / "backtest_runs.jsonl",
+                run.backtest_id,
+                ", ".join(missing_candles),
                 findings,
             )
 

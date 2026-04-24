@@ -1,0 +1,1273 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from html import escape
+import json
+import os
+from pathlib import Path
+import tomllib
+
+from forecast_loop.health import run_health_check
+from forecast_loop.models import (
+    BaselineEvaluation,
+    EvaluationSummary,
+    Forecast,
+    ForecastScore,
+    HealthFinding,
+    PaperPortfolioSnapshot,
+    Proposal,
+    Review,
+    StrategyDecision,
+)
+from forecast_loop.storage import JsonFileRepository
+
+
+@dataclass(slots=True)
+class DashboardSnapshot:
+    storage_dir: Path
+    dashboard_generated_at: datetime
+    last_run_meta: dict | None
+    last_replay_meta: dict | None
+    latest_forecast: Forecast | None
+    latest_score: ForecastScore | None
+    latest_review: Review | None
+    latest_proposal: Proposal | None
+    latest_strategy_decision: StrategyDecision | None
+    latest_baseline_evaluation: BaselineEvaluation | None
+    latest_portfolio_snapshot: PaperPortfolioSnapshot | None
+    latest_replay_summary: EvaluationSummary | None
+    forecast_count: int
+    score_count: int
+    review_count: int
+    proposal_count: int
+    replay_summary_count: int
+    current_mode: str
+    hourly_status: str
+    hourly_status_source_at: datetime | None
+    building_status: str
+    building_status_source_at: datetime | None
+    mode_reason: str
+    replay_freshness_label: str
+    replay_generated_at: datetime | None
+    replay_is_stale: bool
+    health_status: str
+    health_severity: str
+    repair_required: bool
+    repair_request_id: str | None
+    health_findings: list[HealthFinding]
+
+
+@dataclass(slots=True)
+class AutomationState:
+    status: str
+    updated_at: datetime | None
+
+
+def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
+    storage_dir = Path(storage_dir)
+    repository = JsonFileRepository(storage_dir)
+    forecasts = repository.load_forecasts()
+    scores = repository.load_scores()
+    reviews = repository.load_reviews()
+    proposals = repository.load_proposals()
+    strategy_decisions = repository.load_strategy_decisions()
+    baseline_evaluations = repository.load_baseline_evaluations()
+    portfolio_snapshots = repository.load_portfolio_snapshots()
+    replay_summaries = repository.load_evaluation_summaries()
+    latest_forecast = forecasts[-1] if forecasts else None
+    latest_review = reviews[-1] if reviews else None
+    latest_proposal = _latest_proposal_for_review(proposals, latest_review)
+    latest_replay_summary = replay_summaries[-1] if replay_summaries else None
+    hourly_state = _load_automation_state("hourly-paper-forecast")
+    building_state = _load_automation_state("loop-building-heartbeat")
+    current_mode, mode_reason = _derive_mode(hourly_state.status, building_state.status)
+    replay_freshness_label, replay_generated_at, replay_is_stale = _derive_replay_freshness(
+        latest_replay_summary,
+        latest_forecast,
+    )
+    health_result = run_health_check(
+        storage_dir=storage_dir,
+        symbol=latest_forecast.symbol if latest_forecast else "BTC-USD",
+        now=datetime.now(tz=UTC),
+        create_repair_request=False,
+    )
+
+    return DashboardSnapshot(
+        storage_dir=storage_dir,
+        dashboard_generated_at=datetime.now(tz=UTC),
+        last_run_meta=_load_json(storage_dir / "last_run_meta.json"),
+        last_replay_meta=_load_json(storage_dir / "last_replay_meta.json"),
+        latest_forecast=latest_forecast,
+        latest_score=scores[-1] if scores else None,
+        latest_review=latest_review,
+        latest_proposal=latest_proposal,
+        latest_strategy_decision=strategy_decisions[-1] if strategy_decisions else None,
+        latest_baseline_evaluation=baseline_evaluations[-1] if baseline_evaluations else None,
+        latest_portfolio_snapshot=portfolio_snapshots[-1] if portfolio_snapshots else None,
+        latest_replay_summary=latest_replay_summary,
+        forecast_count=len(forecasts),
+        score_count=len(scores),
+        review_count=len(reviews),
+        proposal_count=len(proposals),
+        replay_summary_count=len(replay_summaries),
+        current_mode=current_mode,
+        hourly_status=hourly_state.status,
+        hourly_status_source_at=hourly_state.updated_at,
+        building_status=building_state.status,
+        building_status_source_at=building_state.updated_at,
+        mode_reason=mode_reason,
+        replay_freshness_label=replay_freshness_label,
+        replay_generated_at=replay_generated_at,
+        replay_is_stale=replay_is_stale,
+        health_status=health_result.status,
+        health_severity=health_result.severity,
+        repair_required=health_result.repair_required,
+        repair_request_id=health_result.repair_request_id,
+        health_findings=health_result.findings,
+    )
+
+
+def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
+    latest_forecast = snapshot.latest_forecast
+    latest_review = snapshot.latest_review
+    latest_proposal = snapshot.latest_proposal
+    latest_replay = snapshot.latest_replay_summary
+
+    return f"""<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Paper Forecast Loop 儀表板</title>
+  <style>
+    html {{ color-scheme: dark; }}
+    :root {{
+      --bg: #08111b;
+      --panel: rgba(11, 24, 38, 0.88);
+      --panel-2: rgba(18, 34, 51, 0.9);
+      --line: rgba(116, 150, 181, 0.24);
+      --text: #eaf1f7;
+      --muted: #8fa7be;
+      --accent: #7dd3fc;
+      --ok: #8df5ae;
+      --warn: #ffd479;
+      --focus: #f8fafc;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font-family: "Segoe UI", "Inter", sans-serif;
+      background:
+        radial-gradient(circle at top right, rgba(78, 168, 222, 0.12), transparent 28%),
+        linear-gradient(180deg, #08111b 0%, #0b1521 100%);
+      color: var(--text);
+      min-height: 100vh;
+    }}
+    .skip-link {{
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      transform: translateY(-150%);
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: rgba(248, 250, 252, 0.96);
+      color: #08111b;
+      text-decoration: none;
+      z-index: 20;
+    }}
+    .skip-link:focus-visible {{
+      transform: translateY(0);
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }}
+    .shell {{
+      display: grid;
+      grid-template-columns: 190px minmax(0, 1fr);
+      min-height: 100vh;
+    }}
+    .sidebar {{
+      border-right: 1px solid var(--line);
+      background: rgba(5, 12, 19, 0.62);
+      padding: 20px 14px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+    }}
+    .brand {{
+      font-size: 0.78rem;
+      letter-spacing: 0.14em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }}
+    h1 {{
+      margin: 0 0 8px;
+      font-size: 1.8rem;
+      line-height: 1.1;
+      text-wrap: balance;
+    }}
+    .subtitle {{
+      color: var(--muted);
+      margin: 0 0 24px;
+      font-size: 0.84rem;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }}
+    .nav-list {{
+      list-style: none;
+      padding: 0;
+      margin: 28px 0 0;
+      display: grid;
+      gap: 10px;
+    }}
+    .nav-list a {{
+      display: block;
+      padding: 8px 10px;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      color: var(--muted);
+      text-decoration: none;
+      background: transparent;
+      font-size: 0.92rem;
+    }}
+    .nav-list a:hover {{
+      color: var(--text);
+      border-color: var(--line);
+      background: rgba(125, 211, 252, 0.06);
+    }}
+    .nav-list a:focus-visible,
+    summary:focus-visible {{
+      outline: 2px solid var(--focus);
+      outline-offset: 3px;
+      color: var(--text);
+      border-color: var(--accent);
+    }}
+    main {{
+      padding: 28px 32px 42px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 18px;
+    }}
+    section[id] {{
+      scroll-margin-top: 24px;
+    }}
+    .grid {{
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 18px;
+    }}
+    .panel {{
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 22px;
+      backdrop-filter: blur(18px);
+      box-shadow: 0 10px 35px rgba(0, 0, 0, 0.18);
+    }}
+    .hero,
+    .half {{ grid-column: 1 / -1; }}
+    .panel h2 {{
+      margin: 0 0 8px;
+      font-size: 1.05rem;
+      letter-spacing: 0.01em;
+      text-wrap: balance;
+      overflow-wrap: anywhere;
+    }}
+    .panel h3 {{
+      margin: 0 0 8px;
+      font-size: 0.98rem;
+      letter-spacing: 0.01em;
+    }}
+    .meta {{
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-bottom: 14px;
+      overflow-wrap: anywhere;
+    }}
+    .lead {{
+      margin: 0 0 18px;
+      font-size: 1rem;
+      line-height: 1.55;
+      color: var(--text);
+      max-width: 72ch;
+    }}
+    .summary-grid {{
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 18px 0;
+    }}
+    .summary-card {{
+      padding: 16px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+    }}
+    .summary-label {{
+      font-size: 0.74rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+    }}
+    .summary-value {{
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }}
+    .summary-copy {{
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 0.92rem;
+    }}
+    .summary-tags {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 12px;
+    }}
+    .summary-note {{
+      color: var(--muted);
+      line-height: 1.55;
+      margin: 0;
+      max-width: 70ch;
+    }}
+    .primary-card {{
+      padding: 26px;
+    }}
+    .primary-grid {{
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin: 18px 0 0;
+    }}
+    .stat-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }}
+    .stat {{
+      padding: 14px 14px 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel-2);
+    }}
+    .secondary-panel {{
+      background: rgba(9, 19, 30, 0.72);
+      border-color: rgba(116, 150, 181, 0.16);
+    }}
+    .evidence-grid {{
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+      gap: 16px;
+      margin-top: 18px;
+    }}
+    .evidence-block {{
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel-2);
+    }}
+    .micro-copy {{
+      margin: 0 0 14px;
+      color: var(--muted);
+      line-height: 1.55;
+    }}
+    .decision-grid {{
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+      gap: 16px;
+      margin-top: 18px;
+    }}
+    .decision-block {{
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel-2);
+    }}
+    .decision-emphasis {{
+      margin: 0;
+      font-size: 1rem;
+      line-height: 1.65;
+      color: var(--text);
+    }}
+    .drawer-stack {{
+      display: grid;
+      gap: 14px;
+    }}
+    .command-tags {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }}
+    .drawer-intro {{
+      margin: 0 0 14px;
+      color: var(--muted);
+      line-height: 1.55;
+      max-width: 72ch;
+    }}
+    .stat-label {{
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+    }}
+    .stat-value {{
+      font-size: 1.35rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }}
+    .kicker {{
+      color: var(--accent);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 6px;
+    }}
+    .empty {{
+      color: var(--muted);
+      font-style: italic;
+    }}
+    dl {{
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 10px 16px;
+      margin: 0;
+    }}
+    dt {{ color: var(--muted); }}
+    dd {{ margin: 0; overflow-wrap: anywhere; }}
+    .tag {{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(125, 211, 252, 0.08);
+      font-size: 0.85rem;
+    }}
+    .tag.warn {{
+      background: rgba(255, 212, 121, 0.1);
+      color: var(--warn);
+    }}
+    .tag.ok {{
+      background: rgba(141, 245, 174, 0.1);
+      color: var(--ok);
+    }}
+    pre {{
+      margin: 0;
+      padding: 14px;
+      border-radius: 14px;
+      background: rgba(4, 11, 18, 0.92);
+      border: 1px solid var(--line);
+      color: #d4e6f8;
+      overflow: auto;
+      font-size: 0.82rem;
+      line-height: 1.5;
+    }}
+    details {{
+      border-top: 1px solid var(--line);
+      padding-top: 14px;
+      margin-top: 16px;
+    }}
+    summary {{
+      cursor: pointer;
+      color: var(--muted);
+    }}
+    @media (max-width: 980px) {{
+      .shell {{ grid-template-columns: 1fr; }}
+      .sidebar {{ position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }}
+      .half {{ grid-column: span 12; }}
+      .summary-grid,
+      .primary-grid,
+      .stat-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+      .decision-grid,
+      .evidence-grid {{ grid-template-columns: 1fr; }}
+      main {{ padding: 24px 18px 32px; }}
+    }}
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">跳到主要內容</a>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">Paper-Only Inspector</div>
+      <h1>Paper Forecast Loop</h1>
+      <p class="subtitle">以最新預測為優先的靜態操作視圖，方便先看當前判讀，再對照 replay 與原始中繼資料。</p>
+      <nav aria-label="儀表板區段">
+        <ul class="nav-list">
+          <li><a href="#strategy">明日決策</a></li>
+          <li><a href="#summary">操作摘要</a></li>
+          <li><a href="#forecast">目前預測</a></li>
+          <li><a href="#decision">本輪判讀與建議</a></li>
+          <li><a href="#evidence">證據快照</a></li>
+          <li><a href="#replay">歷史脈絡</a></li>
+          <li><a href="#raw">原始中繼資料</a></li>
+        </ul>
+      </nav>
+    </aside>
+    <main id="main-content">
+      <section class="panel hero primary-card" id="strategy">
+        {render_strategy_panel(snapshot)}
+      </section>
+      <section class="panel hero" id="summary">
+        {render_operator_summary(snapshot)}
+      </section>
+      <section class="panel hero primary-card" id="forecast">
+        {render_forecast_panel(latest_forecast)}
+      </section>
+      <section class="panel" id="decision">
+        {render_decision_panel(latest_review, latest_proposal)}
+      </section>
+      <section class="panel" id="evidence">
+        {render_evidence_panel(snapshot)}
+      </section>
+      <section class="panel half secondary-panel" id="replay">
+        {render_replay_panel(snapshot, latest_replay)}
+      </section>
+      <section class="panel" id="raw">
+        <div class="kicker">Audit / Debug</div>
+        <h2>原始中繼資料</h2>
+        <p class="drawer-intro">只有在比對 dashboard 所用來源、追查欄位映射或人工稽核原始 JSON 時，才需要展開下面兩個 debug drawer。日常操作請以前面的預測、檢討與證據區為主。</p>
+        <details>
+          <summary>last_run_meta.json</summary>
+          <pre>{escape(json.dumps(snapshot.last_run_meta, ensure_ascii=False, indent=2) if snapshot.last_run_meta else "目前還沒有執行中繼資料。")}</pre>
+        </details>
+        <details>
+          <summary>last_replay_meta.json</summary>
+          <pre>{escape(json.dumps(snapshot.last_replay_meta, ensure_ascii=False, indent=2) if snapshot.last_replay_meta else "目前還沒有 replay 中繼資料。")}</pre>
+        </details>
+      </section>
+    </main>
+  </div>
+</body>
+</html>"""
+
+
+def render_operator_summary(snapshot: DashboardSnapshot) -> str:
+    health_label, health_copy = _summarize_health(snapshot)
+    judgment_copy = _summarize_judgment(snapshot)
+    replay_tag_class = "warn" if snapshot.replay_is_stale else "ok"
+    replay_copy = (
+        "僅供歷史脈絡參考。replay 落後於最新預測時，不應覆蓋目前預測卡的判讀。"
+        if snapshot.replay_is_stale
+        else "replay 與最新預測足夠接近，可作為目前操作判讀的補充脈絡。"
+    )
+
+    return f"""
+      <div class="kicker">操作摘要</div>
+      <h2>操作摘要</h2>
+      <div class="summary-grid">
+        <div class="summary-card">
+          <div class="summary-label">健康度</div>
+          <div class="summary-value">{escape(_display_health_label(health_label))}</div>
+          <div class="summary-copy">{escape(_display_health_copy(health_label, health_copy))}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">模式</div>
+          <div class="summary-value">{escape(_display_mode(snapshot.current_mode))}</div>
+          <div class="summary-copy">{escape(_display_mode_reason(snapshot.current_mode, snapshot.mode_reason))}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">判斷</div>
+          <div class="summary-value">{escape(_display_judgment_label(_judgment_label(snapshot)))}</div>
+          <div class="summary-copy">{escape(_display_judgment_copy(snapshot, judgment_copy))}</div>
+        </div>
+      </div>
+      <div class="summary-tags">
+        <span class="tag">{escape(f"每小時：{_display_automation_status(snapshot.hourly_status)}")}</span>
+        <span class="tag">{escape(f"建置心跳：{_display_automation_status(snapshot.building_status)}")}</span>
+        <span class="tag {replay_tag_class}">{escape(_display_replay_freshness(snapshot.replay_freshness_label))}</span>
+      </div>
+      <div class="meta">{escape(_dashboard_freshness_copy(snapshot))}</div>
+      <p class="summary-note">{escape(replay_copy)}</p>
+    """
+
+
+def render_strategy_panel(snapshot: DashboardSnapshot) -> str:
+    decision = snapshot.latest_strategy_decision
+    baseline = snapshot.latest_baseline_evaluation
+    portfolio = snapshot.latest_portfolio_snapshot
+    repair_copy = (
+        "需要 Codex 修復，暫停新進場。"
+        if snapshot.repair_required
+        else "未偵測到阻擋性的修復請求。"
+    )
+    health_tag_class = "warn" if snapshot.repair_required or snapshot.health_severity != "none" else "ok"
+    if decision is None:
+        return f"""
+      <div class="kicker">明日策略決策</div>
+      <h2>明日策略決策</h2>
+      <p class="lead">目前還沒有策略決策。請執行 <code>decide</code> 產生 paper-only 決策建議。</p>
+      <div class="summary-tags">
+        <span class="tag {health_tag_class}">{escape(_display_health_status(snapshot.health_status, snapshot.repair_required))}</span>
+        <span class="tag">{escape(repair_copy)}</span>
+      </div>
+    """
+
+    current_position = "無" if decision.current_position_pct is None else f"{decision.current_position_pct:.2%}"
+    recommended_position = (
+        "無"
+        if decision.recommended_position_pct is None
+        else f"{decision.recommended_position_pct:.2%}"
+    )
+    baseline_copy = (
+        "尚無基準線評估。"
+        if baseline is None
+        else (
+            f"樣本 {baseline.sample_size}；模型正確率 {_format_optional_ratio(baseline.directional_accuracy)}；"
+            f"基準線 {_format_optional_ratio(baseline.baseline_accuracy)}；相對優勢 {_format_optional_ratio(baseline.model_edge)}。"
+        )
+    )
+    portfolio_copy = (
+        "目前沒有 paper 投資組合快照。"
+        if portfolio is None
+        else f"paper 權益 {portfolio.equity:.2f}，淨曝險 {portfolio.net_exposure_pct:.2%}。"
+    )
+    blocked_copy = _display_blocked_reason(decision.blocked_reason)
+    return f"""
+      <div class="kicker">明日策略決策</div>
+      <h2>明日策略決策</h2>
+      <p class="lead">{escape(_display_strategy_reason(decision))}</p>
+      <div class="summary-tags">
+        <span class="tag">{escape(_display_strategy_action(decision.action))}</span>
+        <span class="tag">{escape(_display_evidence_grade(decision.evidence_grade))}</span>
+        <span class="tag">{escape(_display_risk_level(decision.risk_level))}</span>
+        <span class="tag {health_tag_class}">{escape(_display_health_status(snapshot.health_status, snapshot.repair_required))}</span>
+      </div>
+      <div class="primary-grid">
+        <div class="summary-card"><div class="summary-label">目前 paper 部位</div><div class="summary-value">{escape(current_position)}</div><div class="summary-copy">目前 paper 投資組合對 {escape(decision.symbol)} 的曝險。</div></div>
+        <div class="summary-card"><div class="summary-label">建議 paper 部位</div><div class="summary-value">{escape(recommended_position)}</div><div class="summary-copy">這不是真實下單，只是 paper-only 研究建議。</div></div>
+        <div class="summary-card"><div class="summary-label">可交易性</div><div class="summary-value">{escape(_display_boolean(decision.tradeable))}</div><div class="summary-copy">{escape(blocked_copy)}</div></div>
+        <div class="summary-card"><div class="summary-label">健康檢查</div><div class="summary-value">{escape(_display_health_status(snapshot.health_status, snapshot.repair_required))}</div><div class="summary-copy">{escape(repair_copy)}</div></div>
+      </div>
+      <div class="evidence-grid">
+        <div class="evidence-block">
+          <h3>預測品質 vs 基準線</h3>
+          <p class="micro-copy">{escape(baseline_copy)}</p>
+        </div>
+        <div class="evidence-block">
+          <h3>Paper 投資組合 / 修復狀態</h3>
+          <p class="micro-copy">{escape(portfolio_copy)}</p>
+          <p class="micro-copy">{escape(repair_copy)}</p>
+        </div>
+      </div>
+      <details>
+        <summary>展開策略決策詳細欄位</summary>
+        <dl>
+          <dt>決策 ID</dt><dd>{escape(decision.decision_id)}</dd>
+          <dt>Forecast IDs</dt><dd>{escape(", ".join(decision.forecast_ids) or "無")}</dd>
+          <dt>Score IDs</dt><dd>{escape(", ".join(decision.score_ids) or "無")}</dd>
+          <dt>Review IDs</dt><dd>{escape(", ".join(decision.review_ids) or "無")}</dd>
+          <dt>Baseline IDs</dt><dd>{escape(", ".join(decision.baseline_ids) or "無")}</dd>
+          <dt>失效條件</dt><dd>{escape("；".join(decision.invalidation_conditions))}</dd>
+        </dl>
+        <pre>{escape(json.dumps(decision.to_dict(), ensure_ascii=False, indent=2))}</pre>
+      </details>
+    """
+
+
+def render_forecast_panel(forecast: Forecast | None) -> str:
+    if forecast is None:
+        return """
+      <div class="kicker">主要視圖</div>
+      <h2>目前預測</h2>
+      <p class="lead">目前還沒有預測資料。當預測循環寫入新產物後，這個面板會成為操作員優先查看的主卡片。</p>
+      <p class="empty">目前還沒有預測資料。</p>
+    """
+
+    return f"""
+      <div class="kicker">主要視圖</div>
+      <h2>目前預測</h2>
+      <p class="lead">{escape(forecast.symbol)} 是目前的即時操作視圖。解讀 replay 或原始中繼資料前，請先讀這張卡片。</p>
+      <div class="meta"><span class="tag">{escape(_display_forecast_status(forecast.status))}</span> <span class="tag">{escape(_display_status_reason(forecast.status_reason))}</span></div>
+      <div class="primary-grid">
+        <div class="summary-card"><div class="summary-label">預測 regime</div><div class="summary-value">{escape(_display_regime(forecast.predicted_regime))}</div><div class="summary-copy">這一輪對市場狀態的判讀。</div></div>
+        <div class="summary-card"><div class="summary-label">信心值</div><div class="summary-value">{escape(str(forecast.confidence))}</div><div class="summary-copy">模型對這筆預測的信心。</div></div>
+        <div class="summary-card"><div class="summary-label">已觀測 K 線</div><div class="summary-value">{forecast.observed_candle_count} / {forecast.expected_candle_count}</div><div class="summary-copy">目前已捕捉到的覆蓋進度。</div></div>
+        <div class="summary-card"><div class="summary-label">目標視窗</div><div class="summary-value">{escape(_format_window_label(forecast.target_window_start, forecast.target_window_end))}</div><div class="summary-copy">這筆預測目前對應的觀察區間。</div></div>
+      </div>
+      <details>
+        <summary>展開 forecast 詳細欄位</summary>
+        <dl>
+          <dt>Forecast ID</dt><dd>{escape(forecast.forecast_id)}</dd>
+          <dt>Anchor</dt><dd>{escape(forecast.anchor_time.isoformat())}</dd>
+          <dt>目標視窗</dt><dd>{escape(forecast.target_window_start.isoformat())} → {escape(forecast.target_window_end.isoformat())}</dd>
+          <dt>建立時間</dt><dd>{escape(forecast.created_at.isoformat())}</dd>
+          <dt>K 線間隔</dt><dd>{forecast.candle_interval_minutes} 分鐘</dd>
+          <dt>Provider Through</dt><dd>{escape(str(forecast.provider_data_through.isoformat()) if forecast.provider_data_through else "None")}</dd>
+        </dl>
+        <pre>{escape(json.dumps(forecast.to_dict(), ensure_ascii=False, indent=2))}</pre>
+      </details>
+    """
+
+
+def render_score_panel(score: ForecastScore | None) -> str:
+    if score is None:
+        return """
+      <div class="kicker">最新評分</div>
+      <h2>評分快照</h2>
+      <p class="empty">目前還沒有評分資料。</p>
+    """
+
+    return f"""
+      <div class="kicker">最新評分</div>
+      <h2>評分快照</h2>
+      <div class="meta">{escape(_display_regime(score.predicted_regime))} → {escape(_display_regime(score.actual_regime))}</div>
+      <dl>
+        <dt>Score ID</dt><dd>{escape(score.score_id)}</dd>
+        <dt>分數</dt><dd>{score.score:.2f}</dd>
+        <dt>對應預測</dt><dd>{escape(score.forecast_id)}</dd>
+        <dt>已觀測 K 線</dt><dd>{score.observed_candle_count} / {score.expected_candle_count}</dd>
+        <dt>Provider Through</dt><dd>{escape(score.provider_data_through.isoformat())}</dd>
+      </dl>
+    """
+
+
+def render_evidence_panel(snapshot: DashboardSnapshot) -> str:
+    latest_score = snapshot.latest_score
+    evidence_lead = _summarize_evidence(snapshot)
+    score_html = (
+        f"""
+      <dl>
+        <dt>Score ID</dt><dd>{escape(latest_score.score_id)}</dd>
+        <dt>分數</dt><dd>{latest_score.score:.2f}</dd>
+        <dt>對應預測</dt><dd>{escape(latest_score.forecast_id)}</dd>
+        <dt>已觀測 K 線</dt><dd>{latest_score.observed_candle_count} / {latest_score.expected_candle_count}</dd>
+      </dl>
+        """
+        if latest_score is not None
+        else '<p class="empty">最新評分尚未產生；這不影響目前預測主卡的閱讀順序。</p>'
+    )
+    score_detail_html = (
+        f"""
+        <details>
+          <summary>展開最新 score 詳細欄位</summary>
+          <pre>{escape(json.dumps(latest_score.to_dict(), ensure_ascii=False, indent=2))}</pre>
+        </details>
+        """
+        if latest_score is not None
+        else ""
+    )
+    return f"""
+      <div class="kicker">證據鏈</div>
+      <h2>支撐依據</h2>
+      <p class="lead">{escape(evidence_lead)}</p>
+      <div class="evidence-grid">
+        <div class="evidence-block">
+          <h3>已儲存產物</h3>
+          <div class="meta">儲存位置：{escape(str(snapshot.storage_dir.resolve()))}</div>
+          <div class="stat-grid">
+            <div class="stat"><div class="stat-label">預測</div><div class="stat-value">{snapshot.forecast_count}</div></div>
+            <div class="stat"><div class="stat-label">評分</div><div class="stat-value">{snapshot.score_count}</div></div>
+            <div class="stat"><div class="stat-label">檢討</div><div class="stat-value">{snapshot.review_count}</div></div>
+            <div class="stat"><div class="stat-label">提案</div><div class="stat-value">{snapshot.proposal_count}</div></div>
+            <div class="stat"><div class="stat-label">Replay 摘要</div><div class="stat-value">{snapshot.replay_summary_count}</div></div>
+          </div>
+        </div>
+        <div class="evidence-block">
+          <h3>最新評分與唯讀指令</h3>
+          <p class="micro-copy">評分只作為檢討證據補充。即使這裡有新資料，操作員也不應跳過上方的目前預測與檢討主卡。</p>
+          {score_html}
+          {score_detail_html}
+          <div class="command-tags">
+            <span class="tag">run-once</span>
+            <span class="tag">replay-range</span>
+            <span class="tag">render-dashboard</span>
+          </div>
+        </div>
+      </div>
+    """
+
+
+def render_decision_panel(review: Review | None, proposal: Proposal | None) -> str:
+    if review is None:
+        return """
+      <div class="kicker">操作判讀</div>
+      <h2>本輪判讀與建議</h2>
+      <p class="lead">目前還沒有 review/proposal 產物，因此這一區暫時只能維持「等待檢討」狀態。</p>
+      <p class="empty">目前還沒有檢討資料。</p>
+    """
+
+    proposal_summary = _summarize_proposal_surface(proposal)
+    proposal_html = (
+        f"""
+        <details>
+          <summary>最新提案</summary>
+          <pre>{escape(json.dumps(proposal.to_dict(), ensure_ascii=False, indent=2))}</pre>
+        </details>
+        """
+        if proposal is not None
+        else '<p class="empty">目前沒有產生提案。</p>'
+    )
+    return f"""
+      <div class="kicker">操作判讀</div>
+      <h2>本輪判讀與建議</h2>
+      <p class="lead">{escape(review.summary)}</p>
+      <div class="decision-grid">
+        <div class="decision-block">
+          <h3>本輪結論</h3>
+          <p class="decision-emphasis">{escape(_display_decision_surface(review, proposal))}</p>
+        </div>
+        <div class="decision-block">
+          <h3>操作面建議</h3>
+          <div class="meta">{escape(proposal_summary)}</div>
+          <div class="stat-grid">
+            <div class="stat"><div class="stat-label">平均分數</div><div class="stat-value">{review.average_score:.2f}</div></div>
+            <div class="stat"><div class="stat-label">門檻值</div><div class="stat-value">{review.threshold_used:.2f}</div></div>
+            <div class="stat"><div class="stat-label">需要提案</div><div class="stat-value">{escape(_display_boolean(review.proposal_recommended))}</div></div>
+          </div>
+        </div>
+      </div>
+      <details>
+        <summary>展開 review / proposal 詳細欄位</summary>
+        <div class="drawer-stack">
+          <dl>
+            <dt>Review ID</dt><dd>{escape(review.review_id)}</dd>
+            <dt>Forecast IDs</dt><dd>{escape(", ".join(review.forecast_ids) or "None")}</dd>
+            <dt>Score IDs</dt><dd>{escape(", ".join(review.score_ids) or "None")}</dd>
+            <dt>Decision Basis</dt><dd>{escape(review.decision_basis)}</dd>
+            <dt>Proposal Reason</dt><dd>{escape(review.proposal_reason)}</dd>
+          </dl>
+          <pre>{escape(json.dumps(review.to_dict(), ensure_ascii=False, indent=2))}</pre>
+          {proposal_html}
+        </div>
+      </details>
+    """
+
+
+def render_replay_panel(snapshot: DashboardSnapshot, summary: EvaluationSummary | None) -> str:
+    if summary is None:
+        return """
+      <div class="kicker">歷史脈絡</div>
+      <h2>歷史脈絡</h2>
+      <p class="empty">目前還沒有 replay 摘要。</p>
+    """
+
+    replay_copy = (
+        "僅供歷史脈絡參考。replay 落後最新預測時，仍應以目前預測卡為主。"
+        if snapshot.replay_is_stale
+        else "replay 證據足夠新，可補充操作脈絡，但仍是次要參考。"
+    )
+    replay_tag_class = "warn" if snapshot.replay_is_stale else "ok"
+
+    return f"""
+      <div class="kicker">歷史脈絡</div>
+      <h2>歷史脈絡</h2>
+      <p class="micro-copy">{escape(replay_copy)}</p>
+      <div class="summary-tags">
+        <span class="tag {replay_tag_class}">{escape(_display_replay_freshness(snapshot.replay_freshness_label))}</span>
+        <span class="tag">產生時間：{escape(summary.generated_at.isoformat())}</span>
+      </div>
+      <dl>
+        <dt>Forecast 數量</dt><dd>{summary.forecast_count}</dd>
+        <dt>已完成</dt><dd>{summary.resolved_count}</dd>
+        <dt>等待中</dt><dd>{summary.waiting_for_data_count}</dd>
+        <dt>無法評分</dt><dd>{summary.unscorable_count}</dd>
+        <dt>平均分數</dt><dd>{escape("無" if summary.average_score is None else f"{summary.average_score:.2f}")}</dd>
+      </dl>
+      <details>
+        <summary>展開 replay 詳細資料</summary>
+        <dl>
+          <dt>Summary ID</dt><dd>{escape(summary.summary_id)}</dd>
+          <dt>產生時間</dt><dd>{escape(summary.generated_at.isoformat())}</dd>
+          <dt>視窗</dt><dd>{escape(str(summary.replay_window_start.isoformat()) if summary.replay_window_start else "None")} → {escape(str(summary.replay_window_end.isoformat()) if summary.replay_window_end else "None")}</dd>
+        </dl>
+      </details>
+    """
+
+
+def write_dashboard_html(storage_dir: Path | str, output_path: Path | str | None = None) -> Path:
+    storage_path = Path(storage_dir)
+    if not storage_path.exists():
+        raise ValueError(f"storage dir does not exist: {storage_path}")
+    if not storage_path.is_dir():
+        raise ValueError(f"storage dir is not a directory: {storage_path}")
+
+    snapshot = build_dashboard_snapshot(storage_path)
+    html = render_dashboard_html(snapshot)
+    output_path = Path(output_path) if output_path is not None else storage_path / "dashboard.html"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(html, encoding="utf-8")
+    return output_path
+
+
+def _load_json(path: Path) -> dict | None:
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _latest_proposal_for_review(proposals: list[Proposal], review: Review | None) -> Proposal | None:
+    if review is None:
+        return None
+    return next((proposal for proposal in reversed(proposals) if proposal.review_id == review.review_id), None)
+
+
+def _load_automation_state(automation_id: str) -> AutomationState:
+    codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
+    path = codex_home / "automations" / automation_id / "automation.toml"
+    if not path.exists():
+        return AutomationState(status="NOT_FOUND", updated_at=None)
+    payload = tomllib.loads(path.read_text(encoding="utf-8"))
+    return AutomationState(
+        status=payload.get("status", "UNKNOWN"),
+        updated_at=_automation_timestamp(payload.get("updated_at")),
+    )
+
+
+def _automation_timestamp(raw_value) -> datetime | None:
+    if not isinstance(raw_value, int | float):
+        return None
+    return datetime.fromtimestamp(raw_value / 1000, tz=UTC)
+
+
+def _derive_mode(hourly_status: str, building_status: str) -> tuple[str, str]:
+    if building_status == "ACTIVE":
+        return "Building Mode", "Loop Building Heartbeat is active while the system is still being improved."
+    if hourly_status == "ACTIVE":
+        return "Hourly Research Mode", "Hourly Paper Forecast is active and the system is running paper-only prediction cycles."
+    if hourly_status == "PAUSED":
+        return "Paused Prediction Mode", "Hourly Paper Forecast is paused while the system remains under manual inspection."
+    return "Manual Mode", "No known automation is currently active for this workspace."
+
+
+def _derive_replay_freshness(
+    summary: EvaluationSummary | None,
+    latest_forecast: Forecast | None,
+) -> tuple[str, datetime | None, bool]:
+    if summary is None:
+        return "No replay summary yet", None, False
+    if latest_forecast is None or summary.anchor_time_end is None:
+        return "Historical replay available", summary.generated_at, False
+    delta = latest_forecast.anchor_time - summary.anchor_time_end
+    if delta > timedelta(hours=1):
+        hours = int(delta.total_seconds() // 3600)
+        return f"Replay is historical ({hours}h behind latest forecast)", summary.generated_at, True
+    return "Replay aligns with the latest forecast window", summary.generated_at, False
+
+
+def _summarize_health(snapshot: DashboardSnapshot) -> tuple[str, str]:
+    if snapshot.latest_forecast is None:
+        return "Waiting", "Waiting for the first forecast cycle."
+    status = snapshot.latest_forecast.status
+    if status == "pending":
+        return "Open Forecast", "Current forecast is still open, so operator attention should stay on the live forecast card."
+    if status == "waiting_for_data":
+        return "Waiting For Data", "The forecast horizon has ended, but provider coverage is not complete yet."
+    if status == "unscorable":
+        return "Unscorable", "The forecast horizon finished, but the realized candle window is incomplete or invalid."
+    if snapshot.latest_review is not None:
+        return "Reviewed", "Latest resolved forecast has review output recorded for operator follow-through."
+    if status == "resolved":
+        return "Resolved", "Latest forecast has resolved, but downstream review output has not been recorded yet."
+    return "Needs Attention", "Latest forecast is in a terminal or degraded state that should be inspected before relying on it."
+
+
+def _judgment_label(snapshot: DashboardSnapshot) -> str:
+    if snapshot.latest_review is not None:
+        if snapshot.latest_review.proposal_recommended:
+            return "Change Recommended"
+        return "Keep Current Setup"
+    if snapshot.latest_forecast is None:
+        return "No Judgment Yet"
+    if snapshot.latest_forecast.status == "pending":
+        return "Awaiting Horizon End"
+    if snapshot.latest_forecast.status == "waiting_for_data":
+        return "Waiting For Data"
+    if snapshot.latest_forecast.status == "unscorable":
+        return "Unscorable"
+    return "Awaiting Review"
+
+
+def _summarize_judgment(snapshot: DashboardSnapshot) -> str:
+    if snapshot.latest_review is not None:
+        return snapshot.latest_review.summary
+    if snapshot.latest_forecast is None:
+        return "No judgment is available yet because no forecast cycle has produced a current forecast artifact."
+    if snapshot.latest_forecast.status == "pending":
+        return "The current forecast window is still live, so replay should be treated as supporting history rather than the latest judgment."
+    if snapshot.latest_forecast.status == "waiting_for_data":
+        return "The forecast horizon has ended, but provider coverage is still incomplete."
+    if snapshot.latest_forecast.status == "unscorable":
+        return "The forecast horizon ended, but the realized window could not be scored."
+    return "The latest forecast has finished its window, but review and proposal artifacts have not been written yet."
+
+
+def _display_mode(mode: str) -> str:
+    mapping = {
+        "Building Mode": "建置模式",
+        "Hourly Research Mode": "每小時研究模式",
+        "Paused Prediction Mode": "暫停預測模式",
+        "Manual Mode": "手動模式",
+    }
+    return mapping.get(mode, mode)
+
+
+def _display_mode_reason(mode: str, reason: str) -> str:
+    mapping = {
+        "Building Mode": "Loop Building Heartbeat 目前啟用，系統仍在調整與建置中。",
+        "Hourly Research Mode": "Hourly Paper Forecast 目前啟用，系統正在執行 paper-only 預測循環。",
+        "Paused Prediction Mode": "Hourly Paper Forecast 目前暫停，系統處於人工檢查狀態。",
+        "Manual Mode": "這個工作區目前沒有已知的自動化正在執行。",
+    }
+    return mapping.get(mode, reason)
+
+
+def _display_automation_status(status: str) -> str:
+    mapping = {
+        "ACTIVE": "啟用中（ACTIVE）",
+        "PAUSED": "已暫停（PAUSED）",
+        "NOT_FOUND": "未找到（NOT_FOUND）",
+        "UNKNOWN": "未知（UNKNOWN）",
+    }
+    return mapping.get(status, status)
+
+
+def _display_strategy_action(action: str) -> str:
+    mapping = {
+        "BUY": "買進（BUY）",
+        "SELL": "賣出（SELL）",
+        "HOLD": "持有（HOLD）",
+        "REDUCE_RISK": "降低風險（REDUCE_RISK）",
+        "STOP_NEW_ENTRIES": "停止新進場（STOP_NEW_ENTRIES）",
+    }
+    return mapping.get(action, action)
+
+
+def _display_strategy_reason(decision: StrategyDecision) -> str:
+    if decision.blocked_reason == "health_check_repair_required":
+        return "health-check 需要修復；Codex 修復完成前停止新進場。"
+    if decision.blocked_reason == "missing_latest_forecast":
+        return "目前沒有最新 forecast；系統不能產生方向性的 paper-only 決策。"
+    if decision.blocked_reason == "latest_forecast_stale":
+        return "最新 forecast 已超過允許時效；停止新進場直到資料恢復新鮮。"
+    if decision.blocked_reason == "insufficient_evidence":
+        return "已評分 forecast 樣本不足，不足以支持買進或賣出。"
+    if decision.blocked_reason == "model_not_beating_baseline":
+        return "模型證據沒有打贏 naive persistence baseline，因此買進/賣出被擋住。"
+    if decision.blocked_reason == "evidence_grade_too_weak_for_directional_action":
+        return "證據方向偏正面，但強度不足以支持買進或賣出。"
+    if decision.blocked_reason == "unknown_forecast_regime":
+        return "最新 forecast regime 方向性不足，不應產生買進或賣出。"
+    if decision.action == "BUY":
+        return "最新 forecast 偏多，且模型證據在品質足夠時打贏 baseline。"
+    if decision.action == "SELL":
+        return "最新 forecast 偏空，且模型證據在品質足夠時打贏 baseline。"
+    if decision.action == "REDUCE_RISK":
+        return "近期 forecast 分數偏弱，建議降低 paper 風險。"
+    if decision.action == "STOP_NEW_ENTRIES":
+        return "系統目前不允許新增進場，請先檢查 health 與資料新鮮度。"
+    return decision.reason_summary
+
+
+def _display_evidence_grade(grade: str) -> str:
+    mapping = {
+        "A": "證據等級 A",
+        "B": "證據等級 B",
+        "C": "證據等級 C",
+        "D": "證據等級 D",
+        "INSUFFICIENT": "證據不足（INSUFFICIENT）",
+    }
+    return mapping.get(grade, grade)
+
+
+def _display_risk_level(level: str) -> str:
+    mapping = {
+        "LOW": "低風險（LOW）",
+        "MEDIUM": "中風險（MEDIUM）",
+        "HIGH": "高風險（HIGH）",
+        "UNKNOWN": "風險未知（UNKNOWN）",
+    }
+    return mapping.get(level, level)
+
+
+def _display_health_status(status: str, repair_required: bool) -> str:
+    if repair_required:
+        return "需要修復（repair required）"
+    mapping = {
+        "healthy": "健康（healthy）",
+        "degraded": "降級（degraded）",
+        "unhealthy": "不健康（unhealthy）",
+    }
+    return mapping.get(status, status)
+
+
+def _display_blocked_reason(reason: str | None) -> str:
+    mapping = {
+        None: "未被決策 gate 阻擋",
+        "health_check_repair_required": "health-check 要求修復，停止新進場。",
+        "missing_latest_forecast": "缺少最新 forecast，不能做方向性決策。",
+        "latest_forecast_stale": "最新 forecast 已過期，不能做方向性決策。",
+        "insufficient_evidence": "證據不足，不能支持買進或賣出。",
+        "model_not_beating_baseline": "模型沒有打贏基準線，買進/賣出被擋住。",
+        "evidence_grade_too_weak_for_directional_action": "證據等級不足，不能支持買進或賣出。",
+        "unknown_forecast_regime": "forecast regime 方向性不足。",
+    }
+    return mapping.get(reason, reason or "未被決策 gate 阻擋")
+
+
+def _display_health_label(label: str) -> str:
+    mapping = {
+        "Waiting": "等待中",
+        "Open Forecast": "進行中預測",
+        "Waiting For Data": "等待資料覆蓋",
+        "Unscorable": "無法評分",
+        "Reviewed": "已檢討",
+        "Resolved": "已結束",
+        "Needs Attention": "需要檢查",
+    }
+    return mapping.get(label, label)
+
+
+def _display_health_copy(label: str, copy: str) -> str:
+    mapping = {
+        "Waiting": "等待第一筆預測循環。",
+        "Open Forecast": "目前這筆預測仍在開放視窗內，操作注意力應優先放在即時預測卡。",
+        "Waiting For Data": "預測視窗已結束，但仍在等待 provider 補齊目標視窗資料。",
+        "Unscorable": "目標視窗資料不完整或無效，這筆預測不能被當成已正常評分。",
+        "Reviewed": "最新已結束的預測已留下檢討輸出，可直接往後續追蹤。",
+        "Resolved": "最新預測已結束，但下游檢討輸出尚未寫入。",
+        "Needs Attention": "最新預測處於需要人工確認的狀態，先檢查詳細欄位再判斷。",
+    }
+    return mapping.get(label, copy)
+
+
+def _display_judgment_label(label: str) -> str:
+    mapping = {
+        "Change Recommended": "建議調整",
+        "Keep Current Setup": "維持目前設定",
+        "No Judgment Yet": "尚無判斷",
+        "Awaiting Horizon End": "等待視窗結束",
+        "Waiting For Data": "等待資料覆蓋",
+        "Unscorable": "無法評分",
+        "Awaiting Review": "等待檢討",
+    }
+    return mapping.get(label, label)
+
+
+def _display_judgment_copy(snapshot: DashboardSnapshot, copy: str) -> str:
+    if snapshot.latest_review is not None:
+        return copy
+    if snapshot.latest_forecast is None:
+        return "目前還沒有可供判讀的預測產物，因此暫時沒有判斷結果。"
+    if snapshot.latest_forecast.status == "pending":
+        return "目前預測視窗仍在進行中，因此 replay 應視為輔助歷史，而不是最新判斷。"
+    if snapshot.latest_forecast.status == "waiting_for_data":
+        return "預測視窗已結束，但仍在等待 provider 補齊目標視窗資料。"
+    if snapshot.latest_forecast.status == "unscorable":
+        return "目標視窗資料不完整或無效，這筆預測不能作為正常評分依據。"
+    return "最新預測已完成視窗，但檢討與提案產物尚未寫出。"
+
+
+def _display_replay_freshness(label: str) -> str:
+    if label == "No replay summary yet":
+        return "目前還沒有 replay 摘要"
+    if label == "Historical replay available":
+        return "已有歷史 replay 可供參考"
+    if label == "Replay aligns with the latest forecast window":
+        return "replay 與最新預測視窗大致對齊"
+    if label.startswith("Replay is historical (") and label.endswith(")"):
+        detail = label.removeprefix("Replay is historical (").removesuffix(")")
+        if detail.endswith("h behind latest forecast"):
+            hours = detail.removesuffix("h behind latest forecast").strip()
+            detail = f"落後最新預測 {hours} 小時"
+        return f"replay 僅供歷史脈絡參考（{detail}）"
+    return label
+
+
+def _display_forecast_status(status: str) -> str:
+    mapping = {
+        "pending": "待完成（pending）",
+        "resolved": "已完成（resolved）",
+        "waiting_for_data": "等待資料覆蓋（waiting_for_data）",
+        "unscorable": "無法評分（unscorable）",
+        "failed": "失敗（failed）",
+        "cancelled": "已取消（cancelled）",
+    }
+    return mapping.get(status, status)
+
+
+def _display_status_reason(reason: str) -> str:
+    mapping = {
+        "awaiting_horizon_end": "等待視窗結束（awaiting_horizon_end）",
+        "awaiting_provider_coverage": "等待 provider 補齊目標視窗（awaiting_provider_coverage）",
+        "scored": "已評分（scored）",
+        "score_already_recorded": "評分已存在（score_already_recorded）",
+        "missing_expected_candles": "缺少必要 K 線（missing_expected_candles）",
+        "empty_realized_window": "實際觀測視窗為空（empty_realized_window）",
+        "insufficient_realized_candles": "實際 K 線不足（insufficient_realized_candles）",
+        "legacy_unscorable": "舊版無法評分狀態（legacy_unscorable）",
+        "legacy_status": "舊版狀態（legacy_status）",
+    }
+    return mapping.get(reason, reason)
+
+
+def _dashboard_freshness_copy(snapshot: DashboardSnapshot) -> str:
+    hourly_source = _format_optional_timestamp(snapshot.hourly_status_source_at)
+    building_source = _format_optional_timestamp(snapshot.building_status_source_at)
+    return (
+        f"Dashboard 產生時間：{snapshot.dashboard_generated_at.isoformat()}；"
+        f"Automation 狀態來源：hourly {hourly_source}，building {building_source}。"
+    )
+
+
+def _format_optional_timestamp(value: datetime | None) -> str:
+    if value is None:
+        return "未找到"
+    return value.isoformat()
+
+
+def _display_regime(regime: str | None) -> str:
+    mapping = {
+        "trend_up": "上行趨勢（trend_up）",
+        "trend_down": "下行趨勢（trend_down）",
+        "range": "區間盤整（range）",
+    }
+    if regime is None:
+        return "無"
+    return mapping.get(regime, regime)
+
+
+def _display_boolean(value: bool) -> str:
+    return "是" if value else "否"
+
+
+def _format_window_label(start: datetime, end: datetime) -> str:
+    return f"{start.strftime('%m-%d %H:%M')} → {end.strftime('%m-%d %H:%M')}"
+
+
+def _format_optional_ratio(value: float | None) -> str:
+    if value is None:
+        return "無"
+    return f"{value:.2%}"
+
+
+def _display_decision_surface(review: Review, proposal: Proposal | None) -> str:
+    if review.proposal_recommended and proposal is not None:
+        return "目前判讀偏向需要調整 paper-only 參數，請先讀提案摘要，再決定是否進入人工覆核。"
+    if review.proposal_recommended:
+        return "review 判定需要調整，但目前只看到檢討結果，尚未看到完整提案內容。"
+    return "目前判讀偏向維持既有設定，除非後續新 evidence 推翻這次 review。"
+
+
+def _summarize_proposal_surface(proposal: Proposal | None) -> str:
+    if proposal is None:
+        return "目前沒有額外 proposal，代表這輪 review 沒有提出新的調整單。"
+    change_keys = ", ".join(sorted(proposal.changes))
+    return f"提案類型為 {proposal.proposal_type}，目前涉及 {change_keys}。"
+
+
+def _summarize_evidence(snapshot: DashboardSnapshot) -> str:
+    latest_score = snapshot.latest_score
+    if latest_score is None:
+        return "這一區用來確認目前操作判讀背後的證據鏈是否完整。若最新 score 尚未產生，代表證據鏈仍在補齊中。"
+    return (
+        f"目前最新 score 為 {latest_score.score:.2f}，"
+        f"對應 { _display_regime(latest_score.predicted_regime) } 與 { _display_regime(latest_score.actual_regime) }。"
+        " 這些產物數量與最新 score 共同支撐上方的本輪判讀。"
+    )

@@ -1,27 +1,389 @@
 # Paper Forecast Loop
 
-Paper-only public-data forecasting and strategy-research loop for BTC-USD.
+Paper-only public-data strategy research robot for `BTC-USD`.
 
-## What It Does
+This repository is intentionally narrow. The M1 goal is not feature breadth. The
+goal is the first **auditable strategy research robot**:
 
-- ingests public market data from CoinGecko
-- creates immutable forecast artifacts
-- resolves matured forecasts into scores
-- writes review artifacts and defensive strategy proposals
-- stays paper-only with no live trading or automatic promotion
+- create a forecast on a reproducible hourly boundary
+- wait for the target window to complete
+- only score when provider coverage is complete
+- generate review and proposal artifacts with provenance
+- compare prediction quality against baselines
+- produce a paper-only strategy decision for the next horizon
+- create Codex repair requests when health checks find blocking issues
+- keep reruns safe and idempotent
 
-## Project Layout
+## Current Scope
 
-- `src/forecast_loop/`: forecasting loop, providers, storage, models, CLI
-- `tests/`: pipeline and provider tests
-- `run_forecast_loop.py`: repo-root entrypoint for local runs
+This version intentionally includes only:
+
+- single symbol: `BTC-USD`
+- hourly public market data
+- providers:
+  - sample provider
+  - CoinGecko provider
+- JSONL artifacts:
+  - `forecasts.jsonl`
+  - `scores.jsonl`
+  - `reviews.jsonl`
+  - `proposals.jsonl`
+  - `baseline_evaluations.jsonl`
+  - `portfolio_snapshots.jsonl`
+  - `strategy_decisions.jsonl`
+  - `repair_requests.jsonl`
+- CLI execution via:
+  - `run-once`
+  - `replay-range`
+  - `render-dashboard`
+  - `repair-storage`
+  - `decide`
+  - `health-check`
+
+This version intentionally excludes:
+
+- interactive UI controls
+- live trading
+- real capital
+- multi-asset support
+- live broker / exchange adapters
+- real orders
+- portfolio / NAV / PnL accounting beyond a minimal paper snapshot
+- notifications / Telegram
+- full scheduler or autonomous repair daemon orchestration
+
+## Development Environment And Agent Rules
+
+Portable development rules are versioned in this repo:
+
+- `AGENTS.md`: Codex collaboration rules, review rules, routing rules, and role catalog
+- `docs/roles/`: role definitions for controller, fixer, verifier, reviewer, UI, data, replay, infra, and related work
+- `docs/development-environment.md`: Windows/Codex setup, verification commands, ignored local runtime state, and automation boundaries
+- `docs/reviews/`: archived review findings and final reviewer outcomes
+
+Machine-local runtime state is intentionally not committed. This includes
+`.codex/`, `paper_storage/`, screenshots, caches, and generated sample runs.
+
+## M1 Strategy Decision Contract
+
+The new decision artifact answers the operator question:
+
+> What should the paper strategy do for the next 24 hours?
+
+Allowed actions:
+
+- `BUY`
+- `SELL`
+- `HOLD`
+- `REDUCE_RISK`
+- `STOP_NEW_ENTRIES`
+
+Each `strategy_decisions.jsonl` row records:
+
+- action, symbol, horizon, timestamp
+- confidence, evidence grade, risk level
+- current and recommended paper position percentage
+- tradeable/blocking status
+- invalidation conditions
+- human-readable reason summary
+- linked forecast, score, review, and baseline ids
+
+BUY/SELL requires enough evidence and a positive edge over baseline. Weak,
+missing, stale, or unhealthy evidence must produce HOLD, REDUCE_RISK, or
+STOP_NEW_ENTRIES instead of fake directional certainty.
+
+## Baseline And Evidence Gates
+
+M1 compares model quality against a naive persistence baseline:
+
+- naive persistence baseline: next actual regime equals the previous actual regime
+- model directional accuracy: average realized forecast score
+- model edge: model accuracy minus baseline accuracy
+- recent score: recent rolling model score
+- evidence grade: `A`, `B`, `C`, `D`, or `INSUFFICIENT`
+
+Decision gates:
+
+- sample size below 2 -> `INSUFFICIENT`
+- no positive edge over baseline -> BUY/SELL blocked
+- poor recent score -> `REDUCE_RISK`
+- missing/stale forecast or blocking health finding -> `STOP_NEW_ENTRIES`
+
+## Paper Broker Boundary
+
+M1 includes a broker interface only to keep future integration boundaries clean.
+The only implementation is `PaperBrokerAdapter`.
+
+Live broker or exchange modes are intentionally unavailable. There is no API key
+handling and no real order path in M1.
+
+## Forecast Contract
+
+Each forecast records enough information to reconstruct and audit the forecast window:
+
+- `anchor_time`: the latest provider-aligned hourly boundary available at run time
+- `target_window_start`: the forecast window start boundary
+- `target_window_end`: the forecast window end boundary
+- `candle_interval_minutes`: the expected candle interval
+- `expected_candle_count`: the number of hourly boundaries required for a complete score
+- `status`: lifecycle state
+- `status_reason`: why the forecast is in that state
+- `provider_data_through`: latest provider boundary observed during evaluation
+- `observed_candle_count`: how many aligned candles were actually observed for the target window
+
+### Boundary Rule
+
+Forecast creation does **not** use arbitrary wall-clock timestamps. It aligns to the latest provider hourly boundary that is actually available.
+
+Example:
+
+- run time: `2026-04-21T12:37:00Z`
+- latest available hourly candle boundary: `2026-04-21T11:00:00Z`
+- forecast anchor and target window start: `2026-04-21T11:00:00Z`
+
+## Resolve and Scoring Contract
+
+A forecast may only be scored when **all** of the following are true:
+
+1. `now >= target_window_end`
+2. provider data coverage reaches at least `target_window_end`
+3. the target window contains the full expected set of hourly boundaries
+4. the realized candle set is non-empty and sufficient to classify
+
+If any of those conditions fail, the loop must not score the forecast.
+
+## Forecast States
+
+- `pending`
+  - meaning: the target window has not finished yet
+  - reason: `awaiting_horizon_end`
+
+- `waiting_for_data`
+  - meaning: the target window has finished, but provider coverage has not yet reached the target window end
+  - reason: `awaiting_provider_coverage`
+
+- `resolved`
+  - meaning: a valid score has been recorded for the forecast
+  - reason examples:
+    - `scored`
+    - `score_already_recorded`
+
+- `unscorable`
+  - meaning: enough wall-clock time has passed, but the realized data is invalid or incomplete for trustworthy scoring
+  - reason examples:
+    - `empty_realized_window`
+    - `missing_expected_candles`
+    - `insufficient_realized_candles`
+
+## Artifact Provenance
+
+### Score Artifact
+
+Each score records:
+
+- which forecast it belongs to
+- the scored target window
+- predicted regime
+- actual regime
+- expected and observed candle counts
+- provider data coverage at scoring time
+- scoring basis
+
+### Review Artifact
+
+Each review records:
+
+- which scores were used
+- which forecasts those scores came from
+- threshold used
+- decision basis
+- whether a proposal is recommended
+- why a proposal was or was not recommended
+
+### Proposal Artifact
+
+Each proposal records:
+
+- which review produced it
+- which scores were used as the basis
+- threshold used
+- decision basis
+- rationale for generation
+
+### Strategy Decision Artifact
+
+Each decision records:
+
+- paper-only action recommendation
+- evidence grade and confidence
+- baseline ids used for quality gating
+- current paper portfolio context
+- invalidation conditions
+- whether directional action is blocked and why
+
+### Repair Request Artifact
+
+Each repair request records:
+
+- observed health failure
+- exact reproduction command
+- expected behavior
+- affected artifacts
+- recommended first tests
+- paper-only safety boundary
+- acceptance criteria
+
+The health checker also writes a Codex-ready prompt under:
+
+```text
+.codex/repair_requests/pending/<repair_request_id>.md
+```
+
+## Idempotency and Rerun Safety
+
+This version keeps JSONL storage, but rerun safety is enforced:
+
+- the same forecast anchor/window resolves to the same forecast identity
+- the same forecast cannot be scored twice
+- the same review basis does not create duplicate reviews
+- the same review does not create duplicate proposals
+- the same baseline evidence does not create duplicate baseline evaluations
+- the same decision basis does not create duplicate strategy decisions
+- rerunning `run-once` in the same hour does not keep creating semantically duplicate artifacts
+
+## Replay Contract
+
+Use `replay-range` for deterministic historical validation.
+
+Replay guarantees:
+
+- input datetimes must be timezone-aware
+- the replay runner itself only accepts hour-aligned UTC boundaries
+- replay executes on fixed hourly steps only
+- replay uses the same forecast / resolve / scoring contract as `run-once`
+- replay evaluation summaries are built from the replay-scoped artifacts for the requested symbol and window, not from the entire storage directory
+- replay summaries are persisted to the base storage directory, while replay-run artifacts live in a replay-scoped storage path under `.replay/`
+
+### Replay Scoped Storage
+
+Each replay invocation writes its raw artifacts into a deterministic path under the chosen storage directory:
+
+```text
+<storage-dir>/.replay/<provider>/<symbol>/<start>-<end>/
+```
+
+This avoids contaminating one replay run with hidden forecast, score, review, or proposal state from another replay window or another symbol.
+
+### Replay Metadata
+
+After each replay run, the CLI writes:
+
+- `last_replay_meta.json` in the base storage directory
+- `evaluation_summaries.jsonl` in the base storage directory
+
+The replay metadata reports:
+
+- replay window start/end
+- cycle count
+- forecasts created
+- scores created
+- the replay-scoped evaluation summary
+
+## Read-Only Inspector
+
+This repository now includes a minimal read-only inspector layer.
+
+Purpose:
+
+- inspect the latest paper-only strategy decision
+- inspect current health / repair status
+- inspect the current system state without reading JSONL files manually
+- inspect the latest forecast / score / review / proposal
+- inspect the latest replay summary and raw metadata
+- support operator review while the system remains in building mode
+
+Current form:
+
+- static HTML output
+- generated from existing persisted artifacts
+- no live controls
+- no trading actions
+- first screen emphasizes:
+  - tomorrow's strategy decision
+  - health / repair status
+  - operator summary
+  - current forecast
+  - historical replay context
+- raw metadata stays collapsed by default so the inspector remains readable before drill-down
+
+### Dashboard Contract
+
+The dashboard is an inspection surface only.
+
+It does not:
+
+- trigger forecasts
+- mutate loop state
+- write reviews or proposals
+- control automation
+
+It only reads:
+
+- `forecasts.jsonl`
+- `scores.jsonl`
+- `reviews.jsonl`
+- `proposals.jsonl`
+- `evaluation_summaries.jsonl`
+- `baseline_evaluations.jsonl`
+- `portfolio_snapshots.jsonl`
+- `strategy_decisions.jsonl`
+- `repair_requests.jsonl`
+- `last_run_meta.json`
+- `last_replay_meta.json`
+
+`render-dashboard` expects an existing storage directory. This is intentional:
+if the path is mistyped, the command fails instead of creating an empty artifact
+tree that could be mistaken for a real system state.
+
+### Dashboard Command
+
+Generate the current dashboard:
+
+```powershell
+python run_forecast_loop.py render-dashboard --storage-dir .\paper_storage\manual-sample
+```
+
+By default this writes:
+
+```text
+<storage-dir>\dashboard.html
+```
+
+You can also choose a specific output path:
+
+```powershell
+python run_forecast_loop.py render-dashboard --storage-dir .\paper_storage\manual-sample --output .\dashboard.html
+```
+
+## Failure and Degrade Behavior
+
+The loop degrades conservatively:
+
+- if the horizon is complete but provider data does not fully cover the window, the forecast remains `waiting_for_data`
+- if provider coverage exists but required hourly boundaries are missing, the forecast becomes `unscorable`
+- if candles are empty or insufficient for classification, the loop does not crash into scoring; it leaves an auditable terminal state instead
+- review and proposal generation only happen when the current run produced valid scores
+- if evidence is weak, the decision engine blocks BUY/SELL
+- if storage or artifact health is blocking, the decision engine emits `STOP_NEW_ENTRIES`
+- health-check writes repair requests instead of relying on silent failures
+- the dashboard degrades read-only: if no artifacts exist yet, it renders explicit empty states instead of failing
 
 ## Local Commands
 
 Run tests:
 
 ```powershell
-pytest -q
+python -m pytest -q
 ```
 
 Run one sample cycle:
@@ -36,16 +398,57 @@ Run one public-data cycle:
 python run_forecast_loop.py run-once --provider coingecko --symbol BTC-USD --storage-dir .\paper_storage\manual-coingecko
 ```
 
-## Current Scope
+Run a cycle and produce a strategy decision:
 
-- single symbol: `BTC-USD`
-- public data provider: CoinGecko
-- paper-only artifacts: forecasts, scores, reviews, proposals
+```powershell
+python run_forecast_loop.py run-once --provider coingecko --symbol BTC-USD --storage-dir .\paper_storage\manual-coingecko --also-decide
+```
 
-## Review Focus
+Generate a paper-only strategy decision from existing artifacts:
 
-The current implementation is intentionally small. Good review targets are:
+```powershell
+python run_forecast_loop.py decide --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD --horizon-hours 24
+```
 
-- forecast horizon alignment versus provider candle timestamps
-- resolution safety when market data has not fully covered the forecast window
-- proposal and review thresholds for paper-only adjustment logic
+Run a health audit and create a Codex repair request if blocking issues exist:
+
+```powershell
+python run_forecast_loop.py health-check --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD
+```
+
+Run one deterministic sample replay:
+
+```powershell
+python run_forecast_loop.py replay-range --provider sample --symbol BTC-USD --storage-dir .\paper_storage\manual-replay --start 2026-04-21T04:00:00+00:00 --end 2026-04-21T08:00:00+00:00 --horizon-hours 2
+```
+
+Render a dashboard for an existing storage directory:
+
+```powershell
+python run_forecast_loop.py render-dashboard --storage-dir .\paper_storage\manual-replay
+```
+
+Repair and summarize a storage directory after legacy artifact pollution or
+before resuming hourly automation:
+
+```powershell
+python run_forecast_loop.py repair-storage --storage-dir .\paper_storage\manual-replay
+```
+
+The repair command writes `storage_repair_report.json` with a fresh
+`generated_at_utc`, active forecast count, latest forecast id, and quarantine
+status. Treat that report as a point-in-time audit record, not a live monitor.
+
+## Remaining Gaps Intentionally Left for the Next Stage
+
+This milestone improves correctness and auditability, but it does not yet solve everything:
+
+- SQLite is recommended as the future canonical store, but this PR keeps JSONL compatibility active
+- regime classification is still intentionally simple
+- only `BTC-USD` is supported
+- paper portfolio support is a minimal snapshot, not a full ledger
+- there is no paper order ledger or PnL engine yet
+- proposal logic is still heuristic and conservative
+- health-check creates repair requests, but there is no autonomous repair daemon in this repo
+- the inspector is currently static HTML, not a live operator app
+- replay still writes summary metadata into the base storage directory instead of a more formal run registry or database

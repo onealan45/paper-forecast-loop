@@ -284,6 +284,7 @@ Current practical V1 path:
 - M3F adds independent per-symbol strategy decisions for registered assets
 - M4A adds leakage-checked research dataset artifacts built from scored forecasts
 - M4B records expanded baseline suite results for research audit
+- M4C adds a paper-only backtest engine over stored candles
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation
@@ -327,6 +328,8 @@ V1 MVP should include:
 - research dataset artifacts with no-lookahead leakage checks
 - expanded baseline suite covering no-trade/cash, buy-and-hold, moving-average,
   momentum, and deterministic-random baselines
+- paper-only backtest run/result artifacts with return, benchmark, drawdown,
+  Sharpe, turnover, and win-rate metrics
 - health-check output
 - Codex repair request artifacts
 - minimal CLI
@@ -370,6 +373,7 @@ correctness defects:
 - macro events are visible as imported calendar artifacts, but do not yet drive research features or strategy decisions
 - per-symbol multi-asset decisions do not yet perform portfolio optimization or cross-asset allocation
 - research datasets are generated artifacts only; no model training or optimizer is included yet
+- backtests are local simulations over stored candles; no broker or live execution path is involved
 
 The repository is suitable for continued paper-only hourly research only when
 tests pass, active storage repair status is fresh, dashboard freshness is

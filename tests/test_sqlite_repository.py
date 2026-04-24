@@ -5,6 +5,8 @@ import sqlite3
 from forecast_loop.cli import main
 from forecast_loop.models import (
     BaselineEvaluation,
+    BacktestResult,
+    BacktestRun,
     EquityCurvePoint,
     EvaluationSummary,
     Forecast,
@@ -237,6 +239,45 @@ def _research_dataset(now: datetime, forecast: Forecast, score: ForecastScore) -
     )
 
 
+def _backtest_run(now: datetime, candle: MarketCandleRecord) -> BacktestRun:
+    return BacktestRun(
+        backtest_id="backtest-run:sqlite",
+        created_at=now,
+        symbol="BTC-USD",
+        start=candle.timestamp,
+        end=candle.timestamp + timedelta(days=1),
+        strategy_name="moving_average_trend",
+        initial_cash=10_000.0,
+        fee_bps=5.0,
+        slippage_bps=10.0,
+        moving_average_window=3,
+        candle_ids=[candle.candle_id],
+        decision_basis="test",
+    )
+
+
+def _backtest_result(now: datetime, run: BacktestRun) -> BacktestResult:
+    return BacktestResult(
+        result_id="backtest-result:sqlite",
+        backtest_id=run.backtest_id,
+        created_at=now,
+        symbol=run.symbol,
+        start=run.start,
+        end=run.end,
+        initial_cash=run.initial_cash,
+        final_equity=10_100.0,
+        strategy_return=0.01,
+        benchmark_return=0.02,
+        max_drawdown=0.0,
+        sharpe=None,
+        turnover=1.0,
+        win_rate=None,
+        trade_count=1,
+        equity_curve=[{"timestamp": now.isoformat(), "equity": 10_100.0}],
+        decision_basis="test",
+    )
+
+
 def _paper_order(now: datetime, decision: StrategyDecision) -> PaperOrder:
     return PaperOrder(
         order_id="paper-order:sqlite",
@@ -344,6 +385,8 @@ def _seed_repository(repository) -> dict:
     macro_event = _macro_event(now)
     repair_request = _repair_request(now)
     dataset = _research_dataset(now, forecast, score)
+    backtest_run = _backtest_run(now, market_candle)
+    backtest_result = _backtest_result(now, backtest_run)
 
     repository.save_market_candle(market_candle)
     repository.save_macro_event(macro_event)
@@ -362,6 +405,8 @@ def _seed_repository(repository) -> dict:
     repository.save_provider_run(provider_run)
     repository.save_repair_request(repair_request)
     repository.save_research_dataset(dataset)
+    repository.save_backtest_run(backtest_run)
+    repository.save_backtest_result(backtest_result)
     return {
         "forecast": forecast,
         "score": score,
@@ -380,6 +425,8 @@ def _seed_repository(repository) -> dict:
         "macro_event": macro_event,
         "repair_request": repair_request,
         "dataset": dataset,
+        "backtest_run": backtest_run,
+        "backtest_result": backtest_result,
     }
 
 
@@ -406,6 +453,8 @@ def test_sqlite_repository_round_trips_and_dedupes_m1_artifacts(tmp_path):
     assert repository.load_provider_runs() == [artifacts["provider_run"]]
     assert repository.load_repair_requests() == [artifacts["repair_request"]]
     assert repository.load_research_datasets() == [artifacts["dataset"]]
+    assert repository.load_backtest_runs() == [artifacts["backtest_run"]]
+    assert repository.load_backtest_results() == [artifacts["backtest_result"]]
     assert repository.artifact_counts()["forecasts"] == 1
 
 
@@ -451,6 +500,8 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert sqlite_repository.load_paper_orders() == [artifacts["order"]]
     assert sqlite_repository.load_paper_fills() == [artifacts["fill"]]
     assert sqlite_repository.load_research_datasets() == [artifacts["dataset"]]
+    assert sqlite_repository.load_backtest_runs() == [artifacts["backtest_run"]]
+    assert sqlite_repository.load_backtest_results() == [artifacts["backtest_result"]]
 
     assert main(["db-health", "--storage-dir", str(tmp_path)]) == 0
     health_result = json.loads(capsys.readouterr().out)
@@ -464,6 +515,8 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert health_result["artifact_counts"]["risk_snapshots"] == 1
     assert health_result["artifact_counts"]["provider_runs"] == 1
     assert health_result["artifact_counts"]["research_datasets"] == 1
+    assert health_result["artifact_counts"]["backtest_runs"] == 1
+    assert health_result["artifact_counts"]["backtest_results"] == 1
 
 
 def test_db_health_flags_malformed_provider_run_payload(tmp_path, capsys):
@@ -516,3 +569,5 @@ def test_export_jsonl_writes_compatibility_artifacts(tmp_path, capsys):
     assert exported_repository.load_provider_runs() == [artifacts["provider_run"]]
     assert exported_repository.load_repair_requests() == [artifacts["repair_request"]]
     assert exported_repository.load_research_datasets() == [artifacts["dataset"]]
+    assert exported_repository.load_backtest_runs() == [artifacts["backtest_run"]]
+    assert exported_repository.load_backtest_results() == [artifacts["backtest_result"]]

@@ -9,6 +9,8 @@ from typing import Callable
 
 from forecast_loop.models import (
     BaselineEvaluation,
+    BacktestResult,
+    BacktestRun,
     EquityCurvePoint,
     EvaluationSummary,
     Forecast,
@@ -59,6 +61,8 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("provider_runs", "provider_runs.jsonl", "provider_run_id", ProviderRun.from_dict),
     ArtifactSpec("repair_requests", "repair_requests.jsonl", "repair_request_id", RepairRequest.from_dict),
     ArtifactSpec("research_datasets", "research_datasets.jsonl", "dataset_id", ResearchDataset.from_dict),
+    ArtifactSpec("backtest_runs", "backtest_runs.jsonl", "backtest_id", BacktestRun.from_dict),
+    ArtifactSpec("backtest_results", "backtest_results.jsonl", "result_id", BacktestResult.from_dict),
 )
 _SPEC_BY_TYPE = {spec.artifact_type: spec for spec in ARTIFACT_SPECS}
 
@@ -233,6 +237,18 @@ class SQLiteRepository:
     def load_research_datasets(self) -> list[ResearchDataset]:
         return self._load("research_datasets", ResearchDataset.from_dict)
 
+    def save_backtest_run(self, run: BacktestRun) -> None:
+        self._save_unique("backtest_runs", run.backtest_id, run.to_dict())
+
+    def load_backtest_runs(self) -> list[BacktestRun]:
+        return self._load("backtest_runs", BacktestRun.from_dict)
+
+    def save_backtest_result(self, result: BacktestResult) -> None:
+        self._save_unique("backtest_results", result.result_id, result.to_dict())
+
+    def load_backtest_results(self) -> list[BacktestResult]:
+        return self._load("backtest_results", BacktestResult.from_dict)
+
     def artifact_counts(self) -> dict[str, int]:
         with self._connect() as connection:
             rows = connection.execute(
@@ -344,6 +360,10 @@ def migrate_jsonl_to_sqlite(storage_dir: Path | str, db_path: Path | str | None 
         sqlite_repository.save_repair_request(repair_request)
     for dataset in json_repository.load_research_datasets():
         sqlite_repository.save_research_dataset(dataset)
+    for run in json_repository.load_backtest_runs():
+        sqlite_repository.save_backtest_run(run)
+    for result in json_repository.load_backtest_results():
+        sqlite_repository.save_backtest_result(result)
 
     after_counts = sqlite_repository.artifact_counts()
     return {

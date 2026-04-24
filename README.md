@@ -23,15 +23,17 @@ This version intentionally includes only:
 - providers:
   - sample provider
   - CoinGecko provider
-- JSONL artifacts:
-  - `forecasts.jsonl`
-  - `scores.jsonl`
-  - `reviews.jsonl`
-  - `proposals.jsonl`
-  - `baseline_evaluations.jsonl`
-  - `portfolio_snapshots.jsonl`
-  - `strategy_decisions.jsonl`
-  - `repair_requests.jsonl`
+- storage:
+  - SQLite repository for M2 canonical state migration
+  - JSONL artifacts for audit export and backward compatibility:
+    - `forecasts.jsonl`
+    - `scores.jsonl`
+    - `reviews.jsonl`
+    - `proposals.jsonl`
+    - `baseline_evaluations.jsonl`
+    - `portfolio_snapshots.jsonl`
+    - `strategy_decisions.jsonl`
+    - `repair_requests.jsonl`
 - CLI execution via:
   - `run-once`
   - `replay-range`
@@ -39,6 +41,10 @@ This version intentionally includes only:
   - `repair-storage`
   - `decide`
   - `health-check`
+  - `init-db`
+  - `migrate-jsonl-to-sqlite`
+  - `export-jsonl`
+  - `db-health`
 
 This version intentionally excludes:
 
@@ -241,7 +247,8 @@ The health checker also writes a Codex-ready prompt under:
 
 ## Idempotency and Rerun Safety
 
-This version keeps JSONL storage, but rerun safety is enforced:
+This version keeps JSONL compatibility and adds a SQLite repository for M2
+storage migration. Rerun safety is enforced:
 
 - the same forecast anchor/window resolves to the same forecast identity
 - the same forecast cannot be scored twice
@@ -439,11 +446,35 @@ The repair command writes `storage_repair_report.json` with a fresh
 `generated_at_utc`, active forecast count, latest forecast id, and quarantine
 status. Treat that report as a point-in-time audit record, not a live monitor.
 
+Initialize the M2 SQLite repository:
+
+```powershell
+python run_forecast_loop.py init-db --storage-dir .\paper_storage\manual-replay
+```
+
+Migrate existing JSONL artifacts into SQLite:
+
+```powershell
+python run_forecast_loop.py migrate-jsonl-to-sqlite --storage-dir .\paper_storage\manual-replay
+```
+
+Check SQLite schema and artifact health:
+
+```powershell
+python run_forecast_loop.py db-health --storage-dir .\paper_storage\manual-replay
+```
+
+Export SQLite artifacts back to JSONL compatibility files:
+
+```powershell
+python run_forecast_loop.py export-jsonl --storage-dir .\paper_storage\manual-replay --output-dir .\paper_storage\manual-replay-export
+```
+
 ## Remaining Gaps Intentionally Left for the Next Stage
 
 This milestone improves correctness and auditability, but it does not yet solve everything:
 
-- SQLite is recommended as the future canonical store, but this PR keeps JSONL compatibility active
+- the current hourly loop still writes JSONL artifacts by default while M2A proves SQLite migration and export parity
 - regime classification is still intentionally simple
 - only `BTC-USD` is supported
 - paper portfolio support is a minimal snapshot, not a full ledger

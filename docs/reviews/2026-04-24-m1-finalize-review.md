@@ -57,4 +57,23 @@
 
 ## Current Status
 
-Status is pending re-review after remediation. PR must not be marked ready or merged until reviewer subagent returns `APPROVED`, CI remains green, and `git diff --check origin/main...HEAD` passes after the remediation commit.
+Reviewer subagent re-review `019dbfff-6497-7292-a3c6-a52412ca3092` returned `APPROVED`.
+
+Blocking findings: none.
+
+The reviewer confirmed:
+
+- the previous PR-range whitespace blocker was cleared;
+- the M1 Finalize review archive exists and is sufficient;
+- no live trading path was found;
+- no real broker/exchange submit path was found;
+- no secrets, `.env`, `.codex/`, `paper_storage/`, or runtime artifacts were tracked;
+- CI and local M1 gate evidence support marking the PR ready and merging after final checks remain green.
+
+Nonblocking risks:
+
+- PR was still draft at review time and must be marked ready before merge;
+- unresolved GitHub Copilot comments were treated as nonblocking for M1 Finalize;
+- CI covers baseline pytest/compile/help, while full M1 smoke evidence is recorded from local execution.
+
+Final status: `APPROVED` for PR ready/merge when CI remains green, PR remains mergeable, and final machine gates pass.

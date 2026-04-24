@@ -144,7 +144,7 @@ def run_health_check(
             )
         )
 
-    _check_last_run_meta(storage_path, latest_forecast, findings)
+    _check_last_run_meta(storage_path, symbol, latest_forecast, findings)
     _check_provider_runs(storage_path, symbol, now, provider_runs, findings)
     _check_links(storage_path, forecasts, scores, reviews, proposals, decisions, baselines, evaluation_summaries, findings)
     _check_dashboard(storage_path, findings)
@@ -200,7 +200,12 @@ def _check_duplicate_ids(rows: list, attribute: str, path: Path, findings: list[
         )
 
 
-def _check_last_run_meta(storage_path: Path, latest_forecast: Forecast | None, findings: list[HealthFinding]) -> None:
+def _check_last_run_meta(
+    storage_path: Path,
+    symbol: str,
+    latest_forecast: Forecast | None,
+    findings: list[HealthFinding],
+) -> None:
     meta_path = storage_path / "last_run_meta.json"
     if not meta_path.exists() or latest_forecast is None:
         return
@@ -217,7 +222,11 @@ def _check_last_run_meta(storage_path: Path, latest_forecast: Forecast | None, f
             )
         )
         return
-    meta_forecast_id = (payload.get("new_forecast") or {}).get("forecast_id")
+    meta_forecast = payload.get("new_forecast") or {}
+    meta_symbol = payload.get("symbol") or meta_forecast.get("symbol")
+    if meta_symbol and meta_symbol != symbol:
+        return
+    meta_forecast_id = meta_forecast.get("forecast_id")
     if meta_forecast_id and meta_forecast_id != latest_forecast.forecast_id:
         findings.append(
             HealthFinding(

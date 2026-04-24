@@ -11,6 +11,7 @@ def test_asset_registry_contains_required_m3a_assets():
     assert assets["BTC-USD"].status == "active"
     assert assets["ETH-USD"].default_provider == "coingecko"
     assert assets["SPY"].status == "planned"
+    assert assets["SPY"].default_provider == "csv-fixture"
     assert assets["0050.TW"].status == "inactive"
 
 

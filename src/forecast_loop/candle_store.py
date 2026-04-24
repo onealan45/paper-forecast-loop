@@ -292,12 +292,16 @@ def _record_from_import_payload(
         close=float(payload["close"]),
         volume=float(payload["volume"]),
     )
-    return MarketCandleRecord.from_candle(
+    record = MarketCandleRecord.from_candle(
         candle,
         symbol=symbol,
         source=source,
         imported_at=imported_at,
     )
+    adjusted_close = payload.get("adjusted_close")
+    if adjusted_close is not None:
+        record.adjusted_close = float(adjusted_close)
+    return record
 
 
 def _parse_required_datetime(value: str | None, label: str) -> datetime:
@@ -349,6 +353,8 @@ def _validate_candle_record(record: MarketCandleRecord) -> None:
     for label, value in values.items():
         if not math.isfinite(value):
             raise ValueError(f"candle {label} must be finite")
+    if record.adjusted_close is not None and not math.isfinite(record.adjusted_close):
+        raise ValueError("candle adjusted_close must be finite")
     if record.high < max(record.open, record.close, record.low):
         raise ValueError("candle high must be >= open, close, and low")
     if record.low > min(record.open, record.close, record.high):

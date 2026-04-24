@@ -31,6 +31,7 @@ This version intentionally includes:
 - providers:
   - sample provider
   - CoinGecko provider
+  - US ETF/stock CSV fixture provider for `SPY`, `QQQ`, `TLT`, and `GLD`
 - storage:
   - SQLite repository for M2 canonical state migration
   - JSONL artifacts for audit export and backward compatibility:
@@ -67,6 +68,9 @@ This version intentionally includes:
   - `import-candles`
   - `export-candles`
   - `candle-health`
+  - `import-stock-csv`
+  - `stock-candle-health`
+  - `market-calendar`
 
 This version intentionally excludes:
 
@@ -579,6 +583,25 @@ Export stored candles:
 python run_forecast_loop.py export-candles --storage-dir .\paper_storage\manual-replay --symbol BTC-USD --output .\paper_storage\btc-hourly-export.jsonl
 ```
 
+Inspect the US ETF/stock market calendar:
+
+```powershell
+python run_forecast_loop.py market-calendar --market US --start-date 2026-04-02 --end-date 2026-04-06
+```
+
+Import a US ETF/stock CSV fixture with adjusted close:
+
+```powershell
+python run_forecast_loop.py import-stock-csv --storage-dir .\paper_storage\manual-stock --input .\fixtures\spy-daily.csv --symbol SPY --source fixture
+```
+
+Check US ETF/stock fixture coverage. Weekends and configured US market holidays
+are not expected sessions:
+
+```powershell
+python run_forecast_loop.py stock-candle-health --storage-dir .\paper_storage\manual-stock --symbol SPY --start-date 2026-04-02 --end-date 2026-04-06
+```
+
 Render a dashboard for an existing storage directory:
 
 ```powershell
@@ -633,4 +656,5 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - health-check creates repair requests, but there is no autonomous repair daemon in this repo
 - the inspector is currently static HTML, not a live operator app
 - replay still writes summary metadata into the base storage directory instead of a more formal run registry or database
-- stored candle import is JSONL-only; ETF/stock calendars and adjusted closes are deferred to M3D
+- US ETF/stock support is fixture-only; no live or paid data provider is wired
+- Taiwan ETF calendar/provider support remains deferred

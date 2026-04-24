@@ -26,6 +26,12 @@ from forecast_loop.portfolio import create_portfolio_snapshot, fill_paper_order,
 from forecast_loop.providers import CoinGeckoMarketDataProvider, build_sample_provider
 from forecast_loop.replay import ReplayRunner
 from forecast_loop.risk import evaluate_risk
+from forecast_loop.market_calendar import parse_date
+from forecast_loop.stock_data import (
+    import_stock_csv,
+    market_calendar_payload,
+    run_stock_candle_health,
+)
 from forecast_loop.sqlite_repository import (
     export_sqlite_to_jsonl,
     initialize_sqlite_database,
@@ -146,6 +152,24 @@ def main(argv: list[str] | None = None) -> int:
     candle_health.add_argument("--end", required=True)
     candle_health.add_argument("--interval-minutes", type=int, default=60)
 
+    import_stock_csv_cmd = subparsers.add_parser("import-stock-csv")
+    import_stock_csv_cmd.add_argument("--storage-dir", required=True)
+    import_stock_csv_cmd.add_argument("--input", required=True)
+    import_stock_csv_cmd.add_argument("--symbol", default="SPY")
+    import_stock_csv_cmd.add_argument("--source", default="csv-fixture")
+    import_stock_csv_cmd.add_argument("--imported-at")
+
+    stock_candle_health = subparsers.add_parser("stock-candle-health")
+    stock_candle_health.add_argument("--storage-dir", required=True)
+    stock_candle_health.add_argument("--symbol", default="SPY")
+    stock_candle_health.add_argument("--start-date", required=True)
+    stock_candle_health.add_argument("--end-date", required=True)
+
+    market_calendar = subparsers.add_parser("market-calendar")
+    market_calendar.add_argument("--market", choices=["US"], default="US")
+    market_calendar.add_argument("--start-date", required=True)
+    market_calendar.add_argument("--end-date", required=True)
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -184,6 +208,12 @@ def main(argv: list[str] | None = None) -> int:
             return _export_candles(args)
         if args.command == "candle-health":
             return _candle_health(args)
+        if args.command == "import-stock-csv":
+            return _import_stock_csv(args)
+        if args.command == "stock-candle-health":
+            return _stock_candle_health(args)
+        if args.command == "market-calendar":
+            return _market_calendar(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -649,6 +679,40 @@ def _candle_health(args) -> int:
     )
     print(json.dumps(result, ensure_ascii=False))
     return 0 if result["status"] == "healthy" else 2
+
+
+def _import_stock_csv(args) -> int:
+    imported_at = _parse_datetime(args.imported_at) if args.imported_at else datetime.now(tz=UTC)
+    result = import_stock_csv(
+        storage_dir=args.storage_dir,
+        input_path=args.input,
+        symbol=args.symbol,
+        source=args.source,
+        imported_at=imported_at,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _stock_candle_health(args) -> int:
+    result = run_stock_candle_health(
+        storage_dir=args.storage_dir,
+        symbol=args.symbol,
+        start_date=parse_date(args.start_date, label="start-date"),
+        end_date=parse_date(args.end_date, label="end-date"),
+    )
+    print(json.dumps(result, ensure_ascii=False))
+    return 0 if result["status"] == "healthy" else 2
+
+
+def _market_calendar(args) -> int:
+    result = market_calendar_payload(
+        market=args.market,
+        start_date=parse_date(args.start_date, label="start-date"),
+        end_date=parse_date(args.end_date, label="end-date"),
+    )
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
 
 
 def _write_last_run_meta(*, storage_dir: Path, now_utc: datetime, symbol: str, provider: str, result) -> None:

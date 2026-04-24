@@ -111,6 +111,7 @@ class MarketCandleRecord:
     volume: float
     source: str
     imported_at: datetime
+    adjusted_close: float | None = None
 
     @classmethod
     def build_id(cls, *, symbol: str, timestamp: datetime, source: str) -> str:
@@ -144,15 +145,17 @@ class MarketCandleRecord:
             volume=float(candle.volume),
             source=source,
             imported_at=imported_at,
+            adjusted_close=None,
         )
 
     def to_candle(self) -> MarketCandle:
+        close = self.adjusted_close if self.adjusted_close is not None else self.close
         return MarketCandle(
             timestamp=self.timestamp,
             open=self.open,
             high=self.high,
             low=self.low,
-            close=self.close,
+            close=close,
             volume=self.volume,
         )
 
@@ -164,6 +167,7 @@ class MarketCandleRecord:
 
     @classmethod
     def from_dict(cls, payload: dict) -> "MarketCandleRecord":
+        adjusted_close = payload.get("adjusted_close")
         return cls(
             candle_id=_require_string(payload, "candle_id"),
             symbol=_require_string(payload, "symbol"),
@@ -175,6 +179,7 @@ class MarketCandleRecord:
             volume=float(payload["volume"]),
             source=_require_string(payload, "source"),
             imported_at=_require_aware_datetime(payload, "imported_at"),
+            adjusted_close=float(adjusted_close) if adjusted_close is not None else None,
         )
 
 

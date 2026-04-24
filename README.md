@@ -56,6 +56,7 @@ This version intentionally includes:
   - `render-dashboard`
   - `repair-storage`
   - `decide`
+  - `decide-all`
   - `health-check`
   - `init-db`
   - `migrate-jsonl-to-sqlite`
@@ -80,7 +81,7 @@ This version intentionally excludes:
 - interactive UI controls
 - live trading
 - real capital
-- multi-asset support
+- portfolio optimizer or cross-asset allocation engine
 - live broker / exchange adapters
 - real orders
 - broker reconciliation and external execution
@@ -519,6 +520,16 @@ Generate a paper-only strategy decision from existing artifacts:
 python run_forecast_loop.py decide --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD --horizon-hours 24
 ```
 
+Generate independent paper-only strategy decisions for multiple registered
+symbols:
+
+```powershell
+python run_forecast_loop.py decide-all --storage-dir .\paper_storage\manual-multi-asset --symbols BTC-USD,ETH-USD,SPY,QQQ --horizon-hours 24
+```
+
+`decide-all` evaluates each symbol independently. It does not optimize
+cross-asset allocation or rebalance a portfolio.
+
 Create a local paper order from the latest strategy decision:
 
 ```powershell
@@ -664,7 +675,8 @@ This milestone improves correctness and auditability, but it does not yet solve 
 
 - the current hourly loop still writes JSONL artifacts by default while M2A proves SQLite migration and export parity
 - regime classification is still intentionally simple
-- active automation remains `BTC-USD` first; registered non-BTC assets do not yet imply multi-asset decisions
+- active automation remains `BTC-USD` first; non-BTC assets require their own artifacts before `decide-all` can produce non-fail-closed decisions
+- per-symbol multi-asset decisions exist, but there is no portfolio optimizer or cross-asset allocation engine
 - paper portfolio accounting and risk gates are basic local simulations, not broker reconciliation
 - order lifecycle is minimal: created orders can be filled locally, but cancellation and partial fill lifecycle are deferred
 - proposal logic is still heuristic and conservative

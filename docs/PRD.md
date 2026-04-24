@@ -281,6 +281,7 @@ Current practical V1 path:
 - M3C adds deterministic stored hourly candle snapshots for replay
 - M3D adds a US ETF/stock CSV fixture path for `SPY`, `QQQ`, `TLT`, and `GLD`
 - M3E adds fixture-based macro event storage and calendar inspection
+- M3F adds independent per-symbol strategy decisions for registered assets
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation
@@ -303,7 +304,7 @@ Development-level failures should trigger fallback when they involve:
 
 V1 MVP should include:
 
-- one symbol
+- one initial automation symbol, with per-symbol multi-asset decisions available when artifacts exist
 - one strategy context
 - one public-data provider
 - immutable forecast artifacts
@@ -320,6 +321,7 @@ V1 MVP should include:
 - stored market candle artifacts for deterministic replay
 - US ETF/stock fixture import with adjusted close and market-calendar handling
 - macro event artifacts for CPI, PCE, FOMC, GDP, NFP, and unemployment
+- independent per-symbol decision generation through `decide-all`
 - health-check output
 - Codex repair request artifacts
 - minimal CLI
@@ -361,12 +363,14 @@ correctness defects:
 - ETF/stock support is fixture-only and US-calendar-only; no live stock API or paid provider is wired
 - Taiwan ETF calendar/provider support remains deferred
 - macro events are visible as imported calendar artifacts, but do not yet drive research features or strategy decisions
+- per-symbol multi-asset decisions do not yet perform portfolio optimization or cross-asset allocation
 
 The repository is suitable for continued paper-only hourly research only when
 tests pass, active storage repair status is fresh, dashboard freshness is
 visible, strategy decision/health status are visible, and
 `last_run_meta.json.new_forecast.forecast_id` matches the newest forecast tail
-record.
+for the same symbol when that metadata file belongs to the symbol being
+audited.
 
 ## 14. Decision Log: Prior Q&A
 

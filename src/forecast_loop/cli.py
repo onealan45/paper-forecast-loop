@@ -5,7 +5,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from forecast_loop.assets import list_assets
+from forecast_loop.assets import get_asset, list_assets
 from forecast_loop.candle_store import (
     StoredCandleProvider,
     export_market_candles,
@@ -76,6 +76,12 @@ def main(argv: list[str] | None = None) -> int:
     decide.add_argument("--symbol", default="BTC-USD")
     decide.add_argument("--horizon-hours", type=int, default=24)
     decide.add_argument("--now")
+
+    decide_all = subparsers.add_parser("decide-all")
+    decide_all.add_argument("--storage-dir", required=True)
+    decide_all.add_argument("--symbols", required=True)
+    decide_all.add_argument("--horizon-hours", type=int, default=24)
+    decide_all.add_argument("--now")
 
     health_check = subparsers.add_parser("health-check")
     health_check.add_argument("--storage-dir", required=True)
@@ -196,6 +202,8 @@ def main(argv: list[str] | None = None) -> int:
             return _repair_storage(args)
         if args.command == "decide":
             return _decide(args)
+        if args.command == "decide-all":
+            return _decide_all(args)
         if args.command == "health-check":
             return _health_check(args)
         if args.command == "init-db":
@@ -442,43 +450,95 @@ def _repair_storage(args) -> int:
 
 def _decide(args) -> int:
     now = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    decision = _decision_for_symbol(
+        storage_dir=Path(args.storage_dir),
+        symbol=args.symbol,
+        horizon_hours=args.horizon_hours,
+        now=now,
+    )
+    print(json.dumps(decision.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _decide_all(args) -> int:
+    now = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    symbols = _parse_symbol_list(args.symbols)
     storage_dir = Path(args.storage_dir)
+    decisions = [
+        _decision_for_symbol(
+            storage_dir=storage_dir,
+            symbol=symbol,
+            horizon_hours=args.horizon_hours,
+            now=now,
+        )
+        for symbol in symbols
+    ]
+    payload = {
+        "created_at": now.isoformat(),
+        "storage_dir": str(storage_dir.resolve()),
+        "symbols": symbols,
+        "horizon_hours": args.horizon_hours,
+        "decision_count": len(decisions),
+        "tradeable_count": sum(1 for decision in decisions if decision.tradeable),
+        "blocked_count": sum(1 for decision in decisions if decision.blocked_reason is not None),
+        "decisions": [decision.to_dict() for decision in decisions],
+    }
+    print(json.dumps(payload, ensure_ascii=False))
+    return 0
+
+
+def _decision_for_symbol(
+    *,
+    storage_dir: Path,
+    symbol: str,
+    horizon_hours: int,
+    now: datetime,
+) -> StrategyDecision:
     health_result = run_health_check(
         storage_dir=storage_dir,
-        symbol=args.symbol,
+        symbol=symbol,
         now=now,
         create_repair_request=True,
     )
     if health_result.repair_required and not storage_dir.is_dir():
-        decision = StrategyDecision.build_fail_closed(
-            symbol=args.symbol,
-            horizon_hours=args.horizon_hours,
+        return StrategyDecision.build_fail_closed(
+            symbol=symbol,
+            horizon_hours=horizon_hours,
             created_at=now,
             blocked_reason="health_check_repair_required",
             reason_summary="health-check 需要修復；Codex 修復完成前停止新進場。",
             repair_request_id=health_result.repair_request_id,
         )
-        print(json.dumps(decision.to_dict(), ensure_ascii=False))
-        return 0
 
     repository = JsonFileRepository(storage_dir)
     risk_snapshot = None
     if not health_result.repair_required:
         risk_snapshot = evaluate_risk(
             repository=repository,
-            symbol=args.symbol,
+            symbol=symbol,
             now=now,
         )
-    decision = generate_strategy_decision(
+    return generate_strategy_decision(
         repository=repository,
-        symbol=args.symbol,
-        horizon_hours=args.horizon_hours,
+        symbol=symbol,
+        horizon_hours=horizon_hours,
         now=now,
         health_result=health_result,
         risk_snapshot=risk_snapshot,
     )
-    print(json.dumps(decision.to_dict(), ensure_ascii=False))
-    return 0
+
+
+def _parse_symbol_list(value: str) -> list[str]:
+    raw_symbols = [item.strip().upper() for item in value.split(",")]
+    if any(not item for item in raw_symbols):
+        raise ValueError("--symbols must be a comma-separated list without empty entries")
+    symbols = list(dict.fromkeys(raw_symbols))
+    if not symbols:
+        raise ValueError("--symbols must include at least one symbol")
+    unsupported = [symbol for symbol in symbols if get_asset(symbol) is None]
+    if unsupported:
+        raise ValueError(f"unsupported asset symbol(s): {', '.join(unsupported)}; run list-assets")
+    return symbols
 
 
 def _health_check(args) -> int:

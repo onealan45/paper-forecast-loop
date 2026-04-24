@@ -6,9 +6,11 @@ from typing import Protocol
 
 from forecast_loop.models import (
     BaselineEvaluation,
+    EquityCurvePoint,
     EvaluationSummary,
     Forecast,
     ForecastScore,
+    PaperFill,
     PaperOrder,
     PaperPortfolioSnapshot,
     Proposal,
@@ -55,9 +57,19 @@ class ArtifactRepository(Protocol):
 
     def load_paper_orders(self) -> list[PaperOrder]: ...
 
+    def replace_paper_orders(self, orders: list[PaperOrder]) -> None: ...
+
+    def save_paper_fill(self, fill: PaperFill) -> None: ...
+
+    def load_paper_fills(self) -> list[PaperFill]: ...
+
     def save_portfolio_snapshot(self, snapshot: PaperPortfolioSnapshot) -> None: ...
 
     def load_portfolio_snapshots(self) -> list[PaperPortfolioSnapshot]: ...
+
+    def save_equity_curve_point(self, point: EquityCurvePoint) -> None: ...
+
+    def load_equity_curve_points(self) -> list[EquityCurvePoint]: ...
 
     def save_repair_request(self, repair_request: RepairRequest) -> None: ...
 
@@ -76,7 +88,9 @@ class JsonFileRepository:
         self.baseline_evaluations_path = self.root / "baseline_evaluations.jsonl"
         self.strategy_decisions_path = self.root / "strategy_decisions.jsonl"
         self.paper_orders_path = self.root / "paper_orders.jsonl"
+        self.paper_fills_path = self.root / "paper_fills.jsonl"
         self.portfolio_snapshots_path = self.root / "portfolio_snapshots.jsonl"
+        self.equity_curve_path = self.root / "equity_curve.jsonl"
         self.repair_requests_path = self.root / "repair_requests.jsonl"
 
     def save_forecast(self, forecast: Forecast) -> None:
@@ -170,6 +184,21 @@ class JsonFileRepository:
     def load_paper_orders(self) -> list[PaperOrder]:
         return self._load_lines(self.paper_orders_path, PaperOrder.from_dict)
 
+    def replace_paper_orders(self, orders: list[PaperOrder]) -> None:
+        with self.paper_orders_path.open("w", encoding="utf-8") as handle:
+            for order in orders:
+                handle.write(json.dumps(order.to_dict()) + "\n")
+
+    def save_paper_fill(self, fill: PaperFill) -> None:
+        self._append_unique(
+            self.paper_fills_path,
+            fill.to_dict(),
+            identity_key="fill_id",
+        )
+
+    def load_paper_fills(self) -> list[PaperFill]:
+        return self._load_lines(self.paper_fills_path, PaperFill.from_dict)
+
     def save_portfolio_snapshot(self, snapshot: PaperPortfolioSnapshot) -> None:
         self._append_unique(
             self.portfolio_snapshots_path,
@@ -179,6 +208,16 @@ class JsonFileRepository:
 
     def load_portfolio_snapshots(self) -> list[PaperPortfolioSnapshot]:
         return self._load_lines(self.portfolio_snapshots_path, PaperPortfolioSnapshot.from_dict)
+
+    def save_equity_curve_point(self, point: EquityCurvePoint) -> None:
+        self._append_unique(
+            self.equity_curve_path,
+            point.to_dict(),
+            identity_key="point_id",
+        )
+
+    def load_equity_curve_points(self) -> list[EquityCurvePoint]:
+        return self._load_lines(self.equity_curve_path, EquityCurvePoint.from_dict)
 
     def save_repair_request(self, repair_request: RepairRequest) -> None:
         self._append_unique(

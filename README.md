@@ -34,6 +34,8 @@ This version intentionally includes only:
     - `portfolio_snapshots.jsonl`
     - `strategy_decisions.jsonl`
     - `paper_orders.jsonl`
+    - `paper_fills.jsonl`
+    - `equity_curve.jsonl`
     - `repair_requests.jsonl`
 - CLI execution via:
   - `run-once`
@@ -47,6 +49,8 @@ This version intentionally includes only:
   - `export-jsonl`
   - `db-health`
   - `paper-order`
+  - `paper-fill`
+  - `portfolio-snapshot`
 
 This version intentionally excludes:
 
@@ -56,7 +60,7 @@ This version intentionally excludes:
 - multi-asset support
 - live broker / exchange adapters
 - real orders
-- fills, positions, NAV, and PnL accounting beyond a minimal paper snapshot and local paper order ledger
+- broker reconciliation and external execution
 - notifications / Telegram
 - full scheduler or autonomous repair daemon orchestration
 
@@ -123,8 +127,9 @@ M1 includes a broker interface only to keep future integration boundaries clean.
 The only implementation is `PaperBrokerAdapter`.
 
 Live broker or exchange modes are intentionally unavailable. There is no API key
-handling and no real order path. M2B adds a local paper order ledger, but broker
-submission remains unavailable until a later paper execution stage.
+handling and no real order path. M2B/M2C add local paper order and fill
+artifacts, but broker submission remains unavailable until a later paper/sandbox
+execution stage.
 
 ## Forecast Contract
 
@@ -243,6 +248,29 @@ Each paper order records:
 
 Paper orders are local ledger artifacts only. They do not submit to a broker,
 exchange, sandbox, or testnet.
+
+### Paper Fill And Portfolio Artifacts
+
+Each paper fill records:
+
+- the local paper order it fills
+- fill side and quantity
+- market price and slippage-adjusted fill price
+- gross value, fee, fee bps, slippage bps
+- net cash change
+
+Each portfolio snapshot records:
+
+- cash
+- equity / NAV
+- positions
+- realized and unrealized PnL
+- gross and net exposure
+
+Each equity curve point records the portfolio state needed for later risk and
+research analysis.
+
+These are local accounting artifacts only. They do not imply external execution.
 
 ### Repair Request Artifact
 
@@ -442,6 +470,19 @@ Create a local paper order from the latest strategy decision:
 python run_forecast_loop.py paper-order --storage-dir .\paper_storage\manual-coingecko --decision-id latest
 ```
 
+Fill the latest local paper order using a synthetic or externally supplied
+paper-only mark price:
+
+```powershell
+python run_forecast_loop.py paper-fill --storage-dir .\paper_storage\manual-coingecko --order-id latest --market-price 100
+```
+
+Mark the paper portfolio to market:
+
+```powershell
+python run_forecast_loop.py portfolio-snapshot --storage-dir .\paper_storage\manual-coingecko --market-price 105
+```
+
 Run a health audit and create a Codex repair request if blocking issues exist:
 
 ```powershell
@@ -502,7 +543,8 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - the current hourly loop still writes JSONL artifacts by default while M2A proves SQLite migration and export parity
 - regime classification is still intentionally simple
 - only `BTC-USD` is supported
-- paper portfolio support is a minimal snapshot plus local order ledger, not fills, positions, NAV, or a PnL engine
+- paper portfolio accounting is basic local simulation, not broker reconciliation
+- order lifecycle is minimal: created orders can be filled locally, but cancellation and partial fill lifecycle are deferred
 - proposal logic is still heuristic and conservative
 - health-check creates repair requests, but there is no autonomous repair daemon in this repo
 - the inspector is currently static HTML, not a live operator app

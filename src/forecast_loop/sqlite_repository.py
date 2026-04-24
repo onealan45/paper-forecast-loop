@@ -9,9 +9,11 @@ from typing import Callable
 
 from forecast_loop.models import (
     BaselineEvaluation,
+    EquityCurvePoint,
     EvaluationSummary,
     Forecast,
     ForecastScore,
+    PaperFill,
     PaperOrder,
     PaperPortfolioSnapshot,
     Proposal,
@@ -43,7 +45,9 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("baseline_evaluations", "baseline_evaluations.jsonl", "baseline_id", BaselineEvaluation.from_dict),
     ArtifactSpec("strategy_decisions", "strategy_decisions.jsonl", "decision_id", StrategyDecision.from_dict),
     ArtifactSpec("paper_orders", "paper_orders.jsonl", "order_id", PaperOrder.from_dict),
+    ArtifactSpec("paper_fills", "paper_fills.jsonl", "fill_id", PaperFill.from_dict),
     ArtifactSpec("portfolio_snapshots", "portfolio_snapshots.jsonl", "snapshot_id", PaperPortfolioSnapshot.from_dict),
+    ArtifactSpec("equity_curve", "equity_curve.jsonl", "point_id", EquityCurvePoint.from_dict),
     ArtifactSpec("repair_requests", "repair_requests.jsonl", "repair_request_id", RepairRequest.from_dict),
 )
 _SPEC_BY_TYPE = {spec.artifact_type: spec for spec in ARTIFACT_SPECS}
@@ -159,11 +163,29 @@ class SQLiteRepository:
     def load_paper_orders(self) -> list[PaperOrder]:
         return self._load("paper_orders", PaperOrder.from_dict)
 
+    def replace_paper_orders(self, orders: list[PaperOrder]) -> None:
+        with self._connect() as connection:
+            connection.execute("DELETE FROM artifacts WHERE artifact_type = ?", ("paper_orders",))
+            for order in orders:
+                self._save_unique_with_connection(connection, "paper_orders", order.order_id, order.to_dict())
+
+    def save_paper_fill(self, fill: PaperFill) -> None:
+        self._save_unique("paper_fills", fill.fill_id, fill.to_dict())
+
+    def load_paper_fills(self) -> list[PaperFill]:
+        return self._load("paper_fills", PaperFill.from_dict)
+
     def save_portfolio_snapshot(self, snapshot: PaperPortfolioSnapshot) -> None:
         self._save_unique("portfolio_snapshots", snapshot.snapshot_id, snapshot.to_dict())
 
     def load_portfolio_snapshots(self) -> list[PaperPortfolioSnapshot]:
         return self._load("portfolio_snapshots", PaperPortfolioSnapshot.from_dict)
+
+    def save_equity_curve_point(self, point: EquityCurvePoint) -> None:
+        self._save_unique("equity_curve", point.point_id, point.to_dict())
+
+    def load_equity_curve_points(self) -> list[EquityCurvePoint]:
+        return self._load("equity_curve", EquityCurvePoint.from_dict)
 
     def save_repair_request(self, repair_request: RepairRequest) -> None:
         self._save_unique("repair_requests", repair_request.repair_request_id, repair_request.to_dict())
@@ -264,8 +286,12 @@ def migrate_jsonl_to_sqlite(storage_dir: Path | str, db_path: Path | str | None 
         sqlite_repository.save_strategy_decision(decision)
     for order in json_repository.load_paper_orders():
         sqlite_repository.save_paper_order(order)
+    for fill in json_repository.load_paper_fills():
+        sqlite_repository.save_paper_fill(fill)
     for snapshot in json_repository.load_portfolio_snapshots():
         sqlite_repository.save_portfolio_snapshot(snapshot)
+    for point in json_repository.load_equity_curve_points():
+        sqlite_repository.save_equity_curve_point(point)
     for repair_request in json_repository.load_repair_requests():
         sqlite_repository.save_repair_request(repair_request)
 

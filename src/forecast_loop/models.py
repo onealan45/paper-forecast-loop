@@ -433,13 +433,32 @@ class PaperPortfolioSnapshot:
     net_exposure_pct: float
     max_drawdown_pct: float | None
     positions: list[PaperPosition]
+    realized_pnl: float = 0.0
+    unrealized_pnl: float = 0.0
+    nav: float | None = None
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        created_at: datetime,
+        equity: float,
+        cash: float,
+        positions: list[PaperPosition],
+    ) -> str:
+        return _stable_artifact_id(
+            "portfolio",
+            {
+                "created_at": created_at.isoformat(),
+                "equity": round(equity, 8),
+                "cash": round(cash, 8),
+                "positions": [position.to_dict() for position in positions],
+            },
+        )
 
     @classmethod
     def empty(cls, *, created_at: datetime, equity: float = 10_000.0) -> "PaperPortfolioSnapshot":
-        snapshot_id = _stable_artifact_id(
-            "portfolio",
-            {"created_at": created_at.isoformat(), "equity": equity, "cash": equity, "positions": []},
-        )
+        snapshot_id = cls.build_id(created_at=created_at, equity=equity, cash=equity, positions=[])
         return cls(
             snapshot_id=snapshot_id,
             created_at=created_at,
@@ -449,6 +468,9 @@ class PaperPortfolioSnapshot:
             net_exposure_pct=0.0,
             max_drawdown_pct=None,
             positions=[],
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+            nav=equity,
         )
 
     def position_pct_for(self, symbol: str) -> float:
@@ -474,11 +496,15 @@ class PaperPortfolioSnapshot:
             net_exposure_pct=payload.get("net_exposure_pct", 0.0),
             max_drawdown_pct=payload.get("max_drawdown_pct"),
             positions=[PaperPosition.from_dict(item) for item in payload.get("positions", [])],
+            realized_pnl=payload.get("realized_pnl", 0.0),
+            unrealized_pnl=payload.get("unrealized_pnl", 0.0),
+            nav=payload.get("nav", payload.get("equity")),
         )
 
 
 class PaperOrderStatus(StrEnum):
     CREATED = "CREATED"
+    FILLED = "FILLED"
     CANCELLED = "CANCELLED"
     REJECTED = "REJECTED"
 
@@ -546,6 +572,112 @@ class PaperOrder:
             current_position_pct=payload.get("current_position_pct"),
             max_position_pct=payload.get("max_position_pct", 0.0),
             rationale=payload.get("rationale", "legacy_paper_order"),
+        )
+
+
+@dataclass(slots=True)
+class PaperFill:
+    fill_id: str
+    order_id: str
+    decision_id: str
+    symbol: str
+    side: str
+    filled_at: datetime
+    quantity: float
+    market_price: float
+    fill_price: float
+    gross_value: float
+    fee: float
+    fee_bps: float
+    slippage_bps: float
+    net_cash_change: float
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        order_id: str,
+        symbol: str,
+        side: str,
+        quantity: float,
+        fill_price: float,
+    ) -> str:
+        return _stable_artifact_id(
+            "paper-fill",
+            {
+                "order_id": order_id,
+                "symbol": symbol,
+                "side": side,
+                "quantity": round(quantity, 12),
+                "fill_price": round(fill_price, 12),
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["filled_at"] = self.filled_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "PaperFill":
+        return cls(
+            fill_id=payload["fill_id"],
+            order_id=payload["order_id"],
+            decision_id=payload["decision_id"],
+            symbol=payload["symbol"],
+            side=payload["side"],
+            filled_at=datetime.fromisoformat(payload["filled_at"]),
+            quantity=payload.get("quantity", 0.0),
+            market_price=payload.get("market_price", 0.0),
+            fill_price=payload.get("fill_price", 0.0),
+            gross_value=payload.get("gross_value", 0.0),
+            fee=payload.get("fee", 0.0),
+            fee_bps=payload.get("fee_bps", 0.0),
+            slippage_bps=payload.get("slippage_bps", 0.0),
+            net_cash_change=payload.get("net_cash_change", 0.0),
+        )
+
+
+@dataclass(slots=True)
+class EquityCurvePoint:
+    point_id: str
+    created_at: datetime
+    equity: float
+    cash: float
+    realized_pnl: float
+    unrealized_pnl: float
+    gross_exposure_pct: float
+    net_exposure_pct: float
+    max_drawdown_pct: float | None
+
+    @classmethod
+    def build_id(cls, *, created_at: datetime, equity: float, cash: float) -> str:
+        return _stable_artifact_id(
+            "equity",
+            {
+                "created_at": created_at.isoformat(),
+                "equity": round(equity, 8),
+                "cash": round(cash, 8),
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "EquityCurvePoint":
+        return cls(
+            point_id=payload["point_id"],
+            created_at=datetime.fromisoformat(payload["created_at"]),
+            equity=payload.get("equity", 0.0),
+            cash=payload.get("cash", 0.0),
+            realized_pnl=payload.get("realized_pnl", 0.0),
+            unrealized_pnl=payload.get("unrealized_pnl", 0.0),
+            gross_exposure_pct=payload.get("gross_exposure_pct", 0.0),
+            net_exposure_pct=payload.get("net_exposure_pct", 0.0),
+            max_drawdown_pct=payload.get("max_drawdown_pct"),
         )
 
 

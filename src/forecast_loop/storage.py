@@ -10,6 +10,7 @@ from forecast_loop.models import (
     EvaluationSummary,
     Forecast,
     ForecastScore,
+    MarketCandleRecord,
     PaperFill,
     PaperOrder,
     PaperPortfolioSnapshot,
@@ -23,6 +24,10 @@ from forecast_loop.models import (
 
 
 class ArtifactRepository(Protocol):
+    def save_market_candle(self, candle: MarketCandleRecord) -> None: ...
+
+    def load_market_candles(self) -> list[MarketCandleRecord]: ...
+
     def save_forecast(self, forecast: Forecast) -> None: ...
 
     def load_forecasts(self) -> list[Forecast]: ...
@@ -90,6 +95,7 @@ class JsonFileRepository:
     def __init__(self, root: Path | str) -> None:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
+        self.market_candles_path = self.root / "market_candles.jsonl"
         self.forecasts_path = self.root / "forecasts.jsonl"
         self.scores_path = self.root / "scores.jsonl"
         self.reviews_path = self.root / "reviews.jsonl"
@@ -104,6 +110,16 @@ class JsonFileRepository:
         self.risk_snapshots_path = self.root / "risk_snapshots.jsonl"
         self.provider_runs_path = self.root / "provider_runs.jsonl"
         self.repair_requests_path = self.root / "repair_requests.jsonl"
+
+    def save_market_candle(self, candle: MarketCandleRecord) -> None:
+        self._append_unique(
+            self.market_candles_path,
+            candle.to_dict(),
+            identity_key="candle_id",
+        )
+
+    def load_market_candles(self) -> list[MarketCandleRecord]:
+        return self._load_lines(self.market_candles_path, MarketCandleRecord.from_dict)
 
     def save_forecast(self, forecast: Forecast) -> None:
         forecasts = self.load_forecasts()

@@ -52,6 +52,18 @@ This version intentionally excludes:
 - notifications / Telegram
 - full scheduler or autonomous repair daemon orchestration
 
+## Development Environment And Agent Rules
+
+Portable development rules are versioned in this repo:
+
+- `AGENTS.md`: Codex collaboration rules, review rules, routing rules, and role catalog
+- `docs/roles/`: role definitions for controller, fixer, verifier, reviewer, UI, data, replay, infra, and related work
+- `docs/development-environment.md`: Windows/Codex setup, verification commands, ignored local runtime state, and automation boundaries
+- `docs/reviews/`: archived review findings and final reviewer outcomes
+
+Machine-local runtime state is intentionally not committed. This includes
+`.codex/`, `paper_storage/`, screenshots, caches, and generated sample runs.
+
 ## M1 Strategy Decision Contract
 
 The new decision artifact answers the operator question:

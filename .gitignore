@@ -1,6 +1,10 @@
 __pycache__/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 *.pyc
+.coverage
+htmlcov/
 
 debug_resolve_copy/
 output/
@@ -12,3 +16,5 @@ verify_public_run/
 
 .venv/
 venv/
+
+.codex/

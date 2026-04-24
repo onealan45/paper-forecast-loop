@@ -60,7 +60,7 @@ output is a compact operator view.
 
 ## Deferred
 
-- provider audit runs;
+- provider audit runs, deferred to M3B;
 - deterministic historical candle storage;
 - ETF/stock CSV or public provider prototype;
 - macro event model;

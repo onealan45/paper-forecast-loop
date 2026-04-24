@@ -15,6 +15,7 @@ from forecast_loop.maintenance import repair_storage
 from forecast_loop.models import StrategyDecision
 from forecast_loop.orders import create_paper_order_from_decision
 from forecast_loop.pipeline import ForecastingLoop
+from forecast_loop.provider_audit import AuditedMarketDataProvider
 from forecast_loop.portfolio import create_portfolio_snapshot, fill_paper_order, save_portfolio_mark
 from forecast_loop.providers import CoinGeckoMarketDataProvider, build_sample_provider
 from forecast_loop.replay import ReplayRunner
@@ -159,8 +160,12 @@ def main(argv: list[str] | None = None) -> int:
 
 def _run_once(args) -> int:
     now = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
-    provider = _build_data_provider(args.provider, now, args.symbol)
     repository = JsonFileRepository(args.storage_dir)
+    provider = AuditedMarketDataProvider(
+        provider=_build_data_provider(args.provider, now, args.symbol),
+        provider_name=args.provider,
+        repository=repository,
+    )
     try:
         loop = ForecastingLoop(
             config=LoopConfig(

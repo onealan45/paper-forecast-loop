@@ -17,6 +17,7 @@ from forecast_loop.models import (
     PaperOrder,
     PaperPortfolioSnapshot,
     Proposal,
+    ProviderRun,
     RepairRequest,
     RiskSnapshot,
     Review,
@@ -50,6 +51,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("portfolio_snapshots", "portfolio_snapshots.jsonl", "snapshot_id", PaperPortfolioSnapshot.from_dict),
     ArtifactSpec("equity_curve", "equity_curve.jsonl", "point_id", EquityCurvePoint.from_dict),
     ArtifactSpec("risk_snapshots", "risk_snapshots.jsonl", "risk_id", RiskSnapshot.from_dict),
+    ArtifactSpec("provider_runs", "provider_runs.jsonl", "provider_run_id", ProviderRun.from_dict),
     ArtifactSpec("repair_requests", "repair_requests.jsonl", "repair_request_id", RepairRequest.from_dict),
 )
 _SPEC_BY_TYPE = {spec.artifact_type: spec for spec in ARTIFACT_SPECS}
@@ -195,6 +197,12 @@ class SQLiteRepository:
     def load_risk_snapshots(self) -> list[RiskSnapshot]:
         return self._load("risk_snapshots", RiskSnapshot.from_dict)
 
+    def save_provider_run(self, provider_run: ProviderRun) -> None:
+        self._save_unique("provider_runs", provider_run.provider_run_id, provider_run.to_dict())
+
+    def load_provider_runs(self) -> list[ProviderRun]:
+        return self._load("provider_runs", ProviderRun.from_dict)
+
     def save_repair_request(self, repair_request: RepairRequest) -> None:
         self._save_unique("repair_requests", repair_request.repair_request_id, repair_request.to_dict())
 
@@ -302,6 +310,8 @@ def migrate_jsonl_to_sqlite(storage_dir: Path | str, db_path: Path | str | None 
         sqlite_repository.save_equity_curve_point(point)
     for snapshot in json_repository.load_risk_snapshots():
         sqlite_repository.save_risk_snapshot(snapshot)
+    for provider_run in json_repository.load_provider_runs():
+        sqlite_repository.save_provider_run(provider_run)
     for repair_request in json_repository.load_repair_requests():
         sqlite_repository.save_repair_request(repair_request)
 

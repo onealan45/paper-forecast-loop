@@ -15,6 +15,23 @@ def _deserialize_datetime(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value) if value is not None else None
 
 
+def _require_aware_datetime(payload: dict, key: str) -> datetime:
+    if key not in payload or payload[key] in (None, ""):
+        raise ValueError(f"missing required datetime field: {key}")
+    value = _deserialize_datetime(payload[key])
+    if value is None:
+        raise ValueError(f"missing required datetime field: {key}")
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        raise ValueError(f"datetime field must include timezone: {key}")
+    return value
+
+
+def _require_string(payload: dict, key: str) -> str:
+    if key not in payload or not isinstance(payload[key], str) or not payload[key]:
+        raise ValueError(f"missing required string field: {key}")
+    return payload[key]
+
+
 def _evaluation_summary_identity(
     forecast_ids: list[str],
     scored_forecast_ids: list[str],
@@ -749,6 +766,77 @@ class RiskSnapshot:
             findings=payload.get("findings", []),
             recommended_action=payload.get("recommended_action", payload.get("status", "OK")),
             decision_basis=payload.get("decision_basis", "legacy_risk_snapshot"),
+        )
+
+
+@dataclass(slots=True)
+class ProviderRun:
+    provider_run_id: str
+    created_at: datetime
+    provider: str
+    symbol: str
+    operation: str
+    status: str
+    started_at: datetime
+    completed_at: datetime
+    candle_count: int
+    data_start: datetime | None
+    data_end: datetime | None
+    schema_version: str
+    error_type: str | None = None
+    error_message: str | None = None
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        provider: str,
+        symbol: str,
+        operation: str,
+        started_at: datetime,
+        completed_at: datetime,
+        status: str,
+    ) -> str:
+        return _stable_artifact_id(
+            "provider-run",
+            {
+                "provider": provider,
+                "symbol": symbol,
+                "operation": operation,
+                "started_at": started_at.isoformat(),
+                "completed_at": completed_at.isoformat(),
+                "status": status,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        for key in ("created_at", "started_at", "completed_at", "data_start", "data_end"):
+            payload[key] = _serialize_datetime(payload[key])
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "ProviderRun":
+        status = _require_string(payload, "status")
+        if status not in {"success", "empty", "error"}:
+            raise ValueError(f"unsupported provider run status: {status}")
+        if "candle_count" not in payload:
+            raise ValueError("missing required integer field: candle_count")
+        return cls(
+            provider_run_id=_require_string(payload, "provider_run_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            provider=_require_string(payload, "provider"),
+            symbol=_require_string(payload, "symbol"),
+            operation=_require_string(payload, "operation"),
+            status=status,
+            started_at=_require_aware_datetime(payload, "started_at"),
+            completed_at=_require_aware_datetime(payload, "completed_at"),
+            candle_count=int(payload["candle_count"]),
+            data_start=_deserialize_datetime(payload.get("data_start")),
+            data_end=_deserialize_datetime(payload.get("data_end")),
+            schema_version=_require_string(payload, "schema_version"),
+            error_type=payload.get("error_type"),
+            error_message=payload.get("error_message"),
         )
 
 

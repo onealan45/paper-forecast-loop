@@ -17,6 +17,7 @@ from forecast_loop.models import (
     HealthFinding,
     PaperPortfolioSnapshot,
     Proposal,
+    ProviderRun,
     RiskSnapshot,
     Review,
     StrategyDecision,
@@ -38,6 +39,7 @@ class DashboardSnapshot:
     latest_baseline_evaluation: BaselineEvaluation | None
     latest_portfolio_snapshot: PaperPortfolioSnapshot | None
     latest_risk_snapshot: RiskSnapshot | None
+    latest_provider_run: ProviderRun | None
     latest_replay_summary: EvaluationSummary | None
     forecast_count: int
     score_count: int
@@ -77,6 +79,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
     baseline_evaluations = repository.load_baseline_evaluations()
     portfolio_snapshots = repository.load_portfolio_snapshots()
     risk_snapshots = repository.load_risk_snapshots()
+    provider_runs = repository.load_provider_runs()
     replay_summaries = repository.load_evaluation_summaries()
     latest_forecast = forecasts[-1] if forecasts else None
     latest_review = reviews[-1] if reviews else None
@@ -109,6 +112,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         latest_baseline_evaluation=baseline_evaluations[-1] if baseline_evaluations else None,
         latest_portfolio_snapshot=portfolio_snapshots[-1] if portfolio_snapshots else None,
         latest_risk_snapshot=risk_snapshots[-1] if risk_snapshots else None,
+        latest_provider_run=provider_runs[-1] if provider_runs else None,
         latest_replay_summary=latest_replay_summary,
         forecast_count=len(forecasts),
         score_count=len(scores),
@@ -507,6 +511,7 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
           <li><a href="#strategy">明日決策</a></li>
           <li><a href="#summary">操作摘要</a></li>
           <li><a href="#portfolio">投資組合與風險</a></li>
+          <li><a href="#provider">資料來源健康</a></li>
           <li><a href="#forecast">目前預測</a></li>
           <li><a href="#decision">本輪判讀與建議</a></li>
           <li><a href="#evidence">證據快照</a></li>
@@ -524,6 +529,9 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
       </section>
       <section class="panel hero" id="portfolio">
         {render_portfolio_risk_panel(snapshot)}
+      </section>
+      <section class="panel" id="provider">
+        {render_provider_panel(snapshot)}
       </section>
       <section class="panel hero primary-card" id="forecast">
         {render_forecast_panel(latest_forecast)}
@@ -723,6 +731,40 @@ def render_portfolio_risk_panel(snapshot: DashboardSnapshot) -> str:
           <h3>Drawdown Gate</h3>
           <p class="micro-copy">{escape(_risk_threshold_copy(risk))}</p>
         </div>
+      </div>
+    """
+
+
+def render_provider_panel(snapshot: DashboardSnapshot) -> str:
+    provider_run = snapshot.latest_provider_run
+    if provider_run is None:
+        return """
+      <div class="kicker">資料來源健康</div>
+      <h2>Provider Audit</h2>
+      <p class="lead">目前還沒有 provider run audit。下一次 run-once 會記錄資料來源讀取狀態。</p>
+      <p class="empty">沒有 provider_runs.jsonl。</p>
+    """
+
+    status_class = "warn" if provider_run.status in {"error", "empty"} else "ok"
+    data_window = (
+        "無"
+        if provider_run.data_start is None or provider_run.data_end is None
+        else _format_window_label(provider_run.data_start, provider_run.data_end)
+    )
+    error_copy = (
+        "沒有 provider error。"
+        if provider_run.error_type is None
+        else f"{provider_run.error_type}: {provider_run.error_message}"
+    )
+    return f"""
+      <div class="kicker">資料來源健康</div>
+      <h2>Provider Audit</h2>
+      <p class="lead">這裡顯示最近一次資料來源讀取，不代表交易所或 broker 狀態。</p>
+      <div class="primary-grid">
+        <div class="summary-card"><div class="summary-label">Provider</div><div class="summary-value">{escape(provider_run.provider)}</div><div class="summary-copy">{escape(provider_run.symbol)} / {escape(provider_run.operation)}</div></div>
+        <div class="summary-card"><div class="summary-label">狀態</div><div class="summary-value"><span class="tag {status_class}">{escape(_display_provider_status(provider_run.status))}</span></div><div class="summary-copy">{escape(error_copy)}</div></div>
+        <div class="summary-card"><div class="summary-label">資料筆數</div><div class="summary-value">{provider_run.candle_count}</div><div class="summary-copy">market candle rows observed by this provider call。</div></div>
+        <div class="summary-card"><div class="summary-label">資料視窗</div><div class="summary-value">{escape(data_window)}</div><div class="summary-copy">schema {escape(provider_run.schema_version)}；完成 {escape(provider_run.completed_at.isoformat())}</div></div>
       </div>
     """
 
@@ -1157,6 +1199,15 @@ def _display_risk_status(status: str) -> str:
         "OK": "正常（OK）",
         "REDUCE_RISK": "降低風險（REDUCE_RISK）",
         "STOP_NEW_ENTRIES": "停止新進場（STOP_NEW_ENTRIES）",
+    }
+    return mapping.get(status, status)
+
+
+def _display_provider_status(status: str) -> str:
+    mapping = {
+        "success": "正常（success）",
+        "empty": "空資料（empty）",
+        "error": "失敗（error）",
     }
     return mapping.get(status, status)
 

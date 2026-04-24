@@ -50,6 +50,7 @@ This version intentionally includes:
     - `risk_snapshots.jsonl`
     - `provider_runs.jsonl`
     - `repair_requests.jsonl`
+    - `research_datasets.jsonl`
 - CLI execution via:
   - `run-once`
   - `replay-range`
@@ -75,6 +76,7 @@ This version intentionally includes:
   - `market-calendar`
   - `import-macro-events`
   - `macro-calendar`
+  - `build-research-dataset`
 
 This version intentionally excludes:
 
@@ -628,6 +630,16 @@ Inspect the imported macro calendar:
 python run_forecast_loop.py macro-calendar --storage-dir .\paper_storage\manual-macro --start 2026-04-01T00:00:00+00:00 --end 2026-04-30T23:59:00+00:00 --event-type CPI --region US
 ```
 
+Build a leakage-checked research dataset from scored forecasts:
+
+```powershell
+python run_forecast_loop.py build-research-dataset --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD
+```
+
+The dataset builder fails closed if any feature timestamp is after the forecast
+decision timestamp, or if any label timestamp is not after the decision
+timestamp.
+
 Render a dashboard for an existing storage directory:
 
 ```powershell
@@ -686,3 +698,4 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - US ETF/stock support is fixture-only; no live or paid data provider is wired
 - Taiwan ETF calendar/provider support remains deferred
 - macro events are calendar artifacts only; they do not yet influence decisions
+- research datasets are artifact builders only; no model training or optimizer is included yet

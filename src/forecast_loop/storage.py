@@ -18,6 +18,7 @@ from forecast_loop.models import (
     Proposal,
     ProviderRun,
     RepairRequest,
+    ResearchDataset,
     RiskSnapshot,
     Review,
     StrategyDecision,
@@ -95,6 +96,10 @@ class ArtifactRepository(Protocol):
 
     def load_repair_requests(self) -> list[RepairRequest]: ...
 
+    def save_research_dataset(self, dataset: ResearchDataset) -> None: ...
+
+    def load_research_datasets(self) -> list[ResearchDataset]: ...
+
 
 class JsonFileRepository:
     def __init__(self, root: Path | str) -> None:
@@ -116,6 +121,7 @@ class JsonFileRepository:
         self.risk_snapshots_path = self.root / "risk_snapshots.jsonl"
         self.provider_runs_path = self.root / "provider_runs.jsonl"
         self.repair_requests_path = self.root / "repair_requests.jsonl"
+        self.research_datasets_path = self.root / "research_datasets.jsonl"
 
     def save_market_candle(self, candle: MarketCandleRecord) -> None:
         self._append_unique(
@@ -292,6 +298,16 @@ class JsonFileRepository:
 
     def load_repair_requests(self) -> list[RepairRequest]:
         return self._load_lines(self.repair_requests_path, RepairRequest.from_dict)
+
+    def save_research_dataset(self, dataset: ResearchDataset) -> None:
+        self._append_unique(
+            self.research_datasets_path,
+            dataset.to_dict(),
+            identity_key="dataset_id",
+        )
+
+    def load_research_datasets(self) -> list[ResearchDataset]:
+        return self._load_lines(self.research_datasets_path, ResearchDataset.from_dict)
 
     def _append(self, path: Path, payload: dict) -> None:
         with path.open("a", encoding="utf-8") as handle:

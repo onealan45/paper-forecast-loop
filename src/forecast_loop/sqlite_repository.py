@@ -21,6 +21,7 @@ from forecast_loop.models import (
     Proposal,
     ProviderRun,
     RepairRequest,
+    ResearchDataset,
     RiskSnapshot,
     Review,
     StrategyDecision,
@@ -57,6 +58,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("risk_snapshots", "risk_snapshots.jsonl", "risk_id", RiskSnapshot.from_dict),
     ArtifactSpec("provider_runs", "provider_runs.jsonl", "provider_run_id", ProviderRun.from_dict),
     ArtifactSpec("repair_requests", "repair_requests.jsonl", "repair_request_id", RepairRequest.from_dict),
+    ArtifactSpec("research_datasets", "research_datasets.jsonl", "dataset_id", ResearchDataset.from_dict),
 )
 _SPEC_BY_TYPE = {spec.artifact_type: spec for spec in ARTIFACT_SPECS}
 
@@ -225,6 +227,12 @@ class SQLiteRepository:
     def load_repair_requests(self) -> list[RepairRequest]:
         return self._load("repair_requests", RepairRequest.from_dict)
 
+    def save_research_dataset(self, dataset: ResearchDataset) -> None:
+        self._save_unique("research_datasets", dataset.dataset_id, dataset.to_dict())
+
+    def load_research_datasets(self) -> list[ResearchDataset]:
+        return self._load("research_datasets", ResearchDataset.from_dict)
+
     def artifact_counts(self) -> dict[str, int]:
         with self._connect() as connection:
             rows = connection.execute(
@@ -334,6 +342,8 @@ def migrate_jsonl_to_sqlite(storage_dir: Path | str, db_path: Path | str | None 
         sqlite_repository.save_provider_run(provider_run)
     for repair_request in json_repository.load_repair_requests():
         sqlite_repository.save_repair_request(repair_request)
+    for dataset in json_repository.load_research_datasets():
+        sqlite_repository.save_research_dataset(dataset)
 
     after_counts = sqlite_repository.artifact_counts()
     return {

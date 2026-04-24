@@ -625,6 +625,7 @@ class BaselineEvaluation:
     forecast_ids: list[str]
     score_ids: list[str]
     decision_basis: str
+    baseline_results: list[dict[str, object]] = field(default_factory=list)
 
     @classmethod
     def build_id(
@@ -667,6 +668,7 @@ class BaselineEvaluation:
             forecast_ids=payload.get("forecast_ids", []),
             score_ids=payload.get("score_ids", []),
             decision_basis=payload.get("decision_basis", "legacy_baseline_evaluation"),
+            baseline_results=list(payload.get("baseline_results", [])),
         )
 
 

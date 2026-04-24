@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime
+from hashlib import sha1
 
 from forecast_loop.models import BaselineEvaluation, Forecast, ForecastScore
+
+
+REGIME_UNIVERSE = ("trend_up", "trend_down", "range_bound", "volatile_bull", "volatile_bear")
+BULLISH_REGIMES = {"trend_up", "volatile_bull"}
+BEARISH_REGIMES = {"trend_down", "volatile_bear"}
 
 
 def build_baseline_evaluation(
@@ -26,6 +32,7 @@ def build_baseline_evaluation(
     directional_accuracy = _average([score.score for score in scoped_scores])
     recent_score = _average([score.score for score in scoped_scores[-recent_window:]])
     baseline_accuracy = _naive_persistence_accuracy(scoped_scores)
+    baseline_results = build_baseline_suite(symbol=symbol, scores=scoped_scores)
     model_edge = (
         directional_accuracy - baseline_accuracy
         if directional_accuracy is not None and baseline_accuracy is not None
@@ -59,9 +66,84 @@ def build_baseline_evaluation(
         score_ids=score_ids,
         decision_basis=(
             "model directional accuracy compared with naive persistence baseline "
-            f"over {sample_size} scored forecasts"
+            f"over {sample_size} scored forecasts; expanded suite recorded for research audit"
         ),
+        baseline_results=baseline_results,
     )
+
+
+def build_baseline_suite(*, symbol: str, scores: list[ForecastScore]) -> list[dict[str, object]]:
+    scoped_scores = sorted(scores, key=lambda item: item.scored_at)
+    actuals = [score.actual_regime for score in scoped_scores]
+    return [
+        _evaluate_baseline(
+            name="naive_persistence",
+            scores=scoped_scores,
+            predictions=[None, *actuals[:-1]] if actuals else [],
+            decision_basis="predict the next actual regime equals the previous actual regime",
+        ),
+        _evaluate_baseline(
+            name="no_trade_cash",
+            scores=scoped_scores,
+            predictions=[None for _ in scoped_scores],
+            decision_basis="cash/no-trade baseline records zero directional exposure",
+        ),
+        _evaluate_baseline(
+            name="buy_and_hold",
+            scores=scoped_scores,
+            predictions=["trend_up" for _ in scoped_scores],
+            decision_basis="always hold long exposure; represented as trend_up regime prediction",
+        ),
+        _evaluate_baseline(
+            name="moving_average_trend",
+            scores=scoped_scores,
+            predictions=_rolling_direction_predictions(actuals, window=3),
+            decision_basis="predict direction from the prior 3 scored actual regimes",
+        ),
+        _evaluate_baseline(
+            name="momentum_7d",
+            scores=scoped_scores,
+            predictions=_rolling_direction_predictions(actuals, window=7),
+            decision_basis="predict direction from the prior 7 scored actual regimes",
+        ),
+        _evaluate_baseline(
+            name="momentum_14d",
+            scores=scoped_scores,
+            predictions=_rolling_direction_predictions(actuals, window=14),
+            decision_basis="predict direction from the prior 14 scored actual regimes",
+        ),
+        _evaluate_baseline(
+            name="deterministic_random",
+            scores=scoped_scores,
+            predictions=[_deterministic_random_regime(symbol, score) for score in scoped_scores],
+            decision_basis="deterministic random regime baseline using stable score identifiers",
+        ),
+    ]
+
+
+def _evaluate_baseline(
+    *,
+    name: str,
+    scores: list[ForecastScore],
+    predictions: list[str | None],
+    decision_basis: str,
+) -> dict[str, object]:
+    evaluated = [
+        (prediction, score)
+        for prediction, score in zip(predictions, scores, strict=True)
+        if prediction is not None
+    ]
+    hit_count = sum(1 for prediction, score in evaluated if prediction == score.actual_regime)
+    evaluated_count = len(evaluated)
+    accuracy = hit_count / evaluated_count if evaluated_count else None
+    return {
+        "baseline_name": name,
+        "accuracy": accuracy,
+        "evaluated_count": evaluated_count,
+        "hit_count": hit_count,
+        "sample_size": len(scores),
+        "decision_basis": decision_basis,
+    }
 
 
 def _average(values: list[float]) -> float | None:
@@ -82,6 +164,25 @@ def _naive_persistence_accuracy(scores: list[ForecastScore]) -> float | None:
         total += 1
         previous_actual = score.actual_regime
     return hits / total if total else None
+
+
+def _rolling_direction_predictions(actuals: list[str], *, window: int) -> list[str | None]:
+    predictions: list[str | None] = []
+    for index in range(len(actuals)):
+        history = actuals[max(0, index - window) : index]
+        predictions.append(_directional_regime(history) if history else None)
+    return predictions
+
+
+def _directional_regime(actuals: list[str]) -> str:
+    bullish_count = sum(1 for actual in actuals if actual in BULLISH_REGIMES)
+    bearish_count = sum(1 for actual in actuals if actual in BEARISH_REGIMES)
+    return "trend_up" if bullish_count >= bearish_count else "trend_down"
+
+
+def _deterministic_random_regime(symbol: str, score: ForecastScore) -> str:
+    digest = sha1(f"{symbol}:{score.forecast_id}:{score.score_id}:deterministic-random".encode("utf-8")).hexdigest()
+    return REGIME_UNIVERSE[int(digest[:8], 16) % len(REGIME_UNIVERSE)]
 
 
 def _evidence_grade(

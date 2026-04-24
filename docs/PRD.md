@@ -283,6 +283,7 @@ Current practical V1 path:
 - M3E adds fixture-based macro event storage and calendar inspection
 - M3F adds independent per-symbol strategy decisions for registered assets
 - M4A adds leakage-checked research dataset artifacts built from scored forecasts
+- M4B records expanded baseline suite results for research audit
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation
@@ -324,6 +325,8 @@ V1 MVP should include:
 - macro event artifacts for CPI, PCE, FOMC, GDP, NFP, and unemployment
 - independent per-symbol decision generation through `decide-all`
 - research dataset artifacts with no-lookahead leakage checks
+- expanded baseline suite covering no-trade/cash, buy-and-hold, moving-average,
+  momentum, and deterministic-random baselines
 - health-check output
 - Codex repair request artifacts
 - minimal CLI

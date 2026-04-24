@@ -132,13 +132,24 @@ STOP_NEW_ENTRIES instead of fake directional certainty.
 
 ## Baseline And Evidence Gates
 
-M1 compares model quality against a naive persistence baseline:
+The decision gate still compares model quality against the naive persistence
+baseline for backward-compatible M1 behavior:
 
 - naive persistence baseline: next actual regime equals the previous actual regime
 - model directional accuracy: average realized forecast score
 - model edge: model accuracy minus baseline accuracy
 - recent score: recent rolling model score
 - evidence grade: `A`, `B`, `C`, `D`, or `INSUFFICIENT`
+
+M4B also records an expanded baseline suite inside `baseline_evaluations.jsonl`
+for research audit:
+
+- no-trade / cash
+- buy-and-hold
+- moving-average trend
+- momentum 7d
+- momentum 14d
+- deterministic random
 
 Decision gates:
 

@@ -1,13 +1,17 @@
 # Paper Forecast Loop
 
-Paper-only public-data forecasting and strategy-research loop for `BTC-USD`.
+Paper-only public-data strategy research robot for `BTC-USD`.
 
-This repository is intentionally narrow. The goal of this milestone is not feature breadth. The goal is the first **trustworthy forecasting research loop**:
+This repository is intentionally narrow. The M1 goal is not feature breadth. The
+goal is the first **auditable strategy research robot**:
 
 - create a forecast on a reproducible hourly boundary
 - wait for the target window to complete
 - only score when provider coverage is complete
 - generate review and proposal artifacts with provenance
+- compare prediction quality against baselines
+- produce a paper-only strategy decision for the next horizon
+- create Codex repair requests when health checks find blocking issues
 - keep reruns safe and idempotent
 
 ## Current Scope
@@ -24,11 +28,17 @@ This version intentionally includes only:
   - `scores.jsonl`
   - `reviews.jsonl`
   - `proposals.jsonl`
+  - `baseline_evaluations.jsonl`
+  - `portfolio_snapshots.jsonl`
+  - `strategy_decisions.jsonl`
+  - `repair_requests.jsonl`
 - CLI execution via:
   - `run-once`
   - `replay-range`
   - `render-dashboard`
   - `repair-storage`
+  - `decide`
+  - `health-check`
 
 This version intentionally excludes:
 
@@ -36,9 +46,64 @@ This version intentionally excludes:
 - live trading
 - real capital
 - multi-asset support
-- portfolio / NAV / PnL accounting
+- live broker / exchange adapters
+- real orders
+- portfolio / NAV / PnL accounting beyond a minimal paper snapshot
 - notifications / Telegram
-- full scheduler or repair daemon orchestration
+- full scheduler or autonomous repair daemon orchestration
+
+## M1 Strategy Decision Contract
+
+The new decision artifact answers the operator question:
+
+> What should the paper strategy do for the next 24 hours?
+
+Allowed actions:
+
+- `BUY`
+- `SELL`
+- `HOLD`
+- `REDUCE_RISK`
+- `STOP_NEW_ENTRIES`
+
+Each `strategy_decisions.jsonl` row records:
+
+- action, symbol, horizon, timestamp
+- confidence, evidence grade, risk level
+- current and recommended paper position percentage
+- tradeable/blocking status
+- invalidation conditions
+- human-readable reason summary
+- linked forecast, score, review, and baseline ids
+
+BUY/SELL requires enough evidence and a positive edge over baseline. Weak,
+missing, stale, or unhealthy evidence must produce HOLD, REDUCE_RISK, or
+STOP_NEW_ENTRIES instead of fake directional certainty.
+
+## Baseline And Evidence Gates
+
+M1 compares model quality against a naive persistence baseline:
+
+- naive persistence baseline: next actual regime equals the previous actual regime
+- model directional accuracy: average realized forecast score
+- model edge: model accuracy minus baseline accuracy
+- recent score: recent rolling model score
+- evidence grade: `A`, `B`, `C`, `D`, or `INSUFFICIENT`
+
+Decision gates:
+
+- sample size below 2 -> `INSUFFICIENT`
+- no positive edge over baseline -> BUY/SELL blocked
+- poor recent score -> `REDUCE_RISK`
+- missing/stale forecast or blocking health finding -> `STOP_NEW_ENTRIES`
+
+## Paper Broker Boundary
+
+M1 includes a broker interface only to keep future integration boundaries clean.
+The only implementation is `PaperBrokerAdapter`.
+
+Live broker or exchange modes are intentionally unavailable. There is no API key
+handling and no real order path in M1.
 
 ## Forecast Contract
 
@@ -133,6 +198,35 @@ Each proposal records:
 - decision basis
 - rationale for generation
 
+### Strategy Decision Artifact
+
+Each decision records:
+
+- paper-only action recommendation
+- evidence grade and confidence
+- baseline ids used for quality gating
+- current paper portfolio context
+- invalidation conditions
+- whether directional action is blocked and why
+
+### Repair Request Artifact
+
+Each repair request records:
+
+- observed health failure
+- exact reproduction command
+- expected behavior
+- affected artifacts
+- recommended first tests
+- paper-only safety boundary
+- acceptance criteria
+
+The health checker also writes a Codex-ready prompt under:
+
+```text
+.codex/repair_requests/pending/<repair_request_id>.md
+```
+
 ## Idempotency and Rerun Safety
 
 This version keeps JSONL storage, but rerun safety is enforced:
@@ -141,6 +235,8 @@ This version keeps JSONL storage, but rerun safety is enforced:
 - the same forecast cannot be scored twice
 - the same review basis does not create duplicate reviews
 - the same review does not create duplicate proposals
+- the same baseline evidence does not create duplicate baseline evaluations
+- the same decision basis does not create duplicate strategy decisions
 - rerunning `run-once` in the same hour does not keep creating semantically duplicate artifacts
 
 ## Replay Contract
@@ -187,6 +283,8 @@ This repository now includes a minimal read-only inspector layer.
 
 Purpose:
 
+- inspect the latest paper-only strategy decision
+- inspect current health / repair status
 - inspect the current system state without reading JSONL files manually
 - inspect the latest forecast / score / review / proposal
 - inspect the latest replay summary and raw metadata
@@ -199,6 +297,8 @@ Current form:
 - no live controls
 - no trading actions
 - first screen emphasizes:
+  - tomorrow's strategy decision
+  - health / repair status
   - operator summary
   - current forecast
   - historical replay context
@@ -222,6 +322,10 @@ It only reads:
 - `reviews.jsonl`
 - `proposals.jsonl`
 - `evaluation_summaries.jsonl`
+- `baseline_evaluations.jsonl`
+- `portfolio_snapshots.jsonl`
+- `strategy_decisions.jsonl`
+- `repair_requests.jsonl`
 - `last_run_meta.json`
 - `last_replay_meta.json`
 
@@ -257,6 +361,9 @@ The loop degrades conservatively:
 - if provider coverage exists but required hourly boundaries are missing, the forecast becomes `unscorable`
 - if candles are empty or insufficient for classification, the loop does not crash into scoring; it leaves an auditable terminal state instead
 - review and proposal generation only happen when the current run produced valid scores
+- if evidence is weak, the decision engine blocks BUY/SELL
+- if storage or artifact health is blocking, the decision engine emits `STOP_NEW_ENTRIES`
+- health-check writes repair requests instead of relying on silent failures
 - the dashboard degrades read-only: if no artifacts exist yet, it renders explicit empty states instead of failing
 
 ## Local Commands
@@ -277,6 +384,24 @@ Run one public-data cycle:
 
 ```powershell
 python run_forecast_loop.py run-once --provider coingecko --symbol BTC-USD --storage-dir .\paper_storage\manual-coingecko
+```
+
+Run a cycle and produce a strategy decision:
+
+```powershell
+python run_forecast_loop.py run-once --provider coingecko --symbol BTC-USD --storage-dir .\paper_storage\manual-coingecko --also-decide
+```
+
+Generate a paper-only strategy decision from existing artifacts:
+
+```powershell
+python run_forecast_loop.py decide --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD --horizon-hours 24
+```
+
+Run a health audit and create a Codex repair request if blocking issues exist:
+
+```powershell
+python run_forecast_loop.py health-check --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD
 ```
 
 Run one deterministic sample replay:
@@ -306,10 +431,12 @@ status. Treat that report as a point-in-time audit record, not a live monitor.
 
 This milestone improves correctness and auditability, but it does not yet solve everything:
 
+- SQLite is recommended as the future canonical store, but this PR keeps JSONL compatibility active
 - regime classification is still intentionally simple
 - only `BTC-USD` is supported
-- there is no portfolio or strategy-performance layer
+- paper portfolio support is a minimal snapshot, not a full ledger
+- there is no paper order ledger or PnL engine yet
 - proposal logic is still heuristic and conservative
-- there is no explicit repair daemon or orchestration state machine in this repo
+- health-check creates repair requests, but there is no autonomous repair daemon in this repo
 - the inspector is currently static HTML, not a live operator app
 - replay still writes summary metadata into the base storage directory instead of a more formal run registry or database

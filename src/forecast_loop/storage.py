@@ -3,7 +3,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from forecast_loop.models import EvaluationSummary, Forecast, ForecastScore, Proposal, Review
+from forecast_loop.models import (
+    BaselineEvaluation,
+    EvaluationSummary,
+    Forecast,
+    ForecastScore,
+    PaperPortfolioSnapshot,
+    Proposal,
+    RepairRequest,
+    Review,
+    StrategyDecision,
+)
 
 
 class JsonFileRepository:
@@ -15,6 +25,10 @@ class JsonFileRepository:
         self.reviews_path = self.root / "reviews.jsonl"
         self.proposals_path = self.root / "proposals.jsonl"
         self.evaluation_summaries_path = self.root / "evaluation_summaries.jsonl"
+        self.baseline_evaluations_path = self.root / "baseline_evaluations.jsonl"
+        self.strategy_decisions_path = self.root / "strategy_decisions.jsonl"
+        self.portfolio_snapshots_path = self.root / "portfolio_snapshots.jsonl"
+        self.repair_requests_path = self.root / "repair_requests.jsonl"
 
     def save_forecast(self, forecast: Forecast) -> None:
         forecasts = self.load_forecasts()
@@ -77,9 +91,62 @@ class JsonFileRepository:
             deduped.append(summary)
         return deduped
 
+    def save_baseline_evaluation(self, baseline: BaselineEvaluation) -> None:
+        self._append_unique(
+            self.baseline_evaluations_path,
+            baseline.to_dict(),
+            identity_key="baseline_id",
+        )
+
+    def load_baseline_evaluations(self) -> list[BaselineEvaluation]:
+        return self._load_lines(self.baseline_evaluations_path, BaselineEvaluation.from_dict)
+
+    def save_strategy_decision(self, decision: StrategyDecision) -> None:
+        self._append_unique(
+            self.strategy_decisions_path,
+            decision.to_dict(),
+            identity_key="decision_id",
+        )
+
+    def load_strategy_decisions(self) -> list[StrategyDecision]:
+        return self._load_lines(self.strategy_decisions_path, StrategyDecision.from_dict)
+
+    def save_portfolio_snapshot(self, snapshot: PaperPortfolioSnapshot) -> None:
+        self._append_unique(
+            self.portfolio_snapshots_path,
+            snapshot.to_dict(),
+            identity_key="snapshot_id",
+        )
+
+    def load_portfolio_snapshots(self) -> list[PaperPortfolioSnapshot]:
+        return self._load_lines(self.portfolio_snapshots_path, PaperPortfolioSnapshot.from_dict)
+
+    def save_repair_request(self, repair_request: RepairRequest) -> None:
+        self._append_unique(
+            self.repair_requests_path,
+            repair_request.to_dict(),
+            identity_key="repair_request_id",
+        )
+
+    def load_repair_requests(self) -> list[RepairRequest]:
+        return self._load_lines(self.repair_requests_path, RepairRequest.from_dict)
+
     def _append(self, path: Path, payload: dict) -> None:
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload) + "\n")
+
+    def _append_unique(self, path: Path, payload: dict, *, identity_key: str) -> None:
+        if path.exists():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    existing = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if existing.get(identity_key) == payload.get(identity_key):
+                    return
+        self._append(path, payload)
 
     def _load_lines(self, path: Path, factory) -> list:
         if not path.exists():

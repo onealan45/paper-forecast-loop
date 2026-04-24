@@ -50,6 +50,11 @@ def _evaluation_summary_identity(
     return f"evaluation-summary:{digest}"
 
 
+def _stable_artifact_id(prefix: str, payload: dict) -> str:
+    digest = sha1(json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")).hexdigest()[:16]
+    return f"{prefix}:{digest}"
+
+
 @dataclass(slots=True)
 class MarketCandle:
     timestamp: datetime
@@ -329,6 +334,395 @@ class EvaluationSummary:
             score_ids=sorted(score_ids),
             review_ids=sorted(review_ids),
             proposal_ids=sorted(proposal_ids),
+        )
+
+
+@dataclass(slots=True)
+class BaselineEvaluation:
+    baseline_id: str
+    created_at: datetime
+    symbol: str
+    sample_size: int
+    directional_accuracy: float | None
+    baseline_accuracy: float | None
+    model_edge: float | None
+    recent_score: float | None
+    evidence_grade: str
+    forecast_ids: list[str]
+    score_ids: list[str]
+    decision_basis: str
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        symbol: str,
+        score_ids: list[str],
+        baseline_accuracy: float | None,
+        directional_accuracy: float | None,
+        recent_score: float | None,
+    ) -> str:
+        return _stable_artifact_id(
+            "baseline",
+            {
+                "symbol": symbol,
+                "score_ids": sorted(score_ids),
+                "baseline_accuracy": baseline_accuracy,
+                "directional_accuracy": directional_accuracy,
+                "recent_score": recent_score,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "BaselineEvaluation":
+        return cls(
+            baseline_id=payload["baseline_id"],
+            created_at=datetime.fromisoformat(payload["created_at"]),
+            symbol=payload["symbol"],
+            sample_size=payload["sample_size"],
+            directional_accuracy=payload.get("directional_accuracy"),
+            baseline_accuracy=payload.get("baseline_accuracy"),
+            model_edge=payload.get("model_edge"),
+            recent_score=payload.get("recent_score"),
+            evidence_grade=payload.get("evidence_grade", "INSUFFICIENT"),
+            forecast_ids=payload.get("forecast_ids", []),
+            score_ids=payload.get("score_ids", []),
+            decision_basis=payload.get("decision_basis", "legacy_baseline_evaluation"),
+        )
+
+
+@dataclass(slots=True)
+class PaperPosition:
+    symbol: str
+    quantity: float
+    avg_price: float
+    market_price: float
+    market_value: float
+    unrealized_pnl: float
+    position_pct: float
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "PaperPosition":
+        return cls(
+            symbol=payload["symbol"],
+            quantity=payload.get("quantity", 0.0),
+            avg_price=payload.get("avg_price", 0.0),
+            market_price=payload.get("market_price", 0.0),
+            market_value=payload.get("market_value", 0.0),
+            unrealized_pnl=payload.get("unrealized_pnl", 0.0),
+            position_pct=payload.get("position_pct", 0.0),
+        )
+
+
+@dataclass(slots=True)
+class PaperPortfolioSnapshot:
+    snapshot_id: str
+    created_at: datetime
+    equity: float
+    cash: float
+    gross_exposure_pct: float
+    net_exposure_pct: float
+    max_drawdown_pct: float | None
+    positions: list[PaperPosition]
+
+    @classmethod
+    def empty(cls, *, created_at: datetime, equity: float = 10_000.0) -> "PaperPortfolioSnapshot":
+        snapshot_id = _stable_artifact_id(
+            "portfolio",
+            {"created_at": created_at.isoformat(), "equity": equity, "cash": equity, "positions": []},
+        )
+        return cls(
+            snapshot_id=snapshot_id,
+            created_at=created_at,
+            equity=equity,
+            cash=equity,
+            gross_exposure_pct=0.0,
+            net_exposure_pct=0.0,
+            max_drawdown_pct=None,
+            positions=[],
+        )
+
+    def position_pct_for(self, symbol: str) -> float:
+        for position in self.positions:
+            if position.symbol == symbol:
+                return position.position_pct
+        return 0.0
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        payload["positions"] = [position.to_dict() for position in self.positions]
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "PaperPortfolioSnapshot":
+        return cls(
+            snapshot_id=payload["snapshot_id"],
+            created_at=datetime.fromisoformat(payload["created_at"]),
+            equity=payload.get("equity", 0.0),
+            cash=payload.get("cash", 0.0),
+            gross_exposure_pct=payload.get("gross_exposure_pct", 0.0),
+            net_exposure_pct=payload.get("net_exposure_pct", 0.0),
+            max_drawdown_pct=payload.get("max_drawdown_pct"),
+            positions=[PaperPosition.from_dict(item) for item in payload.get("positions", [])],
+        )
+
+
+@dataclass(slots=True)
+class StrategyDecision:
+    decision_id: str
+    created_at: datetime
+    symbol: str
+    horizon_hours: int
+    action: str
+    confidence: float | None
+    evidence_grade: str
+    risk_level: str
+    tradeable: bool
+    blocked_reason: str | None
+    recommended_position_pct: float | None
+    current_position_pct: float | None
+    max_position_pct: float
+    invalidation_conditions: list[str]
+    reason_summary: str
+    forecast_ids: list[str]
+    score_ids: list[str]
+    review_ids: list[str]
+    baseline_ids: list[str]
+    decision_basis: str
+
+    @classmethod
+    def build_fail_closed(
+        cls,
+        *,
+        symbol: str,
+        horizon_hours: int,
+        created_at: datetime,
+        blocked_reason: str,
+        reason_summary: str,
+        repair_request_id: str | None,
+    ) -> "StrategyDecision":
+        decision_basis = (
+            f"action=STOP_NEW_ENTRIES; evidence_grade=INSUFFICIENT; "
+            f"blocked_reason={blocked_reason}; repair_request_id={repair_request_id or 'none'}"
+        )
+        decision_id = cls.build_id(
+            symbol=symbol,
+            horizon_hours=horizon_hours,
+            action="STOP_NEW_ENTRIES",
+            forecast_ids=[],
+            score_ids=[],
+            review_ids=[],
+            baseline_ids=[],
+            decision_basis=decision_basis,
+        )
+        return cls(
+            decision_id=decision_id,
+            created_at=created_at,
+            symbol=symbol,
+            horizon_hours=horizon_hours,
+            action="STOP_NEW_ENTRIES",
+            confidence=None,
+            evidence_grade="INSUFFICIENT",
+            risk_level="HIGH",
+            tradeable=False,
+            blocked_reason=blocked_reason,
+            recommended_position_pct=0.0,
+            current_position_pct=None,
+            max_position_pct=0.15,
+            invalidation_conditions=[
+                "health-check repair request 已處理完成。",
+                "storage artifacts 可正常讀取且 health-check 回到 healthy。",
+                "重新產生最新 forecast 與 strategy decision。",
+            ],
+            reason_summary=reason_summary,
+            forecast_ids=[],
+            score_ids=[],
+            review_ids=[],
+            baseline_ids=[],
+            decision_basis=decision_basis,
+        )
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        symbol: str,
+        horizon_hours: int,
+        action: str,
+        forecast_ids: list[str],
+        score_ids: list[str],
+        review_ids: list[str],
+        baseline_ids: list[str],
+        decision_basis: str,
+    ) -> str:
+        return _stable_artifact_id(
+            "decision",
+            {
+                "symbol": symbol,
+                "horizon_hours": horizon_hours,
+                "action": action,
+                "forecast_ids": sorted(forecast_ids),
+                "score_ids": sorted(score_ids),
+                "review_ids": sorted(review_ids),
+                "baseline_ids": sorted(baseline_ids),
+                "decision_basis": decision_basis,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "StrategyDecision":
+        return cls(
+            decision_id=payload["decision_id"],
+            created_at=datetime.fromisoformat(payload["created_at"]),
+            symbol=payload["symbol"],
+            horizon_hours=payload.get("horizon_hours", 24),
+            action=payload["action"],
+            confidence=payload.get("confidence"),
+            evidence_grade=payload.get("evidence_grade", "INSUFFICIENT"),
+            risk_level=payload.get("risk_level", "UNKNOWN"),
+            tradeable=payload.get("tradeable", False),
+            blocked_reason=payload.get("blocked_reason"),
+            recommended_position_pct=payload.get("recommended_position_pct"),
+            current_position_pct=payload.get("current_position_pct"),
+            max_position_pct=payload.get("max_position_pct", 0.0),
+            invalidation_conditions=payload.get("invalidation_conditions", []),
+            reason_summary=payload["reason_summary"],
+            forecast_ids=payload.get("forecast_ids", []),
+            score_ids=payload.get("score_ids", []),
+            review_ids=payload.get("review_ids", []),
+            baseline_ids=payload.get("baseline_ids", []),
+            decision_basis=payload.get("decision_basis", "legacy_strategy_decision"),
+        )
+
+
+@dataclass(slots=True)
+class HealthFinding:
+    code: str
+    severity: str
+    message: str
+    artifact_path: str | None = None
+    repair_required: bool = False
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "HealthFinding":
+        return cls(
+            code=payload["code"],
+            severity=payload.get("severity", "warning"),
+            message=payload["message"],
+            artifact_path=payload.get("artifact_path"),
+            repair_required=payload.get("repair_required", False),
+        )
+
+
+@dataclass(slots=True)
+class HealthCheckResult:
+    check_id: str
+    created_at: datetime
+    status: str
+    severity: str
+    repair_required: bool
+    repair_request_id: str | None
+    findings: list[HealthFinding]
+
+    @classmethod
+    def build_id(cls, *, created_at: datetime, findings: list[HealthFinding]) -> str:
+        return _stable_artifact_id(
+            "health",
+            {
+                "created_at": created_at.isoformat(),
+                "findings": [finding.to_dict() for finding in findings],
+            },
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "check_id": self.check_id,
+            "created_at": self.created_at.isoformat(),
+            "status": self.status,
+            "severity": self.severity,
+            "repair_required": self.repair_required,
+            "repair_request_id": self.repair_request_id,
+            "findings": [finding.to_dict() for finding in self.findings],
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "HealthCheckResult":
+        return cls(
+            check_id=payload["check_id"],
+            created_at=datetime.fromisoformat(payload["created_at"]),
+            status=payload["status"],
+            severity=payload.get("severity", "none"),
+            repair_required=payload.get("repair_required", False),
+            repair_request_id=payload.get("repair_request_id"),
+            findings=[HealthFinding.from_dict(item) for item in payload.get("findings", [])],
+        )
+
+
+@dataclass(slots=True)
+class RepairRequest:
+    repair_request_id: str
+    created_at: datetime
+    status: str
+    severity: str
+    observed_failure: str
+    reproduction_command: str
+    expected_behavior: str
+    affected_artifacts: list[str]
+    recommended_tests: list[str]
+    safety_boundary: str
+    acceptance_criteria: list[str]
+    finding_codes: list[str]
+    prompt_path: str | None = None
+
+    @classmethod
+    def build_id(cls, *, created_at: datetime, finding_codes: list[str], observed_failure: str) -> str:
+        return _stable_artifact_id(
+            "repair",
+            {
+                "created_at": created_at.isoformat(),
+                "finding_codes": sorted(finding_codes),
+                "observed_failure": observed_failure,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "RepairRequest":
+        return cls(
+            repair_request_id=payload["repair_request_id"],
+            created_at=datetime.fromisoformat(payload["created_at"]),
+            status=payload.get("status", "pending"),
+            severity=payload.get("severity", "blocking"),
+            observed_failure=payload["observed_failure"],
+            reproduction_command=payload["reproduction_command"],
+            expected_behavior=payload["expected_behavior"],
+            affected_artifacts=payload.get("affected_artifacts", []),
+            recommended_tests=payload.get("recommended_tests", []),
+            safety_boundary=payload.get("safety_boundary", "paper-only; no live trading"),
+            acceptance_criteria=payload.get("acceptance_criteria", []),
+            finding_codes=payload.get("finding_codes", []),
+            prompt_path=payload.get("prompt_path"),
         )
 
 

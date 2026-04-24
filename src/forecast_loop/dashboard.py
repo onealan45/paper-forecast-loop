@@ -8,7 +8,18 @@ import os
 from pathlib import Path
 import tomllib
 
-from forecast_loop.models import EvaluationSummary, Forecast, ForecastScore, Proposal, Review
+from forecast_loop.health import run_health_check
+from forecast_loop.models import (
+    BaselineEvaluation,
+    EvaluationSummary,
+    Forecast,
+    ForecastScore,
+    HealthFinding,
+    PaperPortfolioSnapshot,
+    Proposal,
+    Review,
+    StrategyDecision,
+)
 from forecast_loop.storage import JsonFileRepository
 
 
@@ -22,6 +33,9 @@ class DashboardSnapshot:
     latest_score: ForecastScore | None
     latest_review: Review | None
     latest_proposal: Proposal | None
+    latest_strategy_decision: StrategyDecision | None
+    latest_baseline_evaluation: BaselineEvaluation | None
+    latest_portfolio_snapshot: PaperPortfolioSnapshot | None
     latest_replay_summary: EvaluationSummary | None
     forecast_count: int
     score_count: int
@@ -37,6 +51,11 @@ class DashboardSnapshot:
     replay_freshness_label: str
     replay_generated_at: datetime | None
     replay_is_stale: bool
+    health_status: str
+    health_severity: str
+    repair_required: bool
+    repair_request_id: str | None
+    health_findings: list[HealthFinding]
 
 
 @dataclass(slots=True)
@@ -52,6 +71,9 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
     scores = repository.load_scores()
     reviews = repository.load_reviews()
     proposals = repository.load_proposals()
+    strategy_decisions = repository.load_strategy_decisions()
+    baseline_evaluations = repository.load_baseline_evaluations()
+    portfolio_snapshots = repository.load_portfolio_snapshots()
     replay_summaries = repository.load_evaluation_summaries()
     latest_forecast = forecasts[-1] if forecasts else None
     latest_review = reviews[-1] if reviews else None
@@ -64,6 +86,12 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         latest_replay_summary,
         latest_forecast,
     )
+    health_result = run_health_check(
+        storage_dir=storage_dir,
+        symbol=latest_forecast.symbol if latest_forecast else "BTC-USD",
+        now=datetime.now(tz=UTC),
+        create_repair_request=False,
+    )
 
     return DashboardSnapshot(
         storage_dir=storage_dir,
@@ -74,6 +102,9 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         latest_score=scores[-1] if scores else None,
         latest_review=latest_review,
         latest_proposal=latest_proposal,
+        latest_strategy_decision=strategy_decisions[-1] if strategy_decisions else None,
+        latest_baseline_evaluation=baseline_evaluations[-1] if baseline_evaluations else None,
+        latest_portfolio_snapshot=portfolio_snapshots[-1] if portfolio_snapshots else None,
         latest_replay_summary=latest_replay_summary,
         forecast_count=len(forecasts),
         score_count=len(scores),
@@ -89,6 +120,11 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         replay_freshness_label=replay_freshness_label,
         replay_generated_at=replay_generated_at,
         replay_is_stale=replay_is_stale,
+        health_status=health_result.status,
+        health_severity=health_result.severity,
+        repair_required=health_result.repair_required,
+        repair_request_id=health_result.repair_request_id,
+        health_findings=health_result.findings,
     )
 
 
@@ -464,6 +500,7 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
       <p class="subtitle">以最新預測為優先的靜態操作視圖，方便先看當前判讀，再對照 replay 與原始中繼資料。</p>
       <nav aria-label="儀表板區段">
         <ul class="nav-list">
+          <li><a href="#strategy">明日決策</a></li>
           <li><a href="#summary">操作摘要</a></li>
           <li><a href="#forecast">目前預測</a></li>
           <li><a href="#decision">本輪判讀與建議</a></li>
@@ -474,6 +511,9 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
       </nav>
     </aside>
     <main id="main-content">
+      <section class="panel hero primary-card" id="strategy">
+        {render_strategy_panel(snapshot)}
+      </section>
       <section class="panel hero" id="summary">
         {render_operator_summary(snapshot)}
       </section>
@@ -545,6 +585,89 @@ def render_operator_summary(snapshot: DashboardSnapshot) -> str:
       </div>
       <div class="meta">{escape(_dashboard_freshness_copy(snapshot))}</div>
       <p class="summary-note">{escape(replay_copy)}</p>
+    """
+
+
+def render_strategy_panel(snapshot: DashboardSnapshot) -> str:
+    decision = snapshot.latest_strategy_decision
+    baseline = snapshot.latest_baseline_evaluation
+    portfolio = snapshot.latest_portfolio_snapshot
+    repair_copy = (
+        "需要 Codex 修復，暫停新進場。"
+        if snapshot.repair_required
+        else "未偵測到阻擋性的修復請求。"
+    )
+    health_tag_class = "warn" if snapshot.repair_required or snapshot.health_severity != "none" else "ok"
+    if decision is None:
+        return f"""
+      <div class="kicker">明日策略決策</div>
+      <h2>明日策略決策</h2>
+      <p class="lead">目前還沒有策略決策。請執行 <code>decide</code> 產生 paper-only 決策建議。</p>
+      <div class="summary-tags">
+        <span class="tag {health_tag_class}">{escape(_display_health_status(snapshot.health_status, snapshot.repair_required))}</span>
+        <span class="tag">{escape(repair_copy)}</span>
+      </div>
+    """
+
+    current_position = "無" if decision.current_position_pct is None else f"{decision.current_position_pct:.2%}"
+    recommended_position = (
+        "無"
+        if decision.recommended_position_pct is None
+        else f"{decision.recommended_position_pct:.2%}"
+    )
+    baseline_copy = (
+        "尚無基準線評估。"
+        if baseline is None
+        else (
+            f"樣本 {baseline.sample_size}；模型正確率 {_format_optional_ratio(baseline.directional_accuracy)}；"
+            f"基準線 {_format_optional_ratio(baseline.baseline_accuracy)}；相對優勢 {_format_optional_ratio(baseline.model_edge)}。"
+        )
+    )
+    portfolio_copy = (
+        "目前沒有 paper 投資組合快照。"
+        if portfolio is None
+        else f"paper 權益 {portfolio.equity:.2f}，淨曝險 {portfolio.net_exposure_pct:.2%}。"
+    )
+    blocked_copy = _display_blocked_reason(decision.blocked_reason)
+    return f"""
+      <div class="kicker">明日策略決策</div>
+      <h2>明日策略決策</h2>
+      <p class="lead">{escape(_display_strategy_reason(decision))}</p>
+      <div class="summary-tags">
+        <span class="tag">{escape(_display_strategy_action(decision.action))}</span>
+        <span class="tag">{escape(_display_evidence_grade(decision.evidence_grade))}</span>
+        <span class="tag">{escape(_display_risk_level(decision.risk_level))}</span>
+        <span class="tag {health_tag_class}">{escape(_display_health_status(snapshot.health_status, snapshot.repair_required))}</span>
+      </div>
+      <div class="primary-grid">
+        <div class="summary-card"><div class="summary-label">目前 paper 部位</div><div class="summary-value">{escape(current_position)}</div><div class="summary-copy">目前 paper 投資組合對 {escape(decision.symbol)} 的曝險。</div></div>
+        <div class="summary-card"><div class="summary-label">建議 paper 部位</div><div class="summary-value">{escape(recommended_position)}</div><div class="summary-copy">這不是真實下單，只是 paper-only 研究建議。</div></div>
+        <div class="summary-card"><div class="summary-label">可交易性</div><div class="summary-value">{escape(_display_boolean(decision.tradeable))}</div><div class="summary-copy">{escape(blocked_copy)}</div></div>
+        <div class="summary-card"><div class="summary-label">健康檢查</div><div class="summary-value">{escape(_display_health_status(snapshot.health_status, snapshot.repair_required))}</div><div class="summary-copy">{escape(repair_copy)}</div></div>
+      </div>
+      <div class="evidence-grid">
+        <div class="evidence-block">
+          <h3>預測品質 vs 基準線</h3>
+          <p class="micro-copy">{escape(baseline_copy)}</p>
+        </div>
+        <div class="evidence-block">
+          <h3>Paper 投資組合 / 修復狀態</h3>
+          <p class="micro-copy">{escape(portfolio_copy)}</p>
+          <p class="micro-copy">{escape(repair_copy)}</p>
+        </div>
+      </div>
+      <details>
+        <summary>展開策略決策詳細欄位</summary>
+        <dl>
+          <dt>決策 ID</dt><dd>{escape(decision.decision_id)}</dd>
+          <dt>Forecast IDs</dt><dd>{escape(", ".join(decision.forecast_ids) or "無")}</dd>
+          <dt>Score IDs</dt><dd>{escape(", ".join(decision.score_ids) or "無")}</dd>
+          <dt>Review IDs</dt><dd>{escape(", ".join(decision.review_ids) or "無")}</dd>
+          <dt>Baseline IDs</dt><dd>{escape(", ".join(decision.baseline_ids) or "無")}</dd>
+          <dt>失效條件</dt><dd>{escape("；".join(decision.invalidation_conditions))}</dd>
+        </dl>
+        <pre>{escape(json.dumps(decision.to_dict(), ensure_ascii=False, indent=2))}</pre>
+      </details>
     """
 
 
@@ -905,6 +1028,89 @@ def _display_automation_status(status: str) -> str:
     return mapping.get(status, status)
 
 
+def _display_strategy_action(action: str) -> str:
+    mapping = {
+        "BUY": "買進（BUY）",
+        "SELL": "賣出（SELL）",
+        "HOLD": "持有（HOLD）",
+        "REDUCE_RISK": "降低風險（REDUCE_RISK）",
+        "STOP_NEW_ENTRIES": "停止新進場（STOP_NEW_ENTRIES）",
+    }
+    return mapping.get(action, action)
+
+
+def _display_strategy_reason(decision: StrategyDecision) -> str:
+    if decision.blocked_reason == "health_check_repair_required":
+        return "health-check 需要修復；Codex 修復完成前停止新進場。"
+    if decision.blocked_reason == "missing_latest_forecast":
+        return "目前沒有最新 forecast；系統不能產生方向性的 paper-only 決策。"
+    if decision.blocked_reason == "latest_forecast_stale":
+        return "最新 forecast 已超過允許時效；停止新進場直到資料恢復新鮮。"
+    if decision.blocked_reason == "insufficient_evidence":
+        return "已評分 forecast 樣本不足，不足以支持買進或賣出。"
+    if decision.blocked_reason == "model_not_beating_baseline":
+        return "模型證據沒有打贏 naive persistence baseline，因此買進/賣出被擋住。"
+    if decision.blocked_reason == "evidence_grade_too_weak_for_directional_action":
+        return "證據方向偏正面，但強度不足以支持買進或賣出。"
+    if decision.blocked_reason == "unknown_forecast_regime":
+        return "最新 forecast regime 方向性不足，不應產生買進或賣出。"
+    if decision.action == "BUY":
+        return "最新 forecast 偏多，且模型證據在品質足夠時打贏 baseline。"
+    if decision.action == "SELL":
+        return "最新 forecast 偏空，且模型證據在品質足夠時打贏 baseline。"
+    if decision.action == "REDUCE_RISK":
+        return "近期 forecast 分數偏弱，建議降低 paper 風險。"
+    if decision.action == "STOP_NEW_ENTRIES":
+        return "系統目前不允許新增進場，請先檢查 health 與資料新鮮度。"
+    return decision.reason_summary
+
+
+def _display_evidence_grade(grade: str) -> str:
+    mapping = {
+        "A": "證據等級 A",
+        "B": "證據等級 B",
+        "C": "證據等級 C",
+        "D": "證據等級 D",
+        "INSUFFICIENT": "證據不足（INSUFFICIENT）",
+    }
+    return mapping.get(grade, grade)
+
+
+def _display_risk_level(level: str) -> str:
+    mapping = {
+        "LOW": "低風險（LOW）",
+        "MEDIUM": "中風險（MEDIUM）",
+        "HIGH": "高風險（HIGH）",
+        "UNKNOWN": "風險未知（UNKNOWN）",
+    }
+    return mapping.get(level, level)
+
+
+def _display_health_status(status: str, repair_required: bool) -> str:
+    if repair_required:
+        return "需要修復（repair required）"
+    mapping = {
+        "healthy": "健康（healthy）",
+        "degraded": "降級（degraded）",
+        "unhealthy": "不健康（unhealthy）",
+    }
+    return mapping.get(status, status)
+
+
+def _display_blocked_reason(reason: str | None) -> str:
+    mapping = {
+        None: "未被決策 gate 阻擋",
+        "health_check_repair_required": "health-check 要求修復，停止新進場。",
+        "missing_latest_forecast": "缺少最新 forecast，不能做方向性決策。",
+        "latest_forecast_stale": "最新 forecast 已過期，不能做方向性決策。",
+        "insufficient_evidence": "證據不足，不能支持買進或賣出。",
+        "model_not_beating_baseline": "模型沒有打贏基準線，買進/賣出被擋住。",
+        "evidence_grade_too_weak_for_directional_action": "證據等級不足，不能支持買進或賣出。",
+        "unknown_forecast_regime": "forecast regime 方向性不足。",
+    }
+    return mapping.get(reason, reason or "未被決策 gate 阻擋")
+
+
 def _display_health_label(label: str) -> str:
     mapping = {
         "Waiting": "等待中",
@@ -1033,6 +1239,12 @@ def _display_boolean(value: bool) -> str:
 
 def _format_window_label(start: datetime, end: datetime) -> str:
     return f"{start.strftime('%m-%d %H:%M')} → {end.strftime('%m-%d %H:%M')}"
+
+
+def _format_optional_ratio(value: float | None) -> str:
+    if value is None:
+        return "無"
+    return f"{value:.2%}"
 
 
 def _display_decision_surface(review: Review, proposal: Proposal | None) -> str:

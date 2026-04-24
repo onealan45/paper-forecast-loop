@@ -7,20 +7,22 @@
 
 ## 1. Product Summary
 
-This product is an **AI-first trading operator** with a **paper-only forecasting and strategy-research loop**.
+This product is an **AI-first trading operator** with a **paper-only strategy-research robot**.
 
 It is not a live auto-trading system in V1. Its purpose is to:
 
 - generate recurring market forecasts from public data
 - wait for the prediction window to complete
 - validate forecast quality
+- compare forecast quality against baselines
 - review results
-- propose paper-only strategy adjustments
+- produce a paper-only strategy decision for the next horizon
+- raise Codex-ready repair requests when health checks find blocking failures
 - present the entire process in a modern, minimal, practical operator UI
 
 The core product idea is:
 
-> The user is not manually operating a bot. The user is supervising an AI that researches, explains, and proposes adjustments.
+> The user is not manually operating a bot. The user is supervising an AI that researches, explains, and produces auditable paper-only decisions.
 
 ## 2. Problem Statement
 
@@ -43,13 +45,13 @@ The intended product must solve both problems:
 - Make `today's performance` the first thing the user understands.
 - Make `what the AI is doing right now` obvious at a glance.
 - Let the user inspect `why the AI made each decision`.
-- Run a repeatable `predict -> wait -> validate -> review -> adjust -> predict` loop.
+- Run a repeatable `ingest -> forecast -> validate -> score -> compare baseline -> decide -> health audit -> repair if needed` loop.
 - Keep the system `paper-only`, `public-data-first`, and `safe by design`.
 
 ### Secondary Goals
 
 - Provide a premium desktop UX inspired by Codex for Windows interaction patterns.
-- Support hourly automated forecasting with fallback to development mode when the system breaks.
+- Support hourly automated strategy research with fallback to repair/building mode when the system breaks.
 - Keep the system small, explainable, and reviewable in V1.
 
 ## 4. Non-Goals
@@ -58,6 +60,8 @@ The following are explicitly out of scope for V1:
 
 - real-money trading
 - unattended live execution
+- real broker or exchange order submission
+- real API key handling
 - automatic strategy promotion to live capital
 - multi-team collaboration workflows
 - multi-account portfolio management
@@ -232,12 +236,15 @@ V1 should support:
 
 The product’s research engine should follow this loop:
 
-1. AI generates a forecast
-2. The system waits for the forecast horizon to complete
-3. The system validates forecast quality against realized public data
-4. The system generates a review
-5. The system proposes a paper-only strategy adjustment
-6. The next forecast cycle begins
+1. The system ingests public market data
+2. AI generates a forecast
+3. The system waits for the forecast horizon to complete
+4. The system validates forecast quality against realized public data
+5. The system compares forecast quality against baselines
+6. The system updates minimal paper portfolio context
+7. The system generates a paper-only strategy decision
+8. The system audits health and creates a Codex repair request if blocking failures exist
+9. The next research cycle begins
 
 ## 10.2 V1 Boundary
 
@@ -247,7 +254,20 @@ V1 remains:
 - public-data-first
 - no real capital
 - no live execution
+- no live broker or exchange adapter
+- no real order submission
 - no automatic strategy promotion
+
+V1 can produce paper-only strategy decisions such as:
+
+- `BUY`
+- `SELL`
+- `HOLD`
+- `REDUCE_RISK`
+- `STOP_NEW_ENTRIES`
+
+Directional actions must be blocked when evidence is weak, stale, unhealthy, or
+not better than baseline.
 
 ## 10.3 Data Scope
 
@@ -286,6 +306,11 @@ V1 MVP should include:
 - score artifacts
 - review artifacts
 - proposal artifacts
+- baseline evaluation artifacts
+- strategy decision artifacts
+- minimal paper portfolio snapshots
+- health-check output
+- Codex repair request artifacts
 - minimal CLI
 - hourly paper-only automation
 - fallback automation for repair mode
@@ -297,7 +322,10 @@ V1 should be considered product-ready for internal iteration only when:
 - forecasts are generated on schedule
 - forecast windows are correctly aligned to provider data boundaries
 - scoring only happens after complete data coverage
-- reviews and proposals are based on trustworthy scores
+- reviews, proposals, and strategy decisions are based on trustworthy evidence
+- strategy decisions show action, confidence, risk, invalidation conditions, and linked artifacts
+- weak evidence does not produce fake BUY/SELL certainty
+- blocking storage, ingestion, or provider problems create repair requests
 - the system can fail safely and fall back to development mode
 - the UI can present performance, intent, and decision history coherently
 
@@ -314,13 +342,17 @@ correctness defects:
 - strategy and regime classification remain intentionally simple
 - the current read-only UX is static HTML, not a live operator application
 - automation is local and paper-only, with manual evidence checks before any resume
-- there is no portfolio, NAV, PnL, or live execution layer
+- paper portfolio support is a minimal snapshot, not a full ledger, NAV, or PnL engine
+- SQLite is recommended as the future canonical store, while JSONL remains the active audit-compatible store in this milestone
+- health-check creates repair requests, but there is no autonomous repair daemon in this repo
+- there is no live execution layer, and live broker/exchange integration remains explicitly unavailable
 - CoinGecko replay remains disabled until a deterministic historical data source exists
 
 The repository is suitable for continued paper-only hourly research only when
 tests pass, active storage repair status is fresh, dashboard freshness is
-visible, and `last_run_meta.json.new_forecast.forecast_id` matches the newest
-forecast tail record.
+visible, strategy decision/health status are visible, and
+`last_run_meta.json.new_forecast.forecast_id` matches the newest forecast tail
+record.
 
 ## 14. Decision Log: Prior Q&A
 

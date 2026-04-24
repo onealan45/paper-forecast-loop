@@ -7,8 +7,11 @@ from pathlib import Path
 
 from forecast_loop.config import LoopConfig
 from forecast_loop.dashboard import write_dashboard_html
+from forecast_loop.decision import generate_strategy_decision
 from forecast_loop.evaluation import build_evaluation_summary
+from forecast_loop.health import run_health_check
 from forecast_loop.maintenance import repair_storage
+from forecast_loop.models import StrategyDecision
 from forecast_loop.pipeline import ForecastingLoop
 from forecast_loop.providers import CoinGeckoMarketDataProvider, build_sample_provider
 from forecast_loop.replay import ReplayRunner
@@ -26,6 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     run_once.add_argument("--horizon-hours", type=int, default=24)
     run_once.add_argument("--lookback-candles", type=int, default=8)
     run_once.add_argument("--now")
+    run_once.add_argument("--also-decide", action="store_true")
 
     replay_range = subparsers.add_parser("replay-range")
     replay_range.add_argument("--provider", choices=["sample"], default="sample")
@@ -43,6 +47,18 @@ def main(argv: list[str] | None = None) -> int:
     repair_storage_cmd = subparsers.add_parser("repair-storage")
     repair_storage_cmd.add_argument("--storage-dir", required=True)
 
+    decide = subparsers.add_parser("decide")
+    decide.add_argument("--storage-dir", required=True)
+    decide.add_argument("--symbol", default="BTC-USD")
+    decide.add_argument("--horizon-hours", type=int, default=24)
+    decide.add_argument("--now")
+
+    health_check = subparsers.add_parser("health-check")
+    health_check.add_argument("--storage-dir", required=True)
+    health_check.add_argument("--symbol", default="BTC-USD")
+    health_check.add_argument("--now")
+    health_check.add_argument("--stale-after-hours", type=int, default=48)
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -53,6 +69,10 @@ def main(argv: list[str] | None = None) -> int:
             return _render_dashboard(args)
         if args.command == "repair-storage":
             return _repair_storage(args)
+        if args.command == "decide":
+            return _decide(args)
+        if args.command == "health-check":
+            return _health_check(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -62,16 +82,44 @@ def _run_once(args) -> int:
     now = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
     provider = _build_data_provider(args.provider, now, args.symbol)
     repository = JsonFileRepository(args.storage_dir)
-    loop = ForecastingLoop(
-        config=LoopConfig(
+    try:
+        loop = ForecastingLoop(
+            config=LoopConfig(
+                symbol=args.symbol,
+                horizon_hours=args.horizon_hours,
+                lookback_candles=args.lookback_candles,
+            ),
+            data_provider=provider,
+            repository=repository,
+        )
+        result = loop.run_cycle(now=now)
+    except Exception as exc:
+        _write_failed_run_meta(
+            storage_dir=Path(args.storage_dir),
+            now_utc=now,
             symbol=args.symbol,
-            horizon_hours=args.horizon_hours,
-            lookback_candles=args.lookback_candles,
-        ),
-        data_provider=provider,
-        repository=repository,
-    )
-    result = loop.run_cycle(now=now)
+            provider=args.provider,
+            exc=exc,
+        )
+        health_result = run_health_check(
+            storage_dir=args.storage_dir,
+            symbol=args.symbol,
+            now=now,
+            create_repair_request=True,
+        )
+        print(
+            json.dumps(
+                {
+                    "symbol": args.symbol,
+                    "run_status": "failed",
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                    "repair_required": health_result.repair_required,
+                    "repair_request_id": health_result.repair_request_id,
+                }
+            )
+        )
+        return 1
     _write_last_run_meta(
         storage_dir=Path(args.storage_dir),
         now_utc=now,
@@ -79,6 +127,21 @@ def _run_once(args) -> int:
         provider=args.provider,
         result=result,
     )
+    decision = None
+    if args.also_decide:
+        health_result = run_health_check(
+            storage_dir=args.storage_dir,
+            symbol=args.symbol,
+            now=now,
+            create_repair_request=True,
+        )
+        decision = generate_strategy_decision(
+            repository=repository,
+            symbol=args.symbol,
+            horizon_hours=args.horizon_hours,
+            now=now,
+            health_result=health_result,
+        )
     print(
         json.dumps(
             {
@@ -87,10 +150,12 @@ def _run_once(args) -> int:
                 "score_count": len(result.scores),
                 "review_created": result.review is not None,
                 "proposal_created": result.proposal is not None,
+                "decision_id": decision.decision_id if decision else None,
+                "decision_action": decision.action if decision else None,
             }
         )
     )
-    return 0
+    return 0 if result.new_forecast is not None else 1
 
 
 def _build_data_provider(provider_name: str, now: datetime, symbol: str):
@@ -195,6 +260,52 @@ def _repair_storage(args) -> int:
     return 0
 
 
+def _decide(args) -> int:
+    now = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    storage_dir = Path(args.storage_dir)
+    health_result = run_health_check(
+        storage_dir=storage_dir,
+        symbol=args.symbol,
+        now=now,
+        create_repair_request=True,
+    )
+    if health_result.repair_required and not storage_dir.is_dir():
+        decision = StrategyDecision.build_fail_closed(
+            symbol=args.symbol,
+            horizon_hours=args.horizon_hours,
+            created_at=now,
+            blocked_reason="health_check_repair_required",
+            reason_summary="health-check 需要修復；Codex 修復完成前停止新進場。",
+            repair_request_id=health_result.repair_request_id,
+        )
+        print(json.dumps(decision.to_dict(), ensure_ascii=False))
+        return 0
+
+    repository = JsonFileRepository(storage_dir)
+    decision = generate_strategy_decision(
+        repository=repository,
+        symbol=args.symbol,
+        horizon_hours=args.horizon_hours,
+        now=now,
+        health_result=health_result,
+    )
+    print(json.dumps(decision.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _health_check(args) -> int:
+    now = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    result = run_health_check(
+        storage_dir=args.storage_dir,
+        symbol=args.symbol,
+        now=now,
+        stale_after_hours=args.stale_after_hours,
+        create_repair_request=True,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0 if result.severity != "blocking" else 2
+
+
 def _write_last_run_meta(*, storage_dir: Path, now_utc: datetime, symbol: str, provider: str, result) -> None:
     storage_dir.mkdir(parents=True, exist_ok=True)
     meta_path = storage_dir / "last_run_meta.json"
@@ -205,6 +316,7 @@ def _write_last_run_meta(*, storage_dir: Path, now_utc: datetime, symbol: str, p
         "storage_dir": str(storage_dir.resolve()),
         "provider": provider,
         "symbol": symbol,
+        "run_status": "forecast_created" if result.new_forecast else "forecast_missing",
         "new_forecast": result.new_forecast.to_dict() if result.new_forecast else None,
         "score_count": len(result.scores),
         "score_ids": [score.score_id for score in result.scores],
@@ -212,6 +324,32 @@ def _write_last_run_meta(*, storage_dir: Path, now_utc: datetime, symbol: str, p
         "review_created": result.review is not None,
         "proposal_id": result.proposal.proposal_id if result.proposal else None,
         "proposal_created": result.proposal is not None,
+    }
+    tmp_path = meta_path.with_suffix(".json.tmp")
+    tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp_path.replace(meta_path)
+
+
+def _write_failed_run_meta(*, storage_dir: Path, now_utc: datetime, symbol: str, provider: str, exc: Exception) -> None:
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    meta_path = storage_dir / "last_run_meta.json"
+    payload = {
+        "now_local": datetime.now().astimezone().isoformat(sep=" ", timespec="seconds"),
+        "now_utc": now_utc.isoformat(),
+        "workspace": str(Path.cwd()),
+        "storage_dir": str(storage_dir.resolve()),
+        "provider": provider,
+        "symbol": symbol,
+        "run_status": "failed",
+        "error_type": type(exc).__name__,
+        "error": str(exc),
+        "new_forecast": None,
+        "score_count": 0,
+        "score_ids": [],
+        "review_id": None,
+        "review_created": False,
+        "proposal_id": None,
+        "proposal_created": False,
     }
     tmp_path = meta_path.with_suffix(".json.tmp")
     tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

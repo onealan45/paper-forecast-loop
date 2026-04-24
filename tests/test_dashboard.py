@@ -6,7 +6,7 @@ import pytest
 
 from forecast_loop.cli import main
 from forecast_loop.evaluation import build_evaluation_summary
-from forecast_loop.models import Forecast, ForecastScore, Proposal, Review
+from forecast_loop.models import BaselineEvaluation, Forecast, ForecastScore, Proposal, Review, StrategyDecision
 from forecast_loop.storage import JsonFileRepository
 
 
@@ -177,7 +177,8 @@ def test_render_dashboard_includes_latest_artifacts(tmp_path):
     assert 'id="system"' not in html
     assert "證據快照" in html
     assert html.index('id="summary"') < html.index('id="forecast"') < html.index('id="decision"') < html.index('id="evidence"') < html.index('id="replay"') < html.index('id="raw"')
-    assert html.index('class="summary-grid"') < html.index('class="summary-tags"') < html.index('class="summary-note"')
+    summary_section = html.split('id="summary"', 1)[1].split("</section>", 1)[0]
+    assert summary_section.index('class="summary-grid"') < summary_section.index('class="summary-tags"') < summary_section.index('class="summary-note"')
     assert "<details open>" not in html
     forecast_section = html.split('id="forecast"', 1)[1].split("</section>", 1)[0]
     forecast_surface = forecast_section.split("<details>", 1)[0]
@@ -422,3 +423,91 @@ def test_cli_render_dashboard_rejects_missing_storage_dir_without_creating_it(tm
 
     assert exc_info.value.code == 2
     assert not missing_storage.exists()
+
+
+def test_dashboard_prioritizes_strategy_decision_and_health_status(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    forecast = Forecast(
+        forecast_id="forecast:decision",
+        symbol="BTC-USD",
+        created_at=now,
+        anchor_time=now,
+        target_window_start=now,
+        target_window_end=now.replace(day=25),
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        status="pending",
+        status_reason="awaiting_horizon_end",
+        predicted_regime="trend_up",
+        confidence=0.72,
+        provider_data_through=now,
+        observed_candle_count=1,
+    )
+    baseline = BaselineEvaluation(
+        baseline_id="baseline:decision",
+        created_at=now,
+        symbol="BTC-USD",
+        sample_size=5,
+        directional_accuracy=0.8,
+        baseline_accuracy=0.4,
+        model_edge=0.4,
+        recent_score=0.8,
+        evidence_grade="B",
+        forecast_ids=[forecast.forecast_id],
+        score_ids=["score:a"],
+        decision_basis="test baseline",
+    )
+    decision = StrategyDecision(
+        decision_id="decision:buy",
+        created_at=now,
+        symbol="BTC-USD",
+        horizon_hours=24,
+        action="BUY",
+        confidence=0.72,
+        evidence_grade="B",
+        risk_level="MEDIUM",
+        tradeable=True,
+        blocked_reason=None,
+        recommended_position_pct=0.15,
+        current_position_pct=0.0,
+        max_position_pct=0.15,
+        invalidation_conditions=["health-check 轉為 blocking"],
+        reason_summary="forecast 偏多且模型證據打贏 baseline。",
+        forecast_ids=[forecast.forecast_id],
+        score_ids=["score:a"],
+        review_ids=[],
+        baseline_ids=[baseline.baseline_id],
+        decision_basis="test decision",
+    )
+    score = ForecastScore(
+        score_id="score:a",
+        forecast_id=forecast.forecast_id,
+        scored_at=now,
+        predicted_regime="trend_up",
+        actual_regime="trend_up",
+        score=1.0,
+        target_window_start=forecast.target_window_start,
+        target_window_end=forecast.target_window_end,
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        observed_candle_count=25,
+        provider_data_through=forecast.target_window_end,
+        scoring_basis="test",
+    )
+    repository.save_forecast(forecast)
+    repository.save_score(score)
+    repository.save_baseline_evaluation(baseline)
+    repository.save_strategy_decision(decision)
+
+    html = render_dashboard_html(build_dashboard_snapshot(tmp_path))
+
+    assert html.index('id="strategy"') < html.index('id="summary"')
+    assert "明日策略決策" in html
+    assert "買進（BUY）" in html
+    assert "證據等級 B" in html
+    assert "預測品質 vs 基準線" in html
+    assert "forecast 偏多且模型證據打贏 baseline。" in html
+    assert "需要修復" not in html.split('id="strategy"', 1)[1].split("</section>", 1)[0]

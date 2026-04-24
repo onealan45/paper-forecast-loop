@@ -74,4 +74,3 @@ Hourly automation may be resumed only with an M1-aware prompt that includes:
 - strategy decision generation
 - dashboard refresh
 - repair/building mode when blocking findings occur
-

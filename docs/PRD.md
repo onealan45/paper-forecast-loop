@@ -1,8 +1,8 @@
 # PRD: AI Operator Trading Bot and Paper Forecast Loop
 
-**Version:** 0.1  
-**Date:** 2026-04-22  
-**Status:** Draft  
+**Version:** 0.1
+**Date:** 2026-04-22
+**Status:** Draft
 **Source:** Consolidated from prior product Q&A in this thread
 
 ## 1. Product Summary

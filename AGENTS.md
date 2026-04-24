@@ -153,4 +153,3 @@ A role task is done only when:
 - changes are coherent
 - tests or evidence match the claimed behavior
 - handoff is explicit
-

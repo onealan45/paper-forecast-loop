@@ -115,4 +115,3 @@ YYYY-MM-DD-<topic>.md
 
 Final review must be done by a subagent, not by the same agent that implemented
 the change.
-

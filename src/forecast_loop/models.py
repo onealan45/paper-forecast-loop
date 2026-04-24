@@ -492,6 +492,181 @@ class BacktestResult:
 
 
 @dataclass(slots=True)
+class WalkForwardWindow:
+    window_id: str
+    train_start: datetime
+    train_end: datetime
+    validation_start: datetime
+    validation_end: datetime
+    test_start: datetime
+    test_end: datetime
+    train_candle_count: int
+    validation_candle_count: int
+    test_candle_count: int
+    validation_backtest_result_id: str
+    test_backtest_result_id: str
+    validation_return: float
+    test_return: float
+    benchmark_return: float
+    excess_return: float
+    overfit_flags: list[str]
+    decision_basis: str
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        train_start: datetime,
+        validation_start: datetime,
+        test_start: datetime,
+        validation_backtest_result_id: str,
+        test_backtest_result_id: str,
+    ) -> str:
+        return _stable_artifact_id(
+            "walk-forward-window",
+            {
+                "train_start": train_start.isoformat(),
+                "validation_start": validation_start.isoformat(),
+                "test_start": test_start.isoformat(),
+                "validation_backtest_result_id": validation_backtest_result_id,
+                "test_backtest_result_id": test_backtest_result_id,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        for key in (
+            "train_start",
+            "train_end",
+            "validation_start",
+            "validation_end",
+            "test_start",
+            "test_end",
+        ):
+            payload[key] = payload[key].isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "WalkForwardWindow":
+        return cls(
+            window_id=_require_string(payload, "window_id"),
+            train_start=_require_aware_datetime(payload, "train_start"),
+            train_end=_require_aware_datetime(payload, "train_end"),
+            validation_start=_require_aware_datetime(payload, "validation_start"),
+            validation_end=_require_aware_datetime(payload, "validation_end"),
+            test_start=_require_aware_datetime(payload, "test_start"),
+            test_end=_require_aware_datetime(payload, "test_end"),
+            train_candle_count=int(payload.get("train_candle_count", 0)),
+            validation_candle_count=int(payload.get("validation_candle_count", 0)),
+            test_candle_count=int(payload.get("test_candle_count", 0)),
+            validation_backtest_result_id=_require_string(payload, "validation_backtest_result_id"),
+            test_backtest_result_id=_require_string(payload, "test_backtest_result_id"),
+            validation_return=float(payload.get("validation_return", 0.0)),
+            test_return=float(payload.get("test_return", 0.0)),
+            benchmark_return=float(payload.get("benchmark_return", 0.0)),
+            excess_return=float(payload.get("excess_return", 0.0)),
+            overfit_flags=list(payload.get("overfit_flags", [])),
+            decision_basis=payload.get("decision_basis", "legacy_walk_forward_window"),
+        )
+
+
+@dataclass(slots=True)
+class WalkForwardValidation:
+    validation_id: str
+    created_at: datetime
+    symbol: str
+    start: datetime
+    end: datetime
+    strategy_name: str
+    train_size: int
+    validation_size: int
+    test_size: int
+    step_size: int
+    initial_cash: float
+    fee_bps: float
+    slippage_bps: float
+    moving_average_window: int
+    window_count: int
+    average_validation_return: float
+    average_test_return: float
+    average_benchmark_return: float
+    average_excess_return: float
+    test_win_rate: float
+    overfit_window_count: int
+    overfit_risk_flags: list[str]
+    backtest_result_ids: list[str]
+    windows: list[WalkForwardWindow]
+    decision_basis: str
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        symbol: str,
+        start: datetime,
+        end: datetime,
+        train_size: int,
+        validation_size: int,
+        test_size: int,
+        step_size: int,
+        moving_average_window: int,
+        backtest_result_ids: list[str],
+    ) -> str:
+        return _stable_artifact_id(
+            "walk-forward",
+            {
+                "symbol": symbol,
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                "train_size": train_size,
+                "validation_size": validation_size,
+                "test_size": test_size,
+                "step_size": step_size,
+                "moving_average_window": moving_average_window,
+                "backtest_result_ids": sorted(backtest_result_ids),
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        for key in ("created_at", "start", "end"):
+            payload[key] = payload[key].isoformat()
+        payload["windows"] = [window.to_dict() for window in self.windows]
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "WalkForwardValidation":
+        windows = [WalkForwardWindow.from_dict(item) for item in payload.get("windows", [])]
+        return cls(
+            validation_id=_require_string(payload, "validation_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            symbol=_require_string(payload, "symbol"),
+            start=_require_aware_datetime(payload, "start"),
+            end=_require_aware_datetime(payload, "end"),
+            strategy_name=payload.get("strategy_name", "moving_average_trend"),
+            train_size=int(payload.get("train_size", 0)),
+            validation_size=int(payload.get("validation_size", 0)),
+            test_size=int(payload.get("test_size", 0)),
+            step_size=int(payload.get("step_size", 0)),
+            initial_cash=float(payload.get("initial_cash", 0.0)),
+            fee_bps=float(payload.get("fee_bps", 0.0)),
+            slippage_bps=float(payload.get("slippage_bps", 0.0)),
+            moving_average_window=int(payload.get("moving_average_window", 0)),
+            window_count=int(payload.get("window_count", len(windows))),
+            average_validation_return=float(payload.get("average_validation_return", 0.0)),
+            average_test_return=float(payload.get("average_test_return", 0.0)),
+            average_benchmark_return=float(payload.get("average_benchmark_return", 0.0)),
+            average_excess_return=float(payload.get("average_excess_return", 0.0)),
+            test_win_rate=float(payload.get("test_win_rate", 0.0)),
+            overfit_window_count=int(payload.get("overfit_window_count", 0)),
+            overfit_risk_flags=list(payload.get("overfit_risk_flags", [])),
+            backtest_result_ids=list(payload.get("backtest_result_ids", [])),
+            windows=windows,
+            decision_basis=payload.get("decision_basis", "legacy_walk_forward_validation"),
+        )
+
+
+@dataclass(slots=True)
 class Forecast:
     forecast_id: str
     symbol: str

@@ -25,6 +25,7 @@ from forecast_loop.models import (
     RiskSnapshot,
     Review,
     StrategyDecision,
+    WalkForwardValidation,
 )
 from forecast_loop.storage import JsonFileRepository
 
@@ -95,6 +96,11 @@ def run_health_check(
         "market_candles": _load_jsonl(storage_path / "market_candles.jsonl", MarketCandleRecord.from_dict, findings),
         "backtest_runs": _load_jsonl(storage_path / "backtest_runs.jsonl", BacktestRun.from_dict, findings),
         "backtest_results": _load_jsonl(storage_path / "backtest_results.jsonl", BacktestResult.from_dict, findings),
+        "walk_forward_validations": _load_jsonl(
+            storage_path / "walk_forward_validations.jsonl",
+            WalkForwardValidation.from_dict,
+            findings,
+        ),
     }
     forecasts: list[Forecast] = artifact_rows["forecasts"]
     scores: list[ForecastScore] = artifact_rows["scores"]
@@ -114,6 +120,7 @@ def run_health_check(
     market_candles: list[MarketCandleRecord] = artifact_rows["market_candles"]
     backtest_runs: list[BacktestRun] = artifact_rows["backtest_runs"]
     backtest_results: list[BacktestResult] = artifact_rows["backtest_results"]
+    walk_forward_validations: list[WalkForwardValidation] = artifact_rows["walk_forward_validations"]
 
     _check_duplicate_ids(forecasts, "forecast_id", storage_path / "forecasts.jsonl", findings)
     _check_duplicate_ids(scores, "score_id", storage_path / "scores.jsonl", findings)
@@ -133,6 +140,12 @@ def run_health_check(
     _check_duplicate_ids(market_candles, "candle_id", storage_path / "market_candles.jsonl", findings)
     _check_duplicate_ids(backtest_runs, "backtest_id", storage_path / "backtest_runs.jsonl", findings)
     _check_duplicate_ids(backtest_results, "result_id", storage_path / "backtest_results.jsonl", findings)
+    _check_duplicate_ids(
+        walk_forward_validations,
+        "validation_id",
+        storage_path / "walk_forward_validations.jsonl",
+        findings,
+    )
 
     scoped_forecasts = [forecast for forecast in forecasts if forecast.symbol == symbol]
     latest_forecast = scoped_forecasts[-1] if scoped_forecasts else None
@@ -175,6 +188,7 @@ def run_health_check(
         market_candles,
         backtest_runs,
         backtest_results,
+        walk_forward_validations,
         findings,
     )
     _check_research_dataset_leakage(storage_path, research_datasets, findings)
@@ -340,6 +354,7 @@ def _check_links(
     market_candles: list[MarketCandleRecord],
     backtest_runs: list[BacktestRun],
     backtest_results: list[BacktestResult],
+    walk_forward_validations: list[WalkForwardValidation],
     findings: list[HealthFinding],
 ) -> None:
     forecast_ids = {forecast.forecast_id for forecast in forecasts}
@@ -349,6 +364,7 @@ def _check_links(
     baseline_ids = {baseline.baseline_id for baseline in baselines}
     candle_ids = {candle.candle_id for candle in market_candles}
     backtest_run_ids = {run.backtest_id for run in backtest_runs}
+    backtest_result_ids = {result.result_id for result in backtest_results}
 
     for score in scores:
         if score.forecast_id not in forecast_ids:
@@ -486,6 +502,26 @@ def _check_links(
                 storage_path / "backtest_runs.jsonl",
                 run.backtest_id,
                 ", ".join(missing_candles),
+                findings,
+            )
+
+    for validation in walk_forward_validations:
+        nested_result_ids = [
+            result_id
+            for window in validation.windows
+            for result_id in [window.validation_backtest_result_id, window.test_backtest_result_id]
+        ]
+        missing_results = [
+            result_id
+            for result_id in [*validation.backtest_result_ids, *nested_result_ids]
+            if result_id not in backtest_result_ids
+        ]
+        if missing_results:
+            _add_link_finding(
+                "walk_forward_missing_backtest_result",
+                storage_path / "walk_forward_validations.jsonl",
+                validation.validation_id,
+                ", ".join(sorted(set(missing_results))),
                 findings,
             )
 

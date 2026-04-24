@@ -27,6 +27,7 @@ from forecast_loop.models import (
     RiskSnapshot,
     Review,
     StrategyDecision,
+    WalkForwardValidation,
 )
 from forecast_loop.storage import JsonFileRepository
 
@@ -63,6 +64,12 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("research_datasets", "research_datasets.jsonl", "dataset_id", ResearchDataset.from_dict),
     ArtifactSpec("backtest_runs", "backtest_runs.jsonl", "backtest_id", BacktestRun.from_dict),
     ArtifactSpec("backtest_results", "backtest_results.jsonl", "result_id", BacktestResult.from_dict),
+    ArtifactSpec(
+        "walk_forward_validations",
+        "walk_forward_validations.jsonl",
+        "validation_id",
+        WalkForwardValidation.from_dict,
+    ),
 )
 _SPEC_BY_TYPE = {spec.artifact_type: spec for spec in ARTIFACT_SPECS}
 
@@ -249,6 +256,12 @@ class SQLiteRepository:
     def load_backtest_results(self) -> list[BacktestResult]:
         return self._load("backtest_results", BacktestResult.from_dict)
 
+    def save_walk_forward_validation(self, validation: WalkForwardValidation) -> None:
+        self._save_unique("walk_forward_validations", validation.validation_id, validation.to_dict())
+
+    def load_walk_forward_validations(self) -> list[WalkForwardValidation]:
+        return self._load("walk_forward_validations", WalkForwardValidation.from_dict)
+
     def artifact_counts(self) -> dict[str, int]:
         with self._connect() as connection:
             rows = connection.execute(
@@ -364,6 +377,8 @@ def migrate_jsonl_to_sqlite(storage_dir: Path | str, db_path: Path | str | None 
         sqlite_repository.save_backtest_run(run)
     for result in json_repository.load_backtest_results():
         sqlite_repository.save_backtest_result(result)
+    for validation in json_repository.load_walk_forward_validations():
+        sqlite_repository.save_walk_forward_validation(validation)
 
     after_counts = sqlite_repository.artifact_counts()
     return {

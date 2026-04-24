@@ -42,6 +42,7 @@ from forecast_loop.sqlite_repository import (
     sqlite_db_health,
 )
 from forecast_loop.storage import JsonFileRepository
+from forecast_loop.walk_forward import run_walk_forward_validation
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -208,6 +209,21 @@ def main(argv: list[str] | None = None) -> int:
     backtest_cmd.add_argument("--slippage-bps", type=float, default=10.0)
     backtest_cmd.add_argument("--moving-average-window", type=int, default=3)
 
+    walk_forward_cmd = subparsers.add_parser("walk-forward")
+    walk_forward_cmd.add_argument("--storage-dir", required=True)
+    walk_forward_cmd.add_argument("--symbol", default="BTC-USD")
+    walk_forward_cmd.add_argument("--start", required=True)
+    walk_forward_cmd.add_argument("--end", required=True)
+    walk_forward_cmd.add_argument("--created-at")
+    walk_forward_cmd.add_argument("--train-size", type=int, default=4)
+    walk_forward_cmd.add_argument("--validation-size", type=int, default=3)
+    walk_forward_cmd.add_argument("--test-size", type=int, default=3)
+    walk_forward_cmd.add_argument("--step-size", type=int, default=1)
+    walk_forward_cmd.add_argument("--initial-cash", type=float, default=10_000.0)
+    walk_forward_cmd.add_argument("--fee-bps", type=float, default=5.0)
+    walk_forward_cmd.add_argument("--slippage-bps", type=float, default=10.0)
+    walk_forward_cmd.add_argument("--moving-average-window", type=int, default=3)
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -262,6 +278,8 @@ def main(argv: list[str] | None = None) -> int:
             return _build_research_dataset(args)
         if args.command == "backtest":
             return _backtest(args)
+        if args.command == "walk-forward":
+            return _walk_forward(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -858,6 +876,27 @@ def _backtest(args) -> int:
         start=_parse_datetime(args.start),
         end=_parse_datetime(args.end),
         created_at=created_at,
+        initial_cash=args.initial_cash,
+        fee_bps=args.fee_bps,
+        slippage_bps=args.slippage_bps,
+        moving_average_window=args.moving_average_window,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _walk_forward(args) -> int:
+    created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
+    result = run_walk_forward_validation(
+        storage_dir=args.storage_dir,
+        symbol=args.symbol,
+        start=_parse_datetime(args.start),
+        end=_parse_datetime(args.end),
+        created_at=created_at,
+        train_size=args.train_size,
+        validation_size=args.validation_size,
+        test_size=args.test_size,
+        step_size=args.step_size,
         initial_cash=args.initial_cash,
         fee_bps=args.fee_bps,
         slippage_bps=args.slippage_bps,

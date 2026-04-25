@@ -122,3 +122,24 @@ def test_notification_generation_is_idempotent_for_same_source_payload(tmp_path)
     notifications = repository.load_notification_artifacts()
     assert len(notifications) == 2
     assert {notification.notification_type for notification in notifications} == {"NEW_DECISION", "BUY_SELL_BLOCKED"}
+
+
+def test_exposure_only_reduce_risk_does_not_emit_drawdown_breach(tmp_path):
+    now = datetime(2026, 4, 25, 5, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    risk = _risk(now)
+    risk.status = "REDUCE_RISK"
+    risk.severity = "warning"
+    risk.current_drawdown_pct = 0.0
+    risk.gross_exposure_pct = 0.50
+    risk.findings = ["gross_exposure 50.00% > limit 20.00%"]
+
+    notifications = generate_notification_artifacts(
+        repository=repository,
+        symbol="BTC-USD",
+        now=now,
+        risk_snapshot=risk,
+    )
+
+    assert notifications == []
+    assert repository.load_notification_artifacts() == []

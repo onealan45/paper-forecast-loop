@@ -44,6 +44,19 @@ trading, or secret handling.
 - `git diff --check`
   - Result: passed; only CRLF normalization warnings were printed
 
+After reviewer P1 fix:
+
+- `python -m pytest tests\test_notifications.py -q`
+  - Result: `3 passed in 0.11s`
+- `python -m pytest -q`
+  - Result: `191 passed in 6.90s`
+- `python -m compileall -q src tests run_forecast_loop.py sitecustomize.py`
+  - Result: passed
+- `python .\run_forecast_loop.py --help`
+  - Result: passed
+- `git diff --check`
+  - Result: passed; only CRLF normalization warnings were printed
+
 ## Smoke Evidence
 
 Storage/output are under ignored `paper_storage/`.
@@ -74,7 +87,30 @@ Storage/output are under ignored `paper_storage/`.
 
 ## Reviewer Status
 
-Pending final reviewer subagent.
+Initial final reviewer subagent: `Helmholtz`
+(`019dc29a-39fc-7190-96e4-68410c0c6bbb`).
+
+Initial result: `BLOCKED`.
+
+Blocking finding:
+
+- `DRAWDOWN_BREACH` incorrectly fired for non-drawdown risk gates because
+  `_drawdown_breached()` treated every `REDUCE_RISK` or `STOP_NEW_ENTRIES`
+  risk snapshot as a drawdown breach. Exposure-only or position-only risk
+  findings could therefore create false drawdown notifications.
+
+Fix:
+
+- Restricted `_drawdown_breached()` to
+  `current_drawdown_pct >= reduce_risk_drawdown_pct`.
+- Added regression coverage proving exposure-only `REDUCE_RISK` at
+  `current_drawdown_pct=0.0` does not emit `DRAWDOWN_BREACH`.
+
+Reviewer also confirmed the PR had no external notification delivery, no
+scheduler mutation, no live trading path, no broker/exchange submit path, and
+no secrets/runtime artifacts.
+
+Final reviewer status after fix: pending re-review.
 
 ## Automation Status
 

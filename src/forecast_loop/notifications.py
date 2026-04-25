@@ -187,7 +187,4 @@ def _health_is_blocking(health_result: HealthCheckResult) -> bool:
 
 
 def _drawdown_breached(risk_snapshot: RiskSnapshot) -> bool:
-    return (
-        risk_snapshot.current_drawdown_pct >= risk_snapshot.reduce_risk_drawdown_pct
-        or risk_snapshot.status in {"REDUCE_RISK", "STOP_NEW_ENTRIES"}
-    )
+    return risk_snapshot.current_drawdown_pct >= risk_snapshot.reduce_risk_drawdown_pct

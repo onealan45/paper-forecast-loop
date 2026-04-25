@@ -522,6 +522,17 @@ The server only accepts local bind hosts (`127.0.0.1`, `localhost`, `::1`).
 The M5A console does not provide forms, live trading, broker submission,
 secret display, or real control execution.
 
+M5B expands the `decisions` page into a decision timeline. Each decision card
+shows:
+
+- latest decision marker
+- action, reason summary, evidence grade, risk, tradeable status
+- blocked reason
+- linked forecast, score, review, and baseline artifact ids
+- invalidation conditions
+
+This remains read-only and paper-only.
+
 ## Failure and Degrade Behavior
 
 The loop degrades conservatively:

@@ -45,6 +45,18 @@ turning into adaptive data mining. It also keeps the V1 boundary clear: no live
 trading, no real capital, no real broker order submission, and no automatic
 promotion from paper research to live execution.
 
+Product implications:
+
+- Candidate strategy generation must be separated from candidate evaluation.
+- The evaluation path must be deterministic, versioned, and auditable.
+- Failed experiments must be retained as evidence, not discarded.
+- Promotion must depend on research gates and paper-shadow evidence, not on one
+  attractive backtest or one recent forecast.
+- Provider limitations, data gaps, and validation weaknesses must be visible to
+  the operator before any BUY/SELL decision is trusted.
+- The next major product stage should prioritize data trust and research
+  governance over live execution.
+
 ## 2. Problem Statement
 
 Most trading dashboards are either:
@@ -68,12 +80,21 @@ The intended product must solve both problems:
 - Let the user inspect `why the AI made each decision`.
 - Run a repeatable `ingest -> forecast -> validate -> score -> compare baseline -> decide -> health audit -> repair if needed` loop.
 - Keep the system `paper-only`, `public-data-first`, and `safe by design`.
+- Preserve a locked research evaluation path so broader strategy search does not
+  become uncontrolled data mining.
+- Make weak evidence visible by blocking BUY/SELL rather than producing fake
+  conviction.
+- Keep provider quality, leakage checks, baseline edge, drawdown, costs,
+  validation results, and paper-shadow status inspectable from artifacts and UI.
 
 ### Secondary Goals
 
 - Provide a premium desktop UX inspired by Codex for Windows interaction patterns.
 - Support hourly automated strategy research with fallback to repair/building mode when the system breaks.
 - Keep the system small, explainable, and reviewable in V1.
+- Support future Alpha Factory stages through data contracts, experiment
+  registry, locked splits, validation reports, leaderboard governance, and
+  quarantine artifacts.
 
 ## 4. Non-Goals
 
@@ -84,6 +105,8 @@ The following are explicitly out of scope for V1:
 - real broker or exchange order submission
 - real API key handling
 - automatic strategy promotion to live capital
+- automatic promotion from research to paper-shadow without artifact gates
+- cherry-picking only successful experiments while hiding failed trials
 - multi-team collaboration workflows
 - multi-account portfolio management
 - full mobile parity with desktop depth

@@ -14,6 +14,20 @@ visibility. It is not yet a full Alpha Factory because it still lacks broad
 strategy generation, locked experiment governance, deeper validation statistics,
 canonical provider comparison, and evidence-driven promotion/demotion.
 
+## Current Implementation Interpretation
+
+The current repository should be interpreted as an Alpha Factory foundation, not
+as the completed factory.
+
+| Layer | Current M1-M6 state | Alpha Factory gap |
+|---|---|---|
+| Decision layer | Produces paper-only strategy decisions with evidence, risk, and blocked reasons. | Needs per-strategy candidate lineage, paper-shadow promotion state, and demotion history. |
+| Health and repair | Detects artifact and runtime issues and can write repair requests. | Needs research-specific findings for provider distortion, experiment invalidation, and promotion quarantine. |
+| Storage | Has SQLite migration support and JSONL audit/export compatibility. | Needs stronger research snapshot metadata and larger dataset storage conventions. |
+| Data providers | Supports sample, CoinGecko, stored candles, and CSV stock fixtures. | Needs canonical primary/secondary provider comparison before serious promotion. |
+| Research evidence | Supports baselines, research datasets, backtests, reports, walk-forward, and research gates. | Needs locked split manifests, trial registry, CPCV-like paths, PBO, DSR, bootstrap, and parameter stability. |
+| UI and operations | Shows read-only decisions, health, portfolio, risk, automation, and broker/sandbox state. | Needs leaderboard, candidate lifecycle, paper-shadow status, and quarantine visibility. |
+
 ## Core Direction
 
 The long-term target is:
@@ -39,6 +53,28 @@ The project must keep these boundaries:
   safety gates.
 - Research output should answer whether a candidate is trustworthy, not only
   whether one backtest looked profitable.
+
+## Research Factory Operating Model
+
+Future strategy expansion should follow this controlled path:
+
+1. Idea intake records the prompt, code hash, parent strategy, strategy family,
+   and intended asset universe.
+2. Dataset snapshot freezes provider inputs, canonical bars, macro events,
+   calendar rules, normalization version, and response hashes.
+3. Split manifest freezes train, validation, CPCV-like, holdout, embargo, and
+   paper-shadow windows.
+4. Trial runner executes within a declared trial budget and records every
+   success, failure, abort, and invalid result.
+5. Validation suite computes baseline edge, purged fold results, CPCV-like
+   summaries, PBO, DSR, bootstrap intervals, drawdown, turnover, and stability.
+6. Holdout gate runs only after research gates pass and should not be visible to
+   the idea generator during search.
+7. Paper-shadow gate monitors the candidate without live execution.
+8. Promotion or demotion writes immutable artifacts and updates the leaderboard.
+
+This model lets the search space grow without letting the evaluation path move
+after results are known.
 
 ## Threat Model
 
@@ -148,3 +184,23 @@ execution. It should harden the research factory:
 
 These stages should preserve the M1-M6 safety boundary: paper-only by default,
 sandbox/testnet only when explicitly gated, and no live trading path.
+
+## Minimum Acceptance Gates For M7+
+
+The next implementation stage should not be considered complete unless it can
+prove these gates with tests and artifacts:
+
+- No candidate can read or modify the locked holdout path during research
+  search.
+- Every trial has a stable dataset snapshot id, split manifest id, strategy
+  family id, code hash, prompt hash or source hash, seed, trial index, and trial
+  budget.
+- Failed, aborted, and schema-invalid experiments are persisted.
+- Provider audit artifacts include raw response hash, normalization version,
+  missing/duplicate bar counts, and calendar/timezone assumptions.
+- BUY/SELL remains blocked when the latest research evidence is missing, stale,
+  below baseline, overfit-risk flagged, or health/risk blocked.
+- Leaderboard ranking is impossible until hard gates pass.
+- Paper-shadow promotion can be demoted or quarantined by data, cost, risk,
+  execution, or health anomalies.
+- No code path can submit live orders or require live broker secrets.

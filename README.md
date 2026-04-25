@@ -27,6 +27,21 @@ repeatable through canonical data snapshots, locked split manifests, trial
 budgets, baseline comparison, research gates, holdout checks, paper-shadow
 monitoring, and repair/health artifacts.
 
+Operationally, the current system should be read as the foundation of that
+factory:
+
+- M1-M6 provide the paper-only decision, health, research, portfolio, UI, and
+  sandbox-safety spine.
+- M7+ should improve data contracts, canonical market data, experiment registry,
+  validation depth, leaderboard governance, and paper-shadow quarantine before
+  adding more strategy search.
+- CoinGecko remains useful for prototype and cross-check work, but serious
+  intraday crypto research needs canonical provider comparison before promotion.
+- BUY/SELL should remain blocked when evidence is weak, when the model does not
+  beat baselines, when research gates fail, or when health/risk gates are not
+  clean.
+- No research result in this repository is a live trading instruction.
+
 ## Current Scope
 
 This version intentionally includes:

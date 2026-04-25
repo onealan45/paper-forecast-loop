@@ -40,7 +40,7 @@ broker dashboard, or reconciliation against a real network endpoint.
 
 ## Reviewer Status
 
-Pending final reviewer subagent.
+Final reviewer subagent returned `APPROVED`.
 
 ## Safety Status
 

@@ -58,6 +58,7 @@ This version intentionally includes:
   - `run-once`
   - `replay-range`
   - `render-dashboard`
+  - `operator-console`
   - `repair-storage`
   - `decide`
   - `decide-all`
@@ -86,7 +87,7 @@ This version intentionally includes:
 
 This version intentionally excludes:
 
-- interactive UI controls
+- interactive UI controls; the M5A local operator console is read-only
 - live trading
 - real capital
 - portfolio optimizer or cross-asset allocation engine
@@ -494,6 +495,33 @@ You can also choose a specific output path:
 python run_forecast_loop.py render-dashboard --storage-dir .\paper_storage\manual-sample --output .\dashboard.html
 ```
 
+### Operator Console Command
+
+M5A adds a local-only, read-only operator console skeleton with these pages:
+
+- overview
+- decisions
+- portfolio
+- research
+- health
+- control placeholder
+
+Render one page to HTML for inspection:
+
+```powershell
+python run_forecast_loop.py operator-console --storage-dir .\paper_storage\manual-sample --page overview --output .\operator-console.html
+```
+
+Start the local console server:
+
+```powershell
+python run_forecast_loop.py operator-console --storage-dir .\paper_storage\manual-sample --host 127.0.0.1 --port 8765
+```
+
+The server only accepts local bind hosts (`127.0.0.1`, `localhost`, `::1`).
+The M5A console does not provide forms, live trading, broker submission,
+secret display, or real control execution.
+
 ## Failure and Degrade Behavior
 
 The loop degrades conservatively:
@@ -698,6 +726,12 @@ Render a dashboard for an existing storage directory:
 python run_forecast_loop.py render-dashboard --storage-dir .\paper_storage\manual-replay
 ```
 
+Render the M5A local operator console overview:
+
+```powershell
+python run_forecast_loop.py operator-console --storage-dir .\paper_storage\manual-replay --page overview --output .\operator-console.html
+```
+
 Repair and summarize a storage directory after legacy artifact pollution or
 before resuming hourly automation:
 
@@ -745,7 +779,8 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - order lifecycle is minimal: created orders can be filled locally, but cancellation and partial fill lifecycle are deferred
 - proposal logic is still heuristic and conservative
 - health-check creates repair requests, but there is no autonomous repair daemon in this repo
-- the inspector is currently static HTML, not a live operator app
+- the static dashboard and M5A local operator console remain read-only; audited
+  operator controls are deferred to M5E
 - replay still writes summary metadata into the base storage directory instead of a more formal run registry or database
 - US ETF/stock support is fixture-only; no live or paid data provider is wired
 - Taiwan ETF calendar/provider support remains deferred

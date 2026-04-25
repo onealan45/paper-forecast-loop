@@ -25,10 +25,10 @@ brokers:
 
   binance_testnet:
     mode: SANDBOX
-    enabled: false
+    enabled: true
     submit_enabled: false
     live_trading_available: false
     base_url: "https://testnet.binance.vision"
     api_key_env: "BINANCE_TESTNET_API_KEY"
     api_secret_env: "BINANCE_TESTNET_API_SECRET"
-    notes: "Reserved for a later milestone. Do not put secrets in this file."
+    notes: "M6C adapter is testnet-only and mockable. Do not put secrets in this file."

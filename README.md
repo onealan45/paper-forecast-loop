@@ -188,13 +188,22 @@ Supported contract modes are:
 - `EXTERNAL_PAPER`
 - `SANDBOX`
 
-Only `INTERNAL_PAPER` is implemented. `EXTERNAL_PAPER` and `SANDBOX` are
-contract names for later milestones and fail closed if requested.
+`INTERNAL_PAPER` is always available. M6C adds a first `SANDBOX` implementation:
+`binance_testnet`.
+
+`binance_testnet` is testnet-only:
+
+- requires explicit API key and API secret values from the caller
+- refuses non-testnet endpoints
+- uses `/api/v3/order/test` for mocked submit tests
+- has no cancellation lifecycle or fills yet
+- defaults to a blocking HTTP client unless a caller injects a mock/client
+- never enables live trading
 
 Live broker or exchange modes are intentionally unavailable. There is no API key
-handling and no real order path. M2B/M2C add local paper order and fill
-artifacts, but adapter submission remains blocked until later gated
-paper/sandbox execution stages.
+handling in source and no real live order path. M2B/M2C add local paper order
+and fill artifacts; M6C adds only a gated sandbox/testnet adapter surface for
+later milestones.
 
 ## Secret and Config Safety
 

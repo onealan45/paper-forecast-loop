@@ -375,9 +375,9 @@ def test_paper_broker_is_only_available_mode():
         PaperBrokerAdapter(mode=BrokerMode.SANDBOX)
     with pytest.raises(TypeError):
         PaperBrokerAdapter(mode=BrokerMode.EXTERNAL_PAPER)
-    with pytest.raises(ValueError, match="only INTERNAL_PAPER"):
+    with pytest.raises(ValueError, match="available sandbox broker"):
         build_broker_adapter("EXTERNAL_PAPER")
-    with pytest.raises(ValueError, match="only INTERNAL_PAPER"):
+    with pytest.raises(ValueError, match="available sandbox broker"):
         build_broker_adapter("SANDBOX")
     with pytest.raises(ValueError, match="live mode is unsupported"):
         build_broker_adapter("live")

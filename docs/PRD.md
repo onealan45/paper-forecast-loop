@@ -24,6 +24,27 @@ The core product idea is:
 
 > The user is not manually operating a bot. The user is supervising an AI that researches, explains, and produces auditable paper-only decisions.
 
+## 1.1 Research Background: Alpha Factory Direction
+
+The post-M1-M6 research background is recorded in
+[`docs/architecture/alpha-factory-research-background.md`](architecture/alpha-factory-research-background.md).
+
+The long-term product direction is a paper-only, evidence-gated, multi-strategy
+Alpha Factory. The system should generate and evaluate many candidate alphas,
+but promotion must be controlled by fixed data snapshots, locked split
+manifests, trial budgets, leakage checks, baseline comparisons, validation
+statistics, holdout evidence, paper-shadow monitoring, and health/repair
+artifacts.
+
+The core research principle is:
+
+> 放開策略搜尋空間，鎖死評估流程。
+
+This keeps strategy exploration broad while preventing the evaluation loop from
+turning into adaptive data mining. It also keeps the V1 boundary clear: no live
+trading, no real capital, no real broker order submission, and no automatic
+promotion from paper research to live execution.
+
 ## 2. Problem Statement
 
 Most trading dashboards are either:

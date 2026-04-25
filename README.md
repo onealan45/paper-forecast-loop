@@ -14,6 +14,19 @@ goal is the first **auditable strategy research robot**:
 - create Codex repair requests when health checks find blocking issues
 - keep reruns safe and idempotent
 
+## Research Background
+
+The post-M1-M6 research direction is documented in
+[`docs/architecture/alpha-factory-research-background.md`](docs/architecture/alpha-factory-research-background.md).
+The target is a paper-only, evidence-gated, multi-strategy Alpha Factory, not a
+live auto-trading system.
+
+The core research rule is: **放開策略搜尋空間，鎖死評估流程。** Strategy
+ideas may broaden, but candidate evaluation must stay fixed, auditable, and
+repeatable through canonical data snapshots, locked split manifests, trial
+budgets, baseline comparison, research gates, holdout checks, paper-shadow
+monitoring, and repair/health artifacts.
+
 ## Current Scope
 
 This version intentionally includes:

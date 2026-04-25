@@ -11,10 +11,15 @@ import tomllib
 from forecast_loop.health import run_health_check
 from forecast_loop.models import (
     BaselineEvaluation,
+    BrokerOrder,
+    BrokerReconciliation,
+    ExecutionSafetyGate,
     EvaluationSummary,
     Forecast,
     ForecastScore,
     HealthFinding,
+    PaperFill,
+    PaperOrder,
     PaperPortfolioSnapshot,
     Proposal,
     ProviderRun,
@@ -39,6 +44,11 @@ class DashboardSnapshot:
     latest_baseline_evaluation: BaselineEvaluation | None
     latest_portfolio_snapshot: PaperPortfolioSnapshot | None
     latest_risk_snapshot: RiskSnapshot | None
+    paper_orders: list[PaperOrder]
+    broker_orders: list[BrokerOrder]
+    paper_fills: list[PaperFill]
+    latest_broker_reconciliation: BrokerReconciliation | None
+    latest_execution_safety_gate: ExecutionSafetyGate | None
     latest_provider_run: ProviderRun | None
     latest_replay_summary: EvaluationSummary | None
     forecast_count: int
@@ -79,6 +89,11 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
     baseline_evaluations = repository.load_baseline_evaluations()
     portfolio_snapshots = repository.load_portfolio_snapshots()
     risk_snapshots = repository.load_risk_snapshots()
+    paper_orders = repository.load_paper_orders()
+    broker_orders = repository.load_broker_orders()
+    paper_fills = repository.load_paper_fills()
+    broker_reconciliations = repository.load_broker_reconciliations()
+    execution_safety_gates = repository.load_execution_safety_gates()
     provider_runs = repository.load_provider_runs()
     replay_summaries = repository.load_evaluation_summaries()
     latest_forecast = forecasts[-1] if forecasts else None
@@ -112,6 +127,11 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         latest_baseline_evaluation=baseline_evaluations[-1] if baseline_evaluations else None,
         latest_portfolio_snapshot=portfolio_snapshots[-1] if portfolio_snapshots else None,
         latest_risk_snapshot=risk_snapshots[-1] if risk_snapshots else None,
+        paper_orders=paper_orders,
+        broker_orders=broker_orders,
+        paper_fills=paper_fills,
+        latest_broker_reconciliation=broker_reconciliations[-1] if broker_reconciliations else None,
+        latest_execution_safety_gate=execution_safety_gates[-1] if execution_safety_gates else None,
         latest_provider_run=provider_runs[-1] if provider_runs else None,
         latest_replay_summary=latest_replay_summary,
         forecast_count=len(forecasts),
@@ -511,6 +531,7 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
           <li><a href="#strategy">明日決策</a></li>
           <li><a href="#summary">操作摘要</a></li>
           <li><a href="#portfolio">投資組合與風險</a></li>
+          <li><a href="#broker">Broker / Sandbox</a></li>
           <li><a href="#provider">資料來源健康</a></li>
           <li><a href="#forecast">目前預測</a></li>
           <li><a href="#decision">本輪判讀與建議</a></li>
@@ -529,6 +550,9 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
       </section>
       <section class="panel hero" id="portfolio">
         {render_portfolio_risk_panel(snapshot)}
+      </section>
+      <section class="panel" id="broker">
+        {render_broker_panel(snapshot)}
       </section>
       <section class="panel" id="provider">
         {render_provider_panel(snapshot)}
@@ -732,6 +756,84 @@ def render_portfolio_risk_panel(snapshot: DashboardSnapshot) -> str:
           <p class="micro-copy">{escape(_risk_threshold_copy(risk))}</p>
         </div>
       </div>
+    """
+
+
+def render_broker_panel(snapshot: DashboardSnapshot) -> str:
+    gate = snapshot.latest_execution_safety_gate
+    reconciliation = snapshot.latest_broker_reconciliation
+    portfolio = snapshot.latest_portfolio_snapshot
+    active_broker_orders = _active_broker_orders(snapshot.broker_orders)
+    open_paper_orders = [order for order in snapshot.paper_orders if order.status == "CREATED"]
+    latest_fill = snapshot.paper_fills[-1] if snapshot.paper_fills else None
+    broker_mode = _broker_mode(snapshot)
+    gate_status = "尚無 execution-gate。"
+    failed_checks: list[str] = []
+    if gate is not None:
+        gate_status = "允許 sandbox/paper 執行" if gate.allowed else "執行被安全門擋下"
+        failed_checks = [check.get("code", "unknown") for check in gate.checks if check.get("status") == "fail"]
+    reconciliation_status = "尚無 broker reconciliation。"
+    if reconciliation is not None:
+        reconciliation_status = (
+            "對帳通過"
+            if not reconciliation.repair_required and reconciliation.severity != "blocking"
+            else "對帳有阻擋性差異"
+        )
+    account_copy = (
+        "尚無 paper portfolio snapshot，因此沒有可對照的帳戶摘要。"
+        if portfolio is None
+        else f"NAV {portfolio.nav or portfolio.equity:.2f}；Cash {portfolio.cash:.2f}；部位數 {len(portfolio.positions)}。"
+    )
+    order_copy = (
+        f"Open paper orders：{len(open_paper_orders)}；active broker lifecycle rows：{len(active_broker_orders)}。"
+    )
+    fill_copy = (
+        "尚無 paper fills。"
+        if latest_fill is None
+        else f"最新 fill {latest_fill.fill_id}；{latest_fill.symbol} {latest_fill.side} {latest_fill.quantity} @ {latest_fill.fill_price:.2f}。"
+    )
+    mismatch_copy = _broker_mismatch_copy(reconciliation)
+    failed_check_copy = "無" if not failed_checks else "、".join(failed_checks)
+    return f"""
+      <div class="kicker">Broker / Sandbox</div>
+      <h2>Broker / Sandbox 狀態</h2>
+      <p class="lead">這裡只讀本地 paper/sandbox artifacts，不連線 broker、不讀 secrets、不送出任何訂單。</p>
+      <div class="primary-grid">
+        <div class="summary-card"><div class="summary-label">Broker Mode</div><div class="summary-value">{escape(broker_mode)}</div><div class="summary-copy">允許的模式只有 EXTERNAL_PAPER / SANDBOX；LIVE 不可用。</div></div>
+        <div class="summary-card"><div class="summary-label">Execution Gate</div><div class="summary-value">{escape(gate.status if gate else "MISSING")}</div><div class="summary-copy">{escape(gate_status)}</div></div>
+        <div class="summary-card"><div class="summary-label">Reconciliation</div><div class="summary-value">{escape(reconciliation.status if reconciliation else "MISSING")}</div><div class="summary-copy">{escape(reconciliation_status)}</div></div>
+        <div class="summary-card"><div class="summary-label">Broker Health</div><div class="summary-value">{escape(_broker_health_from_gate(gate))}</div><div class="summary-copy">來自最近一次 execution-gate 的 broker health fixture 檢查。</div></div>
+      </div>
+      <div class="evidence-grid">
+        <div class="evidence-block">
+          <h3>帳戶快照 / Positions</h3>
+          <p class="micro-copy">{escape(account_copy)}</p>
+          <p class="micro-copy">{escape(_positions_copy(portfolio))}</p>
+        </div>
+        <div class="evidence-block">
+          <h3>Orders / Fills</h3>
+          <p class="micro-copy">{escape(order_copy)}</p>
+          <p class="micro-copy">{escape(fill_copy)}</p>
+        </div>
+        <div class="evidence-block">
+          <h3>Mismatch Warnings</h3>
+          <p class="micro-copy">{escape(mismatch_copy)}</p>
+        </div>
+        <div class="evidence-block">
+          <h3>Execution Enabled / Disabled</h3>
+          <p class="micro-copy">{escape(_display_boolean(gate.allowed) if gate else "否")}</p>
+          <p class="micro-copy">Failed checks：{escape(failed_check_copy)}</p>
+        </div>
+      </div>
+      <details>
+        <summary>展開 broker artifacts</summary>
+        <dl>
+          <dt>Execution Gate ID</dt><dd>{escape(gate.gate_id if gate else "無")}</dd>
+          <dt>Broker Reconciliation ID</dt><dd>{escape(reconciliation.reconciliation_id if reconciliation else "無")}</dd>
+          <dt>最新 Broker Order</dt><dd>{escape(snapshot.broker_orders[-1].broker_order_id if snapshot.broker_orders else "無")}</dd>
+          <dt>最新 Paper Fill</dt><dd>{escape(latest_fill.fill_id if latest_fill else "無")}</dd>
+        </dl>
+      </details>
     """
 
 
@@ -1220,6 +1322,48 @@ def _risk_threshold_copy(risk: RiskSnapshot | None) -> str:
         f"降低風險門檻 {risk.reduce_risk_drawdown_pct:.2%}；"
         f"停止新進場門檻 {risk.stop_new_entries_drawdown_pct:.2%}。"
     )
+
+
+def _broker_mode(snapshot: DashboardSnapshot) -> str:
+    if snapshot.latest_execution_safety_gate is not None:
+        return snapshot.latest_execution_safety_gate.broker_mode
+    if snapshot.latest_broker_reconciliation is not None:
+        return snapshot.latest_broker_reconciliation.broker_mode
+    if snapshot.broker_orders:
+        return snapshot.broker_orders[-1].broker_mode
+    return "尚無 broker mode artifact"
+
+
+def _broker_health_from_gate(gate: ExecutionSafetyGate | None) -> str:
+    if gate is None:
+        return "MISSING"
+    broker_health = next((check for check in gate.checks if check.get("code") == "broker_health"), None)
+    if broker_health is None:
+        return "MISSING"
+    return "HEALTHY" if broker_health.get("status") == "pass" else "BLOCKING"
+
+
+def _active_broker_orders(orders: list[BrokerOrder]) -> list[BrokerOrder]:
+    terminal = {"FILLED", "CANCELLED", "REJECTED", "EXPIRED", "ERROR"}
+    return [order for order in orders if order.status not in terminal]
+
+
+def _positions_copy(portfolio: PaperPortfolioSnapshot | None) -> str:
+    if portfolio is None or not portfolio.positions:
+        return "目前沒有 paper positions。"
+    return "；".join(
+        f"{position.symbol} qty {position.quantity:g} / value {position.market_value:.2f}"
+        for position in portfolio.positions[:5]
+    )
+
+
+def _broker_mismatch_copy(reconciliation: BrokerReconciliation | None) -> str:
+    if reconciliation is None:
+        return "尚無 reconciliation artifact；M6E broker-reconcile 尚未執行。"
+    if not reconciliation.findings:
+        return "沒有 reconciliation mismatch finding。"
+    codes = [str(finding.get("code", "unknown")) for finding in reconciliation.findings[:6]]
+    return "；".join(codes)
 
 
 def _display_health_status(status: str, repair_required: bool) -> str:

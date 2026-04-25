@@ -232,6 +232,10 @@ health fixture, order sizing, duplicate active orders, latest reconciliation,
 and market-open constraints before a future sandbox submit path may proceed.
 It performs no submit/cancel operation.
 
+M6G renders broker/sandbox state in the read-only dashboard: broker mode,
+broker health gate, account/position snapshot, open order counts, latest fills,
+reconciliation status, execution enabled/disabled, and mismatch warnings.
+
 Live broker or exchange modes are intentionally unavailable. There is no API key
 handling in source and no real live order path. M2B/M2C add local paper order
 and fill artifacts; M6C adds only a gated sandbox/testnet adapter surface for

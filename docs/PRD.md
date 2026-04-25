@@ -329,6 +329,9 @@ Current practical V1 path:
   operator control allowance, tradeable decisions, evidence/risk gates, broker
   health, max order size, duplicate-order checks, reconciliation, and market
   open checks before any future sandbox submit may proceed
+- M6G adds read-only dashboard broker/sandbox state: broker mode, broker
+  health gate, account and positions snapshot, open orders, fills,
+  reconciliation status, execution enabled/disabled, and mismatch warnings
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation

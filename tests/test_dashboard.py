@@ -8,8 +8,13 @@ from forecast_loop.cli import main
 from forecast_loop.evaluation import build_evaluation_summary
 from forecast_loop.models import (
     BaselineEvaluation,
+    BrokerOrder,
+    BrokerReconciliation,
+    ExecutionSafetyGate,
     Forecast,
     ForecastScore,
+    PaperFill,
+    PaperOrder,
     PaperPortfolioSnapshot,
     PaperPosition,
     Proposal,
@@ -580,3 +585,140 @@ def test_dashboard_renders_portfolio_nav_pnl_and_risk(tmp_path):
     assert "已實現 / 未實現 PnL" in html
     assert "降低風險（REDUCE_RISK）" in html
     assert "Gross exposure：10.50%" in html
+
+
+def test_dashboard_renders_broker_sandbox_state(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    position = PaperPosition(
+        symbol="BTC-USD",
+        quantity=1.0,
+        avg_price=100.0,
+        market_price=110.0,
+        market_value=110.0,
+        unrealized_pnl=10.0,
+        position_pct=0.011,
+    )
+    portfolio = PaperPortfolioSnapshot(
+        snapshot_id="portfolio:broker-dashboard",
+        created_at=now,
+        equity=10_000.0,
+        cash=9_890.0,
+        gross_exposure_pct=0.011,
+        net_exposure_pct=0.011,
+        max_drawdown_pct=0.0,
+        positions=[position],
+        realized_pnl=0.0,
+        unrealized_pnl=10.0,
+        nav=10_000.0,
+    )
+    paper_order = PaperOrder(
+        order_id="paper-order:broker-dashboard",
+        created_at=now,
+        decision_id="decision:broker-dashboard",
+        symbol="BTC-USD",
+        side="BUY",
+        order_type="TARGET_PERCENT",
+        status="CREATED",
+        target_position_pct=0.05,
+        current_position_pct=0.0,
+        max_position_pct=0.15,
+        rationale="dashboard test",
+    )
+    broker_order = BrokerOrder(
+        broker_order_id="broker-order:broker-dashboard",
+        created_at=now,
+        updated_at=now,
+        local_order_id=paper_order.order_id,
+        decision_id=paper_order.decision_id,
+        symbol="BTC-USD",
+        side="BUY",
+        quantity=None,
+        target_position_pct=0.05,
+        broker="binance_testnet",
+        broker_mode="SANDBOX",
+        status="ACKNOWLEDGED",
+        broker_status="ACKNOWLEDGED",
+        broker_order_ref="testnet:dashboard",
+        client_order_id=paper_order.order_id,
+        error_message=None,
+        raw_response={"mock": True},
+        decision_basis="test",
+    )
+    fill = PaperFill(
+        fill_id="paper-fill:dashboard",
+        order_id=paper_order.order_id,
+        decision_id=paper_order.decision_id,
+        symbol="BTC-USD",
+        side="BUY",
+        filled_at=now,
+        quantity=1.0,
+        market_price=110.0,
+        fill_price=110.0,
+        gross_value=110.0,
+        fee=0.1,
+        fee_bps=5.0,
+        slippage_bps=10.0,
+        net_cash_change=-110.1,
+    )
+    reconciliation = BrokerReconciliation(
+        reconciliation_id="broker-reconciliation:dashboard",
+        created_at=now,
+        broker="binance_testnet",
+        broker_mode="SANDBOX",
+        status="MISMATCH",
+        severity="blocking",
+        repair_required=True,
+        local_broker_order_ids=[broker_order.broker_order_id],
+        external_order_refs=["testnet:unknown"],
+        matched_order_refs=[],
+        missing_external_order_ids=[broker_order.broker_order_id],
+        unknown_external_order_refs=["testnet:unknown"],
+        duplicate_broker_order_refs=[],
+        status_mismatches=[],
+        position_mismatches=[],
+        cash_mismatch=None,
+        equity_mismatch=None,
+        findings=[{"code": "unknown_external_order", "severity": "blocking"}],
+        decision_basis="test",
+    )
+    gate = ExecutionSafetyGate(
+        gate_id="execution-gate:dashboard",
+        created_at=now,
+        symbol="BTC-USD",
+        decision_id=paper_order.decision_id,
+        order_id=paper_order.order_id,
+        broker="binance_testnet",
+        broker_mode="SANDBOX",
+        status="BLOCKED",
+        severity="blocking",
+        allowed=False,
+        checks=[
+            {"code": "broker_health", "status": "pass"},
+            {"code": "broker_reconciliation", "status": "fail"},
+        ],
+        health_check_id="health:dashboard",
+        risk_id="risk:dashboard",
+        broker_reconciliation_id=reconciliation.reconciliation_id,
+        decision_basis="test",
+    )
+    repository.save_portfolio_snapshot(portfolio)
+    repository.save_paper_order(paper_order)
+    repository.save_broker_order(broker_order)
+    repository.save_paper_fill(fill)
+    repository.save_broker_reconciliation(reconciliation)
+    repository.save_execution_safety_gate(gate)
+
+    html = render_dashboard_html(build_dashboard_snapshot(tmp_path))
+
+    assert 'id="broker"' in html
+    assert "Broker / Sandbox 狀態" in html
+    assert "SANDBOX" in html
+    assert "BLOCKED" in html
+    assert "對帳有阻擋性差異" in html
+    assert "unknown_external_order" in html
+    assert "Execution Enabled / Disabled" in html
+    assert "Open paper orders：1；active broker lifecycle rows：1。" in html
+    assert "BTC-USD qty 1 / value 110.00" in html

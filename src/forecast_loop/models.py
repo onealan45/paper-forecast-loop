@@ -1116,6 +1116,12 @@ class BrokerOrderStatus(StrEnum):
     ERROR = "ERROR"
 
 
+class BrokerReconciliationStatus(StrEnum):
+    MATCHED = "MATCHED"
+    MISMATCH = "MISMATCH"
+    ERROR = "ERROR"
+
+
 class PaperControlAction(StrEnum):
     PAUSE = "PAUSE"
     RESUME = "RESUME"
@@ -1409,6 +1415,87 @@ class BrokerOrder:
             error_message=payload.get("error_message"),
             raw_response=dict(payload.get("raw_response", {})),
             decision_basis=payload.get("decision_basis", "legacy_broker_order"),
+        )
+
+
+@dataclass(slots=True)
+class BrokerReconciliation:
+    reconciliation_id: str
+    created_at: datetime
+    broker: str
+    broker_mode: str
+    status: str
+    severity: str
+    repair_required: bool
+    local_broker_order_ids: list[str]
+    external_order_refs: list[str]
+    matched_order_refs: list[str]
+    missing_external_order_ids: list[str]
+    unknown_external_order_refs: list[str]
+    duplicate_broker_order_refs: list[str]
+    status_mismatches: list[dict]
+    position_mismatches: list[dict]
+    cash_mismatch: dict | None
+    equity_mismatch: dict | None
+    findings: list[dict]
+    decision_basis: str
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        created_at: datetime,
+        broker: str,
+        broker_mode: str,
+        local_broker_order_ids: list[str],
+        external_order_refs: list[str],
+        findings: list[dict],
+    ) -> str:
+        return _stable_artifact_id(
+            "broker-reconciliation",
+            {
+                "created_at": created_at.isoformat(),
+                "broker": broker,
+                "broker_mode": broker_mode,
+                "local_broker_order_ids": sorted(local_broker_order_ids),
+                "external_order_refs": sorted(external_order_refs),
+                "findings": findings,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "BrokerReconciliation":
+        status = _require_string(payload, "status")
+        if status not in {item.value for item in BrokerReconciliationStatus}:
+            raise ValueError(f"unsupported broker reconciliation status: {status}")
+        severity = payload.get("severity", "none")
+        if severity not in {"none", "warning", "blocking"}:
+            raise ValueError(f"unsupported broker reconciliation severity: {severity}")
+        return cls(
+            reconciliation_id=_require_string(payload, "reconciliation_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            broker=_require_string(payload, "broker"),
+            broker_mode=_require_string(payload, "broker_mode"),
+            status=status,
+            severity=severity,
+            repair_required=bool(payload.get("repair_required", False)),
+            local_broker_order_ids=list(payload.get("local_broker_order_ids", [])),
+            external_order_refs=list(payload.get("external_order_refs", [])),
+            matched_order_refs=list(payload.get("matched_order_refs", [])),
+            missing_external_order_ids=list(payload.get("missing_external_order_ids", [])),
+            unknown_external_order_refs=list(payload.get("unknown_external_order_refs", [])),
+            duplicate_broker_order_refs=list(payload.get("duplicate_broker_order_refs", [])),
+            status_mismatches=list(payload.get("status_mismatches", [])),
+            position_mismatches=list(payload.get("position_mismatches", [])),
+            cash_mismatch=payload.get("cash_mismatch"),
+            equity_mismatch=payload.get("equity_mismatch"),
+            findings=list(payload.get("findings", [])),
+            decision_basis=payload.get("decision_basis", "legacy_broker_reconciliation"),
         )
 
 

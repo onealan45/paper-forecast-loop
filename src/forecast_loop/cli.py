@@ -9,6 +9,7 @@ from forecast_loop.assets import get_asset, list_assets
 from forecast_loop.automation_log import automation_step, record_automation_run
 from forecast_loop.backtest import run_backtest
 from forecast_loop.broker_lifecycle import create_broker_order_lifecycle
+from forecast_loop.broker_reconciliation import run_broker_reconciliation
 from forecast_loop.candle_store import (
     StoredCandleProvider,
     export_market_candles,
@@ -153,6 +154,16 @@ def main(argv: list[str] | None = None) -> int:
     broker_order.add_argument("--mock-submit-status", default="CREATED")
     broker_order.add_argument("--broker-order-ref")
     broker_order.add_argument("--now")
+
+    broker_reconcile = subparsers.add_parser("broker-reconcile")
+    broker_reconcile.add_argument("--storage-dir", required=True)
+    broker_reconcile.add_argument("--external-snapshot", required=True)
+    broker_reconcile.add_argument("--broker", default="binance_testnet")
+    broker_reconcile.add_argument("--broker-mode", choices=["EXTERNAL_PAPER", "SANDBOX"], default="SANDBOX")
+    broker_reconcile.add_argument("--cash-tolerance", type=float, default=0.01)
+    broker_reconcile.add_argument("--equity-tolerance", type=float, default=0.01)
+    broker_reconcile.add_argument("--position-tolerance", type=float, default=1e-9)
+    broker_reconcile.add_argument("--now")
 
     paper_fill = subparsers.add_parser("paper-fill")
     paper_fill.add_argument("--storage-dir", required=True)
@@ -301,6 +312,8 @@ def main(argv: list[str] | None = None) -> int:
             return _paper_order(args)
         if args.command == "broker-order":
             return _broker_order(args)
+        if args.command == "broker-reconcile":
+            return _broker_reconcile(args)
         if args.command == "paper-fill":
             return _paper_fill(args)
         if args.command == "portfolio-snapshot":
@@ -880,6 +893,30 @@ def _broker_order(args) -> int:
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0
+
+
+def _broker_reconcile(args) -> int:
+    now = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    snapshot_path = Path(args.external_snapshot)
+    if not snapshot_path.exists():
+        raise ValueError(f"external snapshot file does not exist: {snapshot_path}")
+    try:
+        external_snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"external snapshot file is not valid JSON: {snapshot_path}: {exc}") from exc
+    repository = JsonFileRepository(args.storage_dir)
+    reconciliation = run_broker_reconciliation(
+        repository=repository,
+        external_snapshot=external_snapshot,
+        now=now,
+        broker=args.broker,
+        broker_mode=args.broker_mode,
+        cash_tolerance=args.cash_tolerance,
+        equity_tolerance=args.equity_tolerance,
+        position_tolerance=args.position_tolerance,
+    )
+    print(json.dumps(reconciliation.to_dict(), ensure_ascii=False))
+    return 0 if reconciliation.severity != "blocking" else 2
 
 
 def _paper_fill(args) -> int:

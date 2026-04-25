@@ -218,6 +218,13 @@ The `broker-order` CLI writes local lifecycle records from existing paper
 orders. It accepts only `EXTERNAL_PAPER` or `SANDBOX` broker modes, uses mock
 submit status metadata only, and does not call an external broker.
 
+M6E adds local broker reconciliation artifacts in
+`broker_reconciliations.jsonl`. The `broker-reconcile` CLI compares local
+broker lifecycle rows and the latest local portfolio snapshot against an
+external paper/sandbox snapshot fixture. Unknown external orders, missing
+tracked local orders, duplicate broker order references, status mismatches, or
+cash/equity/position mismatches are blocking and set `repair_required=true`.
+
 Live broker or exchange modes are intentionally unavailable. There is no API key
 handling in source and no real live order path. M2B/M2C add local paper order
 and fill artifacts; M6C adds only a gated sandbox/testnet adapter surface for

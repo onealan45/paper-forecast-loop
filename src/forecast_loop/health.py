@@ -11,6 +11,7 @@ from forecast_loop.models import (
     BacktestResult,
     BacktestRun,
     BrokerOrder,
+    BrokerReconciliation,
     EquityCurvePoint,
     EvaluationSummary,
     Forecast,
@@ -90,6 +91,11 @@ def run_health_check(
         "decisions": _load_jsonl(storage_path / "strategy_decisions.jsonl", StrategyDecision.from_dict, findings),
         "paper_orders": _load_jsonl(storage_path / "paper_orders.jsonl", PaperOrder.from_dict, findings),
         "broker_orders": _load_jsonl(storage_path / "broker_orders.jsonl", BrokerOrder.from_dict, findings),
+        "broker_reconciliations": _load_jsonl(
+            storage_path / "broker_reconciliations.jsonl",
+            BrokerReconciliation.from_dict,
+            findings,
+        ),
         "paper_fills": _load_jsonl(storage_path / "paper_fills.jsonl", PaperFill.from_dict, findings),
         "control_events": _load_jsonl(storage_path / "control_events.jsonl", PaperControlEvent.from_dict, findings),
         "baselines": _load_jsonl(storage_path / "baseline_evaluations.jsonl", BaselineEvaluation.from_dict, findings),
@@ -118,6 +124,7 @@ def run_health_check(
     decisions: list[StrategyDecision] = artifact_rows["decisions"]
     paper_orders: list[PaperOrder] = artifact_rows["paper_orders"]
     broker_orders: list[BrokerOrder] = artifact_rows["broker_orders"]
+    broker_reconciliations: list[BrokerReconciliation] = artifact_rows["broker_reconciliations"]
     paper_fills: list[PaperFill] = artifact_rows["paper_fills"]
     control_events: list[PaperControlEvent] = artifact_rows["control_events"]
     baselines: list[BaselineEvaluation] = artifact_rows["baselines"]
@@ -142,6 +149,12 @@ def run_health_check(
     _check_duplicate_ids(decisions, "decision_id", storage_path / "strategy_decisions.jsonl", findings)
     _check_duplicate_ids(paper_orders, "order_id", storage_path / "paper_orders.jsonl", findings)
     _check_duplicate_ids(broker_orders, "broker_order_id", storage_path / "broker_orders.jsonl", findings)
+    _check_duplicate_ids(
+        broker_reconciliations,
+        "reconciliation_id",
+        storage_path / "broker_reconciliations.jsonl",
+        findings,
+    )
     _check_duplicate_ids(paper_fills, "fill_id", storage_path / "paper_fills.jsonl", findings)
     _check_duplicate_ids(control_events, "control_id", storage_path / "control_events.jsonl", findings)
     _check_duplicate_ids(baselines, "baseline_id", storage_path / "baseline_evaluations.jsonl", findings)
@@ -209,6 +222,7 @@ def run_health_check(
         findings,
     )
     _check_research_dataset_leakage(storage_path, research_datasets, findings)
+    _check_broker_reconciliations(storage_path, broker_reconciliations, findings)
     _check_dashboard(storage_path, findings)
     _check_secret_leakage(storage_path, findings)
 
@@ -261,6 +275,30 @@ def _check_duplicate_ids(rows: list, attribute: str, path: Path, findings: list[
                 repair_required=True,
             )
         )
+
+
+def _check_broker_reconciliations(
+    storage_path: Path,
+    reconciliations: list[BrokerReconciliation],
+    findings: list[HealthFinding],
+) -> None:
+    if not reconciliations:
+        return
+    latest = reconciliations[-1]
+    if not latest.repair_required and latest.severity != "blocking":
+        return
+    findings.append(
+        HealthFinding(
+            code="broker_reconciliation_blocking",
+            severity="blocking",
+            message=(
+                f"Latest broker reconciliation {latest.reconciliation_id} is blocking; "
+                f"finding_count={len(latest.findings)}."
+            ),
+            artifact_path=str(storage_path / "broker_reconciliations.jsonl"),
+            repair_required=True,
+        )
+    )
 
 
 _SECRET_ASSIGNMENT_RE = re.compile(

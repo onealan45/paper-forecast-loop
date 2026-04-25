@@ -322,6 +322,9 @@ Current practical V1 path:
   experimentation with missing-key fail-safe behavior and no live endpoint
 - M6D adds local broker order lifecycle artifacts that map paper orders to
   sandbox/external-paper statuses without calling a broker
+- M6E adds local broker reconciliation artifacts that compare broker lifecycle,
+  positions, cash, and equity against an external paper/sandbox snapshot and
+  mark blocking mismatches as repair-required
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation

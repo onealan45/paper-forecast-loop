@@ -291,6 +291,8 @@ Current practical V1 path:
 - M5A adds a local-only read-only operator console skeleton
 - M5B expands the operator console decision timeline with decision reasons,
   evidence links, invalidation conditions, and blocked reasons
+- M5C expands the operator console portfolio/risk page with NAV, PnL,
+  exposure, drawdown, positions, and risk gates
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation
@@ -347,6 +349,8 @@ V1 MVP should include:
   portfolio, research, health, and control-placeholder pages
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
+- portfolio/risk view exposing NAV, cash, realized/unrealized PnL,
+  positions, drawdown, exposure, risk gate thresholds, and risk findings
 - health-check output
 - Codex repair request artifacts
 - minimal CLI

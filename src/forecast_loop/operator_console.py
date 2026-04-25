@@ -484,6 +484,8 @@ def _render_portfolio(snapshot: OperatorConsoleSnapshot) -> str:
         "<tr>"
         f"<td>{escape(position.symbol)}</td>"
         f"<td>{position.quantity:.8f}</td>"
+        f"<td>{_format_money(position.avg_price)}</td>"
+        f"<td>{_format_money(position.market_price)}</td>"
         f"<td>{_format_money(position.market_value)}</td>"
         f"<td>{_format_pct(position.position_pct)}</td>"
         f"<td>{_format_money(position.unrealized_pnl)}</td>"
@@ -491,28 +493,47 @@ def _render_portfolio(snapshot: OperatorConsoleSnapshot) -> str:
         for position in positions
     )
     if not position_rows:
-        position_rows = '<tr><td colspan="5">目前沒有 paper position。</td></tr>'
+        position_rows = '<tr><td colspan="7">目前沒有 paper position。</td></tr>'
+    risk_findings = _risk_findings(risk)
     return f"""
 <section class="grid">
   <article class="panel">
-    <h3>NAV / Cash</h3>
+    <h3>NAV / Cash / PnL</h3>
     <div class="metric">{_format_money(portfolio.nav if portfolio else None)}</div>
     <p>Cash：{_format_money(portfolio.cash if portfolio else None)}</p>
+    <p>Realized PnL：{_format_money(portfolio.realized_pnl if portfolio else None)}</p>
+    <p>Unrealized PnL：{_format_money(portfolio.unrealized_pnl if portfolio else None)}</p>
   </article>
   <article class="panel">
-    <h3>Risk</h3>
-    <p>Status：{escape(risk.status) if risk else "UNKNOWN"}</p>
-    <p>Drawdown：{_format_pct(risk.current_drawdown_pct if risk else None)}</p>
+    <h3>Drawdown</h3>
+    <p>Status：{_risk_status(risk)}</p>
+    <p>Current：{_format_pct(risk.current_drawdown_pct if risk else None)}</p>
+    <p>Max：{_format_pct(risk.max_drawdown_pct if risk else None)}</p>
+    <p>Recommended：{escape(risk.recommended_action) if risk else "UNKNOWN"}</p>
   </article>
   <article class="panel">
     <h3>Exposure</h3>
     <p>Gross：{_format_pct(portfolio.gross_exposure_pct if portfolio else None)}</p>
     <p>Net：{_format_pct(portfolio.net_exposure_pct if portfolio else None)}</p>
+    <p>Position：{_format_pct(risk.position_pct if risk else None)}</p>
+  </article>
+  <article class="panel wide">
+    <h3>Risk Gates</h3>
+    <table>
+      <thead><tr><th>Gate</th><th>Current</th><th>Limit / Trigger</th></tr></thead>
+      <tbody>
+        <tr><td>Position</td><td>{_format_pct(risk.position_pct if risk else None)}</td><td>{_format_pct(risk.max_position_pct if risk else None)}</td></tr>
+        <tr><td>Gross exposure</td><td>{_format_pct(risk.gross_exposure_pct if risk else None)}</td><td>{_format_pct(risk.max_gross_exposure_pct if risk else None)}</td></tr>
+        <tr><td>Reduce-risk drawdown</td><td>{_format_pct(risk.current_drawdown_pct if risk else None)}</td><td>{_format_pct(risk.reduce_risk_drawdown_pct if risk else None)}</td></tr>
+        <tr><td>Stop-new-entries drawdown</td><td>{_format_pct(risk.current_drawdown_pct if risk else None)}</td><td>{_format_pct(risk.stop_new_entries_drawdown_pct if risk else None)}</td></tr>
+      </tbody>
+    </table>
+    <p>Findings：{risk_findings}</p>
   </article>
   <article class="panel wide">
     <h3>Positions</h3>
     <table>
-      <thead><tr><th>Symbol</th><th>Quantity</th><th>Market Value</th><th>Position %</th><th>Unrealized PnL</th></tr></thead>
+      <thead><tr><th>Symbol</th><th>Quantity</th><th>Avg Price</th><th>Market Price</th><th>Market Value</th><th>Position %</th><th>Unrealized PnL</th></tr></thead>
       <tbody>{position_rows}</tbody>
     </table>
   </article>
@@ -675,6 +696,20 @@ def _conditions(conditions: list[str]) -> str:
 
 def _render_counts(counts: dict[str, int]) -> str:
     return "".join(f"<p>{escape(name)}：{count}</p>" for name, count in counts.items())
+
+
+def _risk_status(risk: RiskSnapshot | None) -> str:
+    if risk is None:
+        return "UNKNOWN"
+    return f'<span class="{_status_class(risk.severity)}">{escape(risk.status)}</span>'
+
+
+def _risk_findings(risk: RiskSnapshot | None) -> str:
+    if risk is None:
+        return '<span class="muted">n/a</span>'
+    if not risk.findings:
+        return '<span class="muted">none</span>'
+    return ", ".join(f"<code>{escape(finding)}</code>" for finding in risk.findings)
 
 
 def _page_title(page: str) -> str:

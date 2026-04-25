@@ -196,6 +196,25 @@ handling and no real order path. M2B/M2C add local paper order and fill
 artifacts, but adapter submission remains blocked until later gated
 paper/sandbox execution stages.
 
+## Secret and Config Safety
+
+M6B adds safe configuration examples only:
+
+- `.env.example`
+- `config/brokers.example.yml`
+- `docs/secrets-management.md`
+
+`.env` and `.env.*` are ignored, except `.env.example`. Example files contain
+blank placeholders and environment variable names only.
+
+`health-check` scans repo safety files and selected storage artifacts for
+obvious secret-looking assignments such as API keys, API secrets, tokens,
+webhook URLs, and private keys. If found, it reports
+`secret_leak_detected` without echoing the secret value.
+
+This does not add external broker connectivity, notification delivery,
+sandbox/testnet submission, or live trading.
+
 ## Forecast Contract
 
 Each forecast records enough information to reconstruct and audit the forecast window:

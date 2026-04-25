@@ -77,7 +77,26 @@ Fix:
 - Added regression coverage proving direct constructor attempts with
   `SANDBOX` and `EXTERNAL_PAPER` fail.
 
-Final reviewer status after fix: pending re-review.
+Final reviewer status after fix: `APPROVED`.
+
+Re-review result:
+
+- P1 is resolved.
+- `PaperBrokerAdapter.mode` is a read-only property fixed to
+  `INTERNAL_PAPER`.
+- Direct constructor bypass with `SANDBOX` or `EXTERNAL_PAPER` is blocked.
+- `build_broker_adapter()` still fails closed for `EXTERNAL_PAPER`,
+  `SANDBOX`, and `live`.
+- Adapter `submit_order` and `cancel_order` still return blocked responses.
+- Safety boundary was rechecked: no external broker/exchange calls, no API
+  key/secret handling, no sandbox implementation, no live trading path, and no
+  runtime artifacts.
+
+Residual non-blocking risk:
+
+- Adapter responses are still loose dictionaries. Before a real sandbox or
+  external paper adapter is implemented, later milestones should type or schema
+  these responses.
 
 ## Safety Status
 

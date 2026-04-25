@@ -18,6 +18,7 @@ from forecast_loop.models import (
     MacroEvent,
     MarketCandleRecord,
     PaperFill,
+    PaperControlEvent,
     PaperOrder,
     PaperPortfolioSnapshot,
     Proposal,
@@ -56,6 +57,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("strategy_decisions", "strategy_decisions.jsonl", "decision_id", StrategyDecision.from_dict),
     ArtifactSpec("paper_orders", "paper_orders.jsonl", "order_id", PaperOrder.from_dict),
     ArtifactSpec("paper_fills", "paper_fills.jsonl", "fill_id", PaperFill.from_dict),
+    ArtifactSpec("control_events", "control_events.jsonl", "control_id", PaperControlEvent.from_dict),
     ArtifactSpec("portfolio_snapshots", "portfolio_snapshots.jsonl", "snapshot_id", PaperPortfolioSnapshot.from_dict),
     ArtifactSpec("equity_curve", "equity_curve.jsonl", "point_id", EquityCurvePoint.from_dict),
     ArtifactSpec("risk_snapshots", "risk_snapshots.jsonl", "risk_id", RiskSnapshot.from_dict),
@@ -207,6 +209,12 @@ class SQLiteRepository:
 
     def load_paper_fills(self) -> list[PaperFill]:
         return self._load("paper_fills", PaperFill.from_dict)
+
+    def save_control_event(self, event: PaperControlEvent) -> None:
+        self._save_unique("control_events", event.control_id, event.to_dict())
+
+    def load_control_events(self) -> list[PaperControlEvent]:
+        return self._load("control_events", PaperControlEvent.from_dict)
 
     def save_portfolio_snapshot(self, snapshot: PaperPortfolioSnapshot) -> None:
         self._save_unique("portfolio_snapshots", snapshot.snapshot_id, snapshot.to_dict())
@@ -361,6 +369,8 @@ def migrate_jsonl_to_sqlite(storage_dir: Path | str, db_path: Path | str | None 
         sqlite_repository.save_paper_order(order)
     for fill in json_repository.load_paper_fills():
         sqlite_repository.save_paper_fill(fill)
+    for event in json_repository.load_control_events():
+        sqlite_repository.save_control_event(event)
     for snapshot in json_repository.load_portfolio_snapshots():
         sqlite_repository.save_portfolio_snapshot(snapshot)
     for point in json_repository.load_equity_curve_points():

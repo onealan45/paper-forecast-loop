@@ -1104,6 +1104,81 @@ class PaperOrderType(StrEnum):
     TARGET_PERCENT = "TARGET_PERCENT"
 
 
+class PaperControlAction(StrEnum):
+    PAUSE = "PAUSE"
+    RESUME = "RESUME"
+    STOP_NEW_ENTRIES = "STOP_NEW_ENTRIES"
+    REDUCE_RISK = "REDUCE_RISK"
+    EMERGENCY_STOP = "EMERGENCY_STOP"
+    SET_MAX_POSITION = "SET_MAX_POSITION"
+
+
+@dataclass(slots=True)
+class PaperControlEvent:
+    control_id: str
+    created_at: datetime
+    action: str
+    actor: str
+    reason: str
+    status: str
+    symbol: str | None
+    requires_confirmation: bool
+    confirmed: bool
+    parameter_name: str | None = None
+    parameter_value: float | None = None
+    decision_basis: str = "paper_control"
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        created_at: datetime,
+        action: str,
+        actor: str,
+        reason: str,
+        symbol: str | None,
+        parameter_name: str | None,
+        parameter_value: float | None,
+    ) -> str:
+        return _stable_artifact_id(
+            "control",
+            {
+                "created_at": created_at.isoformat(),
+                "action": action,
+                "actor": actor,
+                "reason": reason,
+                "symbol": symbol,
+                "parameter_name": parameter_name,
+                "parameter_value": parameter_value,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "PaperControlEvent":
+        action = _require_string(payload, "action").upper()
+        if action not in {item.value for item in PaperControlAction}:
+            raise ValueError(f"unsupported paper control action: {action}")
+        return cls(
+            control_id=_require_string(payload, "control_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            action=action,
+            actor=payload.get("actor", "operator"),
+            reason=_require_string(payload, "reason"),
+            status=payload.get("status", "ACTIVE"),
+            symbol=payload.get("symbol"),
+            requires_confirmation=bool(payload.get("requires_confirmation", False)),
+            confirmed=bool(payload.get("confirmed", False)),
+            parameter_name=payload.get("parameter_name"),
+            parameter_value=_optional_float(payload.get("parameter_value")),
+            decision_basis=payload.get("decision_basis", "legacy_paper_control"),
+        )
+
+
 @dataclass(slots=True)
 class PaperOrder:
     order_id: str

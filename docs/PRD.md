@@ -288,6 +288,7 @@ Current practical V1 path:
 - M4D adds rolling walk-forward validation artifacts with train/validation/test boundaries
 - M4E adds generated Markdown research reports from existing research artifacts
 - M4F adds research-quality gates before BUY/SELL decisions
+- M5A adds a local-only read-only operator console skeleton
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation
@@ -340,6 +341,8 @@ V1 MVP should include:
 - research-quality gates requiring enough samples, positive model edge,
   benchmark-beating backtests, acceptable drawdown, and stable walk-forward
   evidence before BUY/SELL
+- local-only read-only operator console skeleton with overview, decisions,
+  portfolio, research, health, and control-placeholder pages
 - health-check output
 - Codex repair request artifacts
 - minimal CLI
@@ -371,7 +374,8 @@ Remaining gaps are now product and operations scope, not known loop-blocking
 correctness defects:
 
 - strategy and regime classification remain intentionally simple
-- the current read-only UX is static HTML, not a live operator application
+- the current read-only UX includes static HTML plus a local operator console
+  skeleton; audited interactive controls are still deferred
 - automation is local and paper-only, with manual evidence checks before any resume
 - paper portfolio accounting and risk gates are local simulations and not broker reconciliation or external execution
 - SQLite repository migration/export now exists, while the hourly loop and dashboard still use JSONL artifacts by default until later M2 integration

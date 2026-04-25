@@ -21,6 +21,12 @@ from forecast_loop.health import run_health_check
 from forecast_loop.macro_events import import_macro_events, macro_calendar
 from forecast_loop.maintenance import repair_storage
 from forecast_loop.models import StrategyDecision
+from forecast_loop.operator_console import (
+    OPERATOR_CONSOLE_PAGES,
+    serve_operator_console,
+    validate_local_bind_host,
+    write_operator_console_page,
+)
 from forecast_loop.orders import create_paper_order_from_decision
 from forecast_loop.pipeline import ForecastingLoop
 from forecast_loop.provider_audit import AuditedMarketDataProvider
@@ -71,6 +77,15 @@ def main(argv: list[str] | None = None) -> int:
     render_dashboard = subparsers.add_parser("render-dashboard")
     render_dashboard.add_argument("--storage-dir", required=True)
     render_dashboard.add_argument("--output")
+
+    operator_console = subparsers.add_parser("operator-console")
+    operator_console.add_argument("--storage-dir", required=True)
+    operator_console.add_argument("--symbol", default="BTC-USD")
+    operator_console.add_argument("--host", default="127.0.0.1")
+    operator_console.add_argument("--port", type=int, default=8765)
+    operator_console.add_argument("--page", choices=OPERATOR_CONSOLE_PAGES, default="overview")
+    operator_console.add_argument("--output")
+    operator_console.add_argument("--now")
 
     repair_storage_cmd = subparsers.add_parser("repair-storage")
     repair_storage_cmd.add_argument("--storage-dir", required=True)
@@ -239,6 +254,8 @@ def main(argv: list[str] | None = None) -> int:
             return _replay_range(args)
         if args.command == "render-dashboard":
             return _render_dashboard(args)
+        if args.command == "operator-console":
+            return _operator_console(args)
         if args.command == "repair-storage":
             return _repair_storage(args)
         if args.command == "decide":
@@ -475,6 +492,50 @@ def _render_dashboard(args) -> int:
                 "dashboard_path": str(output_path.resolve()),
             }
         )
+    )
+    return 0
+
+
+def _operator_console(args) -> int:
+    now = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    if args.output:
+        output_path = write_operator_console_page(
+            storage_dir=args.storage_dir,
+            output=args.output,
+            page=args.page,
+            symbol=args.symbol,
+            now=now,
+        )
+        print(
+            json.dumps(
+                {
+                    "storage_dir": str(Path(args.storage_dir).resolve()),
+                    "console_path": str(output_path.resolve()),
+                    "page": args.page,
+                    "mode": "render_once",
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 0
+    validate_local_bind_host(args.host)
+    print(
+        json.dumps(
+            {
+                "storage_dir": str(Path(args.storage_dir).resolve()),
+                "url": f"http://{args.host}:{args.port}/{args.page}",
+                "mode": "serve_forever",
+                "local_only": True,
+            },
+            ensure_ascii=False,
+        )
+    )
+    serve_operator_console(
+        storage_dir=args.storage_dir,
+        host=args.host,
+        port=args.port,
+        symbol=args.symbol,
+        now=now,
     )
     return 0
 

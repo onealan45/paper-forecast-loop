@@ -886,11 +886,94 @@ def test_health_check_flags_secret_leak_without_echoing_secret_value(tmp_path, m
     assert leaked not in messages
 
 
+def test_health_check_flags_prefixed_env_secret_names(tmp_path, monkeypatch):
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    monkeypatch.chdir(tmp_path)
+    storage = tmp_path / "storage"
+    repository = JsonFileRepository(storage)
+    repository.save_forecast(_forecast("forecast:latest", anchor_time=now, status="pending"))
+    leaked = "test_secret_value_should_not_echo"
+    (tmp_path / ".env").write_text(
+        "\n".join(
+            [
+                f"ALPACA_PAPER_API_KEY={leaked}",
+                f"BINANCE_TESTNET_API_SECRET={leaked}",
+                f"TELEGRAM_BOT_TOKEN={leaked}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_health_check(
+        storage_dir=storage,
+        symbol="BTC-USD",
+        now=now,
+        create_repair_request=False,
+    )
+    messages = "\n".join(finding.message for finding in result.findings)
+
+    assert "secret_leak_detected" in {finding.code for finding in result.findings}
+    assert leaked not in messages
+
+
+def test_health_check_allows_non_secret_local_env(tmp_path, monkeypatch):
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "FORECAST_LOOP_ENV=local\nFORECAST_LOOP_BROKER_MODE=INTERNAL_PAPER\n",
+        encoding="utf-8",
+    )
+    storage = tmp_path / "storage"
+    repository = JsonFileRepository(storage)
+    repository.save_forecast(_forecast("forecast:latest", anchor_time=now, status="pending"))
+
+    result = run_health_check(
+        storage_dir=storage,
+        symbol="BTC-USD",
+        now=now,
+        create_repair_request=False,
+    )
+
+    assert "secret_leak_detected" not in {finding.code for finding in result.findings}
+
+
 def test_health_check_allows_blank_example_secret_placeholders(tmp_path, monkeypatch):
     now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".env.example").write_text(
         "ALPACA_PAPER_API_KEY=\nALPACA_PAPER_API_SECRET=\nTELEGRAM_BOT_TOKEN=\n",
+        encoding="utf-8",
+    )
+    storage = tmp_path / "storage"
+    repository = JsonFileRepository(storage)
+    repository.save_forecast(_forecast("forecast:latest", anchor_time=now, status="pending"))
+
+    result = run_health_check(
+        storage_dir=storage,
+        symbol="BTC-USD",
+        now=now,
+        create_repair_request=False,
+    )
+
+    assert "secret_leak_detected" not in {finding.code for finding in result.findings}
+
+
+def test_health_check_allows_example_config_env_variable_names(tmp_path, monkeypatch):
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    monkeypatch.chdir(tmp_path)
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "brokers.example.yml").write_text(
+        "\n".join(
+            [
+                "brokers:",
+                "  alpaca_paper:",
+                "    api_key_env: ALPACA_PAPER_API_KEY",
+                "    api_secret_env: ALPACA_PAPER_API_SECRET",
+                "  telegram:",
+                "    token_env: TELEGRAM_BOT_TOKEN",
+            ]
+        ),
         encoding="utf-8",
     )
     storage = tmp_path / "storage"

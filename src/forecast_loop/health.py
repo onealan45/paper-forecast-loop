@@ -260,8 +260,10 @@ def _check_duplicate_ids(rows: list, attribute: str, path: Path, findings: list[
 
 
 _SECRET_ASSIGNMENT_RE = re.compile(
-    r"(?i)['\"]?\b(?:api[_-]?key|api[_-]?secret|secret[_-]?key|token|webhook[_-]?url|private[_-]?key)\b['\"]?"
-    r"\s*[:=]\s*['\"]?([^'\"\s,}]+)"
+    r"(?i)['\"]?([A-Z0-9_-]*"
+    r"(?:api[_-]?key|api[_-]?secret|secret[_-]?key|token|webhook[_-]?url|private[_-]?key)"
+    r"[A-Z0-9_-]*)['\"]?"
+    r"[ \t]*[:=][ \t]*['\"]?([^'\"\s,}\r\n]*)"
 )
 _SAFE_SECRET_PLACEHOLDERS = {
     "",
@@ -290,9 +292,6 @@ def _check_secret_leakage(storage_path: Path, findings: list[HealthFinding]) -> 
     for path in scan_paths:
         if not path.exists() or not path.is_file():
             continue
-        if path.name == ".env":
-            _append_secret_finding(path, "local .env file must stay untracked and outside health artifacts", findings)
-            continue
         try:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
@@ -313,8 +312,11 @@ def _repo_secret_scan_paths() -> list[Path]:
 
 def _contains_secret_assignment(text: str) -> bool:
     for match in _SECRET_ASSIGNMENT_RE.finditer(text):
-        value = match.group(1).strip().strip("'\"")
+        key = match.group(1).strip().strip("'\"").lower()
+        value = match.group(2).strip().strip("'\"")
         normalized = value.lower()
+        if key.endswith("_env") or key.endswith("-env"):
+            continue
         if normalized in _SAFE_SECRET_PLACEHOLDERS:
             continue
         if normalized.startswith("${") or normalized.endswith("_env"):

@@ -23,13 +23,16 @@ broker dashboard, or automatic execution.
   unhealthy broker health, live-mode rejection, closed stock market, health
   audit, and SQLite parity.
 - Kept the implementation local and gate-only; no submit/cancel call is made.
+- Follow-up reviewer P1 fixed: `duplicate_active_broker_order` now blocks any
+  active broker order on the same symbol/broker/mode, not only the same local
+  paper order id.
 
 ## Verification
 
 - `python -m pytest tests\test_execution_safety.py tests\test_sqlite_repository.py -q`
-  - Result: `11 passed in 2.46s`
+  - Result: `11 passed in 2.44s`
 - `python -m pytest -q`
-  - Result: `215 passed in 7.54s`
+  - Result: `215 passed in 7.53s`
 - `python -m compileall -q src tests run_forecast_loop.py sitecustomize.py`
   - Result: passed
 - `python .\run_forecast_loop.py --help`
@@ -39,7 +42,8 @@ broker dashboard, or automatic execution.
 
 ## Reviewer Status
 
-Pending final reviewer subagent.
+Reviewer subagent found a P1 duplicate active broker-order blocker. The blocker
+was fixed and is pending re-review.
 
 ## Safety Status
 

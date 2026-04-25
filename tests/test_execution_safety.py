@@ -186,7 +186,7 @@ def test_execution_gate_blocks_weak_evidence_and_duplicate_broker_order(tmp_path
             broker_order_id="broker-order:duplicate",
             created_at=now,
             updated_at=now,
-            local_order_id=order.order_id,
+            local_order_id="paper-order:different-active-order",
             decision_id=order.decision_id,
             symbol=order.symbol,
             side=order.side,

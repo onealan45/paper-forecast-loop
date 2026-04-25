@@ -232,7 +232,7 @@ def _order_checks(
         (
             item
             for item in broker_orders
-            if item.local_order_id == order.order_id
+            if item.symbol == order.symbol
             and item.broker == broker
             and item.broker_mode == broker_mode
             and item.status in ACTIVE_BROKER_ORDER_STATUSES

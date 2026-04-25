@@ -533,6 +533,18 @@ shows:
 
 This remains read-only and paper-only.
 
+M5C expands the `portfolio` page with:
+
+- NAV, cash, realized PnL, and unrealized PnL
+- drawdown status and recommended risk action
+- gross/net/position exposure
+- risk gate current values and limits
+- risk findings
+- position quantity, average price, market price, market value, position %, and
+  unrealized PnL
+
+This also remains read-only and paper-only.
+
 ## Failure and Degrade Behavior
 
 The loop degrades conservatively:

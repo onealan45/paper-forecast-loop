@@ -5,7 +5,7 @@ import socket
 import pytest
 
 from forecast_loop.cli import main
-from forecast_loop.models import PaperPortfolioSnapshot, PaperPosition, StrategyDecision
+from forecast_loop.models import PaperPortfolioSnapshot, PaperPosition, RiskSnapshot, StrategyDecision
 from forecast_loop.operator_console import (
     build_operator_console_snapshot,
     local_address_family_for_host,
@@ -90,11 +90,34 @@ def _portfolio(now: datetime) -> PaperPortfolioSnapshot:
     )
 
 
+def _risk(now: datetime) -> RiskSnapshot:
+    return RiskSnapshot(
+        risk_id="risk:test",
+        created_at=now,
+        symbol="BTC-USD",
+        status="REDUCE_RISK",
+        severity="warning",
+        current_drawdown_pct=0.06,
+        max_drawdown_pct=0.08,
+        gross_exposure_pct=0.5,
+        net_exposure_pct=0.5,
+        position_pct=0.5,
+        max_position_pct=0.4,
+        max_gross_exposure_pct=0.45,
+        reduce_risk_drawdown_pct=0.05,
+        stop_new_entries_drawdown_pct=0.10,
+        findings=["gross_exposure_above_limit", "drawdown_reduce_risk"],
+        recommended_action="REDUCE_RISK",
+        decision_basis="test",
+    )
+
+
 def test_operator_console_renders_required_pages_read_only(tmp_path):
     now = datetime(2026, 4, 25, 1, 30, tzinfo=UTC)
     repository = JsonFileRepository(tmp_path)
     repository.save_strategy_decision(_decision(now))
     repository.save_portfolio_snapshot(_portfolio(now))
+    repository.save_risk_snapshot(_risk(now))
 
     snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
 
@@ -120,6 +143,39 @@ def test_operator_console_renders_required_pages_read_only(tmp_path):
     assert "控制面板在 M5A 只顯示 skeleton" in control
     assert "disabled" in control
     assert "submit_order" not in control
+
+
+def test_portfolio_page_shows_nav_pnl_exposure_drawdown_and_risk_gates(tmp_path):
+    now = datetime(2026, 4, 25, 1, 30, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    repository.save_portfolio_snapshot(_portfolio(now))
+    repository.save_risk_snapshot(_risk(now))
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    html = render_operator_console_page(snapshot, page="portfolio")
+
+    assert "NAV / Cash / PnL" in html
+    assert "$20,000.00" in html
+    assert "Realized PnL" in html
+    assert "Unrealized PnL" in html
+    assert "$1,000.00" in html
+    assert "Drawdown" in html
+    assert "Current：6.00%" in html
+    assert "Max：8.00%" in html
+    assert "Max：2.00%" not in html
+    assert "Exposure" in html
+    assert "Gross：50.00%" in html
+    assert "Risk Gates" in html
+    assert "Position" in html
+    assert "40.00%" in html
+    assert "Gross exposure" in html
+    assert "45.00%" in html
+    assert "Reduce-risk drawdown" in html
+    assert "Stop-new-entries drawdown" in html
+    assert "gross_exposure_above_limit" in html
+    assert "drawdown_reduce_risk" in html
+    assert "Avg Price" in html
+    assert "Market Price" in html
 
 
 def test_decision_timeline_shows_reason_evidence_and_invalidation(tmp_path):

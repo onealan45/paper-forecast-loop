@@ -9,6 +9,7 @@ from forecast_loop.models import (
     BacktestResult,
     BacktestRun,
     BrokerOrder,
+    BrokerReconciliation,
     BrokerOrderStatus,
     EquityCurvePoint,
     EvaluationSummary,
@@ -449,6 +450,30 @@ def _broker_order(now: datetime, order: PaperOrder) -> BrokerOrder:
     )
 
 
+def _broker_reconciliation(now: datetime, broker_order: BrokerOrder) -> BrokerReconciliation:
+    return BrokerReconciliation(
+        reconciliation_id="broker-reconciliation:sqlite",
+        created_at=now,
+        broker=broker_order.broker,
+        broker_mode=broker_order.broker_mode,
+        status="MATCHED",
+        severity="none",
+        repair_required=False,
+        local_broker_order_ids=[broker_order.broker_order_id],
+        external_order_refs=[broker_order.broker_order_ref],
+        matched_order_refs=[broker_order.broker_order_ref],
+        missing_external_order_ids=[],
+        unknown_external_order_refs=[],
+        duplicate_broker_order_refs=[],
+        status_mismatches=[],
+        position_mismatches=[],
+        cash_mismatch=None,
+        equity_mismatch=None,
+        findings=[],
+        decision_basis="test",
+    )
+
+
 def _equity_point(now: datetime) -> EquityCurvePoint:
     return EquityCurvePoint(
         point_id="equity:sqlite",
@@ -513,6 +538,7 @@ def _seed_repository(repository) -> dict:
     decision = _decision(now, forecast, score, review, baseline)
     order = _paper_order(now, decision)
     broker_order = _broker_order(now, order)
+    broker_reconciliation = _broker_reconciliation(now, broker_order)
     fill = _paper_fill(now, order)
     snapshot = PaperPortfolioSnapshot.empty(created_at=now)
     equity_point = _equity_point(now)
@@ -540,6 +566,7 @@ def _seed_repository(repository) -> dict:
     repository.save_strategy_decision(decision)
     repository.save_paper_order(order)
     repository.save_broker_order(broker_order)
+    repository.save_broker_reconciliation(broker_reconciliation)
     repository.save_paper_fill(fill)
     repository.save_portfolio_snapshot(snapshot)
     repository.save_equity_curve_point(equity_point)
@@ -563,6 +590,7 @@ def _seed_repository(repository) -> dict:
         "decision": decision,
         "order": order,
         "broker_order": broker_order,
+        "broker_reconciliation": broker_reconciliation,
         "fill": fill,
         "snapshot": snapshot,
         "equity_point": equity_point,
@@ -598,6 +626,7 @@ def test_sqlite_repository_round_trips_and_dedupes_m1_artifacts(tmp_path):
     assert repository.load_strategy_decisions() == [artifacts["decision"]]
     assert repository.load_paper_orders() == [artifacts["order"]]
     assert repository.load_broker_orders() == [artifacts["broker_order"]]
+    assert repository.load_broker_reconciliations() == [artifacts["broker_reconciliation"]]
     assert repository.load_paper_fills() == [artifacts["fill"]]
     assert repository.load_portfolio_snapshots() == [artifacts["snapshot"]]
     assert repository.load_equity_curve_points() == [artifacts["equity_point"]]
@@ -655,6 +684,7 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert sqlite_repository.load_strategy_decisions() == [artifacts["decision"]]
     assert sqlite_repository.load_paper_orders() == [artifacts["order"]]
     assert sqlite_repository.load_broker_orders() == [artifacts["broker_order"]]
+    assert sqlite_repository.load_broker_reconciliations() == [artifacts["broker_reconciliation"]]
     assert sqlite_repository.load_paper_fills() == [artifacts["fill"]]
     assert sqlite_repository.load_control_events() == [artifacts["control_event"]]
     assert sqlite_repository.load_automation_runs() == [artifacts["automation_run"]]
@@ -672,6 +702,7 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert health_result["artifact_counts"]["strategy_decisions"] == 1
     assert health_result["artifact_counts"]["paper_orders"] == 1
     assert health_result["artifact_counts"]["broker_orders"] == 1
+    assert health_result["artifact_counts"]["broker_reconciliations"] == 1
     assert health_result["artifact_counts"]["paper_fills"] == 1
     assert health_result["artifact_counts"]["control_events"] == 1
     assert health_result["artifact_counts"]["automation_runs"] == 1
@@ -730,6 +761,7 @@ def test_export_jsonl_writes_compatibility_artifacts(tmp_path, capsys):
     assert exported_repository.load_strategy_decisions() == [artifacts["decision"]]
     assert exported_repository.load_paper_orders() == [artifacts["order"]]
     assert exported_repository.load_broker_orders() == [artifacts["broker_order"]]
+    assert exported_repository.load_broker_reconciliations() == [artifacts["broker_reconciliation"]]
     assert exported_repository.load_paper_fills() == [artifacts["fill"]]
     assert exported_repository.load_control_events() == [artifacts["control_event"]]
     assert exported_repository.load_automation_runs() == [artifacts["automation_run"]]

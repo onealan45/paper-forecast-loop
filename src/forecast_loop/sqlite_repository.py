@@ -13,6 +13,7 @@ from forecast_loop.models import (
     BacktestResult,
     BacktestRun,
     BrokerOrder,
+    BrokerReconciliation,
     EquityCurvePoint,
     EvaluationSummary,
     Forecast,
@@ -60,6 +61,12 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("strategy_decisions", "strategy_decisions.jsonl", "decision_id", StrategyDecision.from_dict),
     ArtifactSpec("paper_orders", "paper_orders.jsonl", "order_id", PaperOrder.from_dict),
     ArtifactSpec("broker_orders", "broker_orders.jsonl", "broker_order_id", BrokerOrder.from_dict),
+    ArtifactSpec(
+        "broker_reconciliations",
+        "broker_reconciliations.jsonl",
+        "reconciliation_id",
+        BrokerReconciliation.from_dict,
+    ),
     ArtifactSpec("paper_fills", "paper_fills.jsonl", "fill_id", PaperFill.from_dict),
     ArtifactSpec("control_events", "control_events.jsonl", "control_id", PaperControlEvent.from_dict),
     ArtifactSpec("portfolio_snapshots", "portfolio_snapshots.jsonl", "snapshot_id", PaperPortfolioSnapshot.from_dict),
@@ -214,6 +221,16 @@ class SQLiteRepository:
 
     def load_broker_orders(self) -> list[BrokerOrder]:
         return self._load("broker_orders", BrokerOrder.from_dict)
+
+    def save_broker_reconciliation(self, reconciliation: BrokerReconciliation) -> None:
+        self._save_unique(
+            "broker_reconciliations",
+            reconciliation.reconciliation_id,
+            reconciliation.to_dict(),
+        )
+
+    def load_broker_reconciliations(self) -> list[BrokerReconciliation]:
+        return self._load("broker_reconciliations", BrokerReconciliation.from_dict)
 
     def replace_paper_orders(self, orders: list[PaperOrder]) -> None:
         with self._connect() as connection:
@@ -398,6 +415,8 @@ def migrate_jsonl_to_sqlite(storage_dir: Path | str, db_path: Path | str | None 
         sqlite_repository.save_paper_order(order)
     for order in json_repository.load_broker_orders():
         sqlite_repository.save_broker_order(order)
+    for reconciliation in json_repository.load_broker_reconciliations():
+        sqlite_repository.save_broker_reconciliation(reconciliation)
     for fill in json_repository.load_paper_fills():
         sqlite_repository.save_paper_fill(fill)
     for event in json_repository.load_control_events():

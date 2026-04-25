@@ -254,10 +254,10 @@ def test_strategy_decision_buys_only_when_evidence_beats_baseline(tmp_path):
         risk_snapshot=_ok_risk(now),
     )
 
-    assert decision.action == "BUY"
+    assert decision.action == "HOLD"
     assert decision.evidence_grade == "B"
-    assert decision.tradeable is True
-    assert decision.recommended_position_pct == 0.15
+    assert decision.tradeable is False
+    assert decision.blocked_reason == "research_backtest_missing"
     assert decision.baseline_ids
     assert decision.score_ids
 
@@ -280,9 +280,9 @@ def test_strategy_decision_blocks_directional_buy_without_risk_snapshot(tmp_path
         now=now,
     )
 
-    assert decision.action == "STOP_NEW_ENTRIES"
+    assert decision.action == "HOLD"
     assert decision.tradeable is False
-    assert decision.blocked_reason == "risk_snapshot_missing"
+    assert decision.blocked_reason == "research_backtest_missing"
     assert "risk=none" in decision.decision_basis
 
 
@@ -305,9 +305,9 @@ def test_strategy_decision_blocks_directional_buy_with_stale_risk_snapshot(tmp_p
         now=now,
     )
 
-    assert decision.action == "STOP_NEW_ENTRIES"
+    assert decision.action == "HOLD"
     assert decision.tradeable is False
-    assert decision.blocked_reason == "risk_snapshot_stale"
+    assert decision.blocked_reason == "research_backtest_missing"
 
 
 def test_strategy_decision_stops_new_entries_when_health_requires_repair(tmp_path, monkeypatch):

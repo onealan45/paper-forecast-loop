@@ -11,6 +11,7 @@ from forecast_loop.models import (
     Review,
     StrategyDecision,
 )
+from forecast_loop.research_gates import ResearchGateResult, evaluate_research_gates
 
 
 BULLISH_REGIMES = {"trend_up", "volatile_bull"}
@@ -55,6 +56,13 @@ def generate_strategy_decision(
         scores=scores,
     )
     repository.save_baseline_evaluation(baseline)
+    latest_backtest = _latest_for_symbol(repository.load_backtest_results(), symbol)
+    latest_walk_forward = _latest_for_symbol(repository.load_walk_forward_validations(), symbol)
+    research_gate = evaluate_research_gates(
+        baseline=baseline,
+        latest_backtest=latest_backtest,
+        latest_walk_forward=latest_walk_forward,
+    )
     portfolio = _latest_or_empty_portfolio(repository, now)
     current_position_pct = portfolio.position_pct_for(symbol)
     risk_snapshot = risk_snapshot or _latest_risk_snapshot(repository, symbol)
@@ -124,13 +132,19 @@ def generate_strategy_decision(
         blocked_reason = "model_not_beating_baseline"
         reason_summary = "模型證據沒有打贏 naive persistence baseline，因此買進/賣出被擋住。"
         risk_level = "MEDIUM"
-    elif baseline.recent_score is not None and baseline.recent_score < 0.40:
+    elif research_gate.recommended_action == "REDUCE_RISK":
         action = "REDUCE_RISK"
-        tradeable = True
-        blocked_reason = None
-        reason_summary = "雖然相對 baseline 仍有部分 edge，但近期 forecast 分數偏弱，建議降低 paper 風險。"
-        risk_level = "HIGH"
+        tradeable = current_position_pct > 0
+        blocked_reason = None if tradeable else "research_reduce_required_but_no_position"
+        reason_summary = "研究品質 gate 偵測近期退化、回測風險或 walk-forward 風險，建議降低 paper 風險。"
+        risk_level = research_gate.risk_level
         recommended_position_pct = max(0.0, min(current_position_pct, max_position_pct) * 0.5)
+    elif not research_gate.directional_allowed:
+        action = "HOLD"
+        tradeable = False
+        blocked_reason = research_gate.blocked_reason
+        reason_summary = "研究品質 gate 未通過；BUY/SELL 在樣本、baseline、backtest、walk-forward 或 drawdown 證據不足時被擋住。"
+        risk_level = research_gate.risk_level
     elif baseline.evidence_grade not in {"A", "B"}:
         action = "HOLD"
         tradeable = False
@@ -178,6 +192,7 @@ def generate_strategy_decision(
         baseline=baseline,
         blocked_reason=blocked_reason,
         risk_snapshot=risk_snapshot,
+        research_gate=research_gate,
     )
     decision_id = StrategyDecision.build_id(
         symbol=symbol,
@@ -229,6 +244,11 @@ def _latest_risk_snapshot(repository, symbol: str) -> RiskSnapshot | None:
     return snapshots[-1] if snapshots else None
 
 
+def _latest_for_symbol(items: list, symbol: str):
+    scoped = [item for item in items if getattr(item, "symbol", None) == symbol]
+    return max(scoped, key=lambda item: item.created_at) if scoped else None
+
+
 def _risk_blocked_reason(
     *,
     risk_snapshot: RiskSnapshot | None,
@@ -260,11 +280,12 @@ def _decision_basis(
     baseline: BaselineEvaluation,
     blocked_reason: str | None,
     risk_snapshot: RiskSnapshot | None,
+    research_gate: ResearchGateResult,
 ) -> str:
     risk_basis = "none" if risk_snapshot is None else f"{risk_snapshot.risk_id}:{risk_snapshot.status}"
     return (
         f"action={action}; evidence_grade={baseline.evidence_grade}; "
         f"sample_size={baseline.sample_size}; model_edge={baseline.model_edge}; "
         f"recent_score={baseline.recent_score}; risk={risk_basis}; "
-        f"blocked_reason={blocked_reason or 'none'}"
+        f"blocked_reason={blocked_reason or 'none'}; {research_gate.decision_basis}"
     )

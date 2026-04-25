@@ -320,6 +320,8 @@ Current practical V1 path:
   ignore rules, and health-check detection for obvious secret leakage
 - M6C adds a first mockable `BinanceTestnetBrokerAdapter` for sandbox/testnet
   experimentation with missing-key fail-safe behavior and no live endpoint
+- M6D adds local broker order lifecycle artifacts that map paper orders to
+  sandbox/external-paper statuses without calling a broker
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation

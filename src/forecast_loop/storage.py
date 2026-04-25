@@ -9,6 +9,7 @@ from forecast_loop.models import (
     BaselineEvaluation,
     BacktestResult,
     BacktestRun,
+    BrokerOrder,
     EquityCurvePoint,
     EvaluationSummary,
     Forecast,
@@ -78,6 +79,10 @@ class ArtifactRepository(Protocol):
 
     def replace_paper_orders(self, orders: list[PaperOrder]) -> None: ...
 
+    def save_broker_order(self, order: BrokerOrder) -> None: ...
+
+    def load_broker_orders(self) -> list[BrokerOrder]: ...
+
     def save_paper_fill(self, fill: PaperFill) -> None: ...
 
     def load_paper_fills(self) -> list[PaperFill]: ...
@@ -145,6 +150,7 @@ class JsonFileRepository:
         self.baseline_evaluations_path = self.root / "baseline_evaluations.jsonl"
         self.strategy_decisions_path = self.root / "strategy_decisions.jsonl"
         self.paper_orders_path = self.root / "paper_orders.jsonl"
+        self.broker_orders_path = self.root / "broker_orders.jsonl"
         self.paper_fills_path = self.root / "paper_fills.jsonl"
         self.control_events_path = self.root / "control_events.jsonl"
         self.portfolio_snapshots_path = self.root / "portfolio_snapshots.jsonl"
@@ -274,6 +280,16 @@ class JsonFileRepository:
         with self.paper_orders_path.open("w", encoding="utf-8") as handle:
             for order in orders:
                 handle.write(json.dumps(order.to_dict()) + "\n")
+
+    def save_broker_order(self, order: BrokerOrder) -> None:
+        self._append_unique(
+            self.broker_orders_path,
+            order.to_dict(),
+            identity_key="broker_order_id",
+        )
+
+    def load_broker_orders(self) -> list[BrokerOrder]:
+        return self._load_lines(self.broker_orders_path, BrokerOrder.from_dict)
 
     def save_paper_fill(self, fill: PaperFill) -> None:
         self._append_unique(

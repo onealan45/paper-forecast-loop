@@ -8,6 +8,8 @@ from forecast_loop.models import (
     BaselineEvaluation,
     BacktestResult,
     BacktestRun,
+    BrokerOrder,
+    BrokerOrderStatus,
     EquityCurvePoint,
     EvaluationSummary,
     Forecast,
@@ -424,6 +426,29 @@ def _paper_fill(now: datetime, order: PaperOrder) -> PaperFill:
     )
 
 
+def _broker_order(now: datetime, order: PaperOrder) -> BrokerOrder:
+    return BrokerOrder(
+        broker_order_id="broker-order:sqlite",
+        created_at=now,
+        updated_at=now,
+        local_order_id=order.order_id,
+        decision_id=order.decision_id,
+        symbol=order.symbol,
+        side=order.side,
+        quantity=None,
+        target_position_pct=order.target_position_pct,
+        broker="binance_testnet",
+        broker_mode="SANDBOX",
+        status=BrokerOrderStatus.SUBMITTED.value,
+        broker_status="SUBMITTED",
+        broker_order_ref="testnet:sqlite",
+        client_order_id=order.order_id,
+        error_message=None,
+        raw_response={"mock": True},
+        decision_basis="test",
+    )
+
+
 def _equity_point(now: datetime) -> EquityCurvePoint:
     return EquityCurvePoint(
         point_id="equity:sqlite",
@@ -487,6 +512,7 @@ def _seed_repository(repository) -> dict:
     baseline = _baseline(now, forecast, score)
     decision = _decision(now, forecast, score, review, baseline)
     order = _paper_order(now, decision)
+    broker_order = _broker_order(now, order)
     fill = _paper_fill(now, order)
     snapshot = PaperPortfolioSnapshot.empty(created_at=now)
     equity_point = _equity_point(now)
@@ -513,6 +539,7 @@ def _seed_repository(repository) -> dict:
     repository.save_baseline_evaluation(baseline)
     repository.save_strategy_decision(decision)
     repository.save_paper_order(order)
+    repository.save_broker_order(broker_order)
     repository.save_paper_fill(fill)
     repository.save_portfolio_snapshot(snapshot)
     repository.save_equity_curve_point(equity_point)
@@ -535,6 +562,7 @@ def _seed_repository(repository) -> dict:
         "baseline": baseline,
         "decision": decision,
         "order": order,
+        "broker_order": broker_order,
         "fill": fill,
         "snapshot": snapshot,
         "equity_point": equity_point,
@@ -569,6 +597,7 @@ def test_sqlite_repository_round_trips_and_dedupes_m1_artifacts(tmp_path):
     assert repository.load_baseline_evaluations() == [artifacts["baseline"]]
     assert repository.load_strategy_decisions() == [artifacts["decision"]]
     assert repository.load_paper_orders() == [artifacts["order"]]
+    assert repository.load_broker_orders() == [artifacts["broker_order"]]
     assert repository.load_paper_fills() == [artifacts["fill"]]
     assert repository.load_portfolio_snapshots() == [artifacts["snapshot"]]
     assert repository.load_equity_curve_points() == [artifacts["equity_point"]]
@@ -625,6 +654,7 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert sqlite_repository.load_scores() == [artifacts["score"]]
     assert sqlite_repository.load_strategy_decisions() == [artifacts["decision"]]
     assert sqlite_repository.load_paper_orders() == [artifacts["order"]]
+    assert sqlite_repository.load_broker_orders() == [artifacts["broker_order"]]
     assert sqlite_repository.load_paper_fills() == [artifacts["fill"]]
     assert sqlite_repository.load_control_events() == [artifacts["control_event"]]
     assert sqlite_repository.load_automation_runs() == [artifacts["automation_run"]]
@@ -641,6 +671,7 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert health_result["artifact_counts"]["macro_events"] == 1
     assert health_result["artifact_counts"]["strategy_decisions"] == 1
     assert health_result["artifact_counts"]["paper_orders"] == 1
+    assert health_result["artifact_counts"]["broker_orders"] == 1
     assert health_result["artifact_counts"]["paper_fills"] == 1
     assert health_result["artifact_counts"]["control_events"] == 1
     assert health_result["artifact_counts"]["automation_runs"] == 1
@@ -698,6 +729,7 @@ def test_export_jsonl_writes_compatibility_artifacts(tmp_path, capsys):
     assert exported_repository.load_scores() == [artifacts["score"]]
     assert exported_repository.load_strategy_decisions() == [artifacts["decision"]]
     assert exported_repository.load_paper_orders() == [artifacts["order"]]
+    assert exported_repository.load_broker_orders() == [artifacts["broker_order"]]
     assert exported_repository.load_paper_fills() == [artifacts["fill"]]
     assert exported_repository.load_control_events() == [artifacts["control_event"]]
     assert exported_repository.load_automation_runs() == [artifacts["automation_run"]]

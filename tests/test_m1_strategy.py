@@ -737,8 +737,58 @@ def test_cli_run_once_also_decide_writes_one_command_strategy_decision(tmp_path,
 
     assert exit_code == 0
     assert payload["decision_action"] == "HOLD"
+    assert payload["automation_run_id"].startswith("automation-run:")
     assert (tmp_path / "forecasts.jsonl").exists()
     assert (tmp_path / "strategy_decisions.jsonl").exists()
+    automation_runs = JsonFileRepository(tmp_path).load_automation_runs()
+    assert len(automation_runs) == 1
+    run = automation_runs[0]
+    assert run.status == "completed"
+    assert run.symbol == "BTC-USD"
+    assert run.provider == "sample"
+    assert run.command == "run-once"
+    assert run.health_check_id is not None
+    assert run.decision_id == payload["decision_id"]
+    assert run.repair_request_id is None
+    step_names = [step["name"] for step in run.steps]
+    assert step_names == ["forecast", "score", "review", "proposal", "health_check", "risk_check", "decide"]
+
+
+def test_health_check_audits_bad_and_duplicate_automation_runs(tmp_path):
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    repository.save_forecast(_forecast("forecast:latest", anchor_time=now, status="pending"))
+    main(
+        [
+            "run-once",
+            "--provider",
+            "sample",
+            "--symbol",
+            "BTC-USD",
+            "--storage-dir",
+            str(tmp_path),
+            "--now",
+            now.isoformat(),
+            "--also-decide",
+        ]
+    )
+    run_payload = JsonFileRepository(tmp_path).load_automation_runs()[0].to_dict()
+    (tmp_path / "automation_runs.jsonl").write_text(
+        "\n".join([json.dumps(run_payload), json.dumps(run_payload), "{bad json"]) + "\n",
+        encoding="utf-8",
+    )
+
+    result = run_health_check(
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=now,
+        create_repair_request=False,
+    )
+    codes = {finding.code for finding in result.findings}
+
+    assert result.repair_required is True
+    assert "bad_json_row" in codes
+    assert "duplicate_automation_run_id" in codes
 
 
 def test_cli_health_check_reports_missing_storage_without_creating_it(tmp_path, monkeypatch, capsys):

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from forecast_loop.assets import get_asset, list_assets
+from forecast_loop.automation_log import automation_step, record_automation_run
 from forecast_loop.backtest import run_backtest
 from forecast_loop.candle_store import (
     StoredCandleProvider,
@@ -326,12 +327,14 @@ def main(argv: list[str] | None = None) -> int:
 
 def _run_once(args) -> int:
     now = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    started_at = now
     repository = JsonFileRepository(args.storage_dir)
     provider = AuditedMarketDataProvider(
         provider=_build_data_provider(args.provider, now, args.symbol),
         provider_name=args.provider,
         repository=repository,
     )
+    steps: list[dict[str, str | None]] = []
     try:
         loop = ForecastingLoop(
             config=LoopConfig(
@@ -343,6 +346,7 @@ def _run_once(args) -> int:
             repository=repository,
         )
         result = loop.run_cycle(now=now)
+        steps.extend(_cycle_steps(result))
     except Exception as exc:
         _write_failed_run_meta(
             storage_dir=Path(args.storage_dir),
@@ -357,6 +361,19 @@ def _run_once(args) -> int:
             now=now,
             create_repair_request=True,
         )
+        steps.append(automation_step("run_cycle", "failed", type(exc).__name__))
+        automation_run = record_automation_run(
+            repository=repository,
+            started_at=started_at,
+            completed_at=now,
+            status="failed",
+            symbol=args.symbol,
+            provider=args.provider,
+            command="run-once",
+            steps=steps,
+            health_result=health_result,
+            decision=None,
+        )
         print(
             json.dumps(
                 {
@@ -366,6 +383,7 @@ def _run_once(args) -> int:
                     "error": str(exc),
                     "repair_required": health_result.repair_required,
                     "repair_request_id": health_result.repair_request_id,
+                    "automation_run_id": automation_run.automation_run_id,
                 }
             )
         )
@@ -378,6 +396,7 @@ def _run_once(args) -> int:
         result=result,
     )
     decision = None
+    health_result = None
     if args.also_decide:
         health_result = run_health_check(
             storage_dir=args.storage_dir,
@@ -385,6 +404,7 @@ def _run_once(args) -> int:
             now=now,
             create_repair_request=True,
         )
+        steps.append(automation_step("health_check", "completed", health_result.check_id))
         risk_snapshot = None
         if not health_result.repair_required:
             risk_snapshot = evaluate_risk(
@@ -392,6 +412,9 @@ def _run_once(args) -> int:
                 symbol=args.symbol,
                 now=now,
             )
+            steps.append(automation_step("risk_check", "completed", risk_snapshot.risk_id))
+        else:
+            steps.append(automation_step("risk_check", "skipped", health_result.repair_request_id))
         decision = generate_strategy_decision(
             repository=repository,
             symbol=args.symbol,
@@ -400,6 +423,20 @@ def _run_once(args) -> int:
             health_result=health_result,
             risk_snapshot=risk_snapshot,
         )
+        steps.append(automation_step("decide", "completed", decision.decision_id))
+    automation_status = "repair_required" if health_result and health_result.repair_required else "completed"
+    automation_run = record_automation_run(
+        repository=repository,
+        started_at=started_at,
+        completed_at=now,
+        status=automation_status,
+        symbol=args.symbol,
+        provider=args.provider,
+        command="run-once",
+        steps=steps,
+        health_result=health_result,
+        decision=decision,
+    )
     print(
         json.dumps(
             {
@@ -410,10 +447,36 @@ def _run_once(args) -> int:
                 "proposal_created": result.proposal is not None,
                 "decision_id": decision.decision_id if decision else None,
                 "decision_action": decision.action if decision else None,
+                "automation_run_id": automation_run.automation_run_id,
             }
         )
     )
     return 0 if result.new_forecast is not None else 1
+
+
+def _cycle_steps(result) -> list[dict[str, str | None]]:
+    return [
+        automation_step(
+            "forecast",
+            "created" if result.new_forecast else "missing",
+            result.new_forecast.forecast_id if result.new_forecast else None,
+        ),
+        automation_step(
+            "score",
+            "completed" if result.scores else "skipped",
+            ",".join(score.score_id for score in result.scores) if result.scores else None,
+        ),
+        automation_step(
+            "review",
+            "created" if result.review else "skipped",
+            result.review.review_id if result.review else None,
+        ),
+        automation_step(
+            "proposal",
+            "created" if result.proposal else "skipped",
+            result.proposal.proposal_id if result.proposal else None,
+        ),
+    ]
 
 
 def _build_data_provider(provider_name: str, now: datetime, symbol: str):

@@ -299,6 +299,8 @@ Current practical V1 path:
 - M5E adds audited paper-only control events and a read-only control page for
   pause/resume, stop-new-entries, reduce-risk, emergency-stop, and max-position
   controls
+- M5F adds automation run logs that link each paper cycle to step status,
+  health-check id, strategy decision id, and repair request id
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation
@@ -363,6 +365,8 @@ V1 MVP should include:
 - audited paper-only control event artifacts with confirmation requirements for
   risky controls and paper-order blocking gates for emergency stop, pause, stop
   new entries, reduce risk, and max position
+- automation run log artifacts that record cycle steps, health checks,
+  decisions, repair requests, and final run status
 - health-check output
 - Codex repair request artifacts
 - minimal CLI
@@ -396,6 +400,8 @@ correctness defects:
 - strategy and regime classification remain intentionally simple
 - the current read-only UX includes static HTML plus a local operator console;
   controls are audited CLI events, while browser forms remain deferred
+- automation run logs are audit artifacts only; scheduler orchestration remains
+  outside the repo
 - automation is local and paper-only, with manual evidence checks before any resume
 - paper portfolio accounting and risk gates are local simulations and not broker reconciliation or external execution
 - SQLite repository migration/export now exists, while the hourly loop and dashboard still use JSONL artifacts by default until later M2 integration

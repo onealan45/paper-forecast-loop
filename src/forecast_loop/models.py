@@ -1180,6 +1180,79 @@ class PaperControlEvent:
 
 
 @dataclass(slots=True)
+class AutomationRun:
+    automation_run_id: str
+    started_at: datetime
+    completed_at: datetime
+    status: str
+    symbol: str
+    provider: str
+    command: str
+    steps: list[dict[str, str | None]]
+    health_check_id: str | None
+    decision_id: str | None
+    repair_request_id: str | None
+    decision_basis: str = "automation run log"
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        started_at: datetime,
+        completed_at: datetime,
+        symbol: str,
+        provider: str,
+        command: str,
+        status: str,
+    ) -> str:
+        return _stable_artifact_id(
+            "automation-run",
+            {
+                "started_at": started_at.isoformat(),
+                "completed_at": completed_at.isoformat(),
+                "symbol": symbol,
+                "provider": provider,
+                "command": command,
+                "status": status,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["started_at"] = self.started_at.isoformat()
+        payload["completed_at"] = self.completed_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "AutomationRun":
+        steps = []
+        for step in payload.get("steps", []):
+            if not isinstance(step, dict):
+                raise ValueError("automation run step must be an object")
+            steps.append(
+                {
+                    "name": str(step.get("name") or ""),
+                    "status": str(step.get("status") or ""),
+                    "artifact_id": step.get("artifact_id"),
+                }
+            )
+        return cls(
+            automation_run_id=_require_string(payload, "automation_run_id"),
+            started_at=_require_aware_datetime(payload, "started_at"),
+            completed_at=_require_aware_datetime(payload, "completed_at"),
+            status=_require_string(payload, "status"),
+            symbol=_require_string(payload, "symbol"),
+            provider=_require_string(payload, "provider"),
+            command=_require_string(payload, "command"),
+            steps=steps,
+            health_check_id=payload.get("health_check_id"),
+            decision_id=payload.get("decision_id"),
+            repair_request_id=payload.get("repair_request_id"),
+            decision_basis=payload.get("decision_basis", "legacy_automation_run"),
+        )
+
+
+@dataclass(slots=True)
 class PaperOrder:
     order_id: str
     created_at: datetime

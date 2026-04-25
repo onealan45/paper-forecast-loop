@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Protocol
 
 from forecast_loop.models import (
+    AutomationRun,
     BaselineEvaluation,
     BacktestResult,
     BacktestRun,
@@ -100,6 +101,10 @@ class ArtifactRepository(Protocol):
 
     def load_provider_runs(self) -> list[ProviderRun]: ...
 
+    def save_automation_run(self, run: AutomationRun) -> None: ...
+
+    def load_automation_runs(self) -> list[AutomationRun]: ...
+
     def save_repair_request(self, repair_request: RepairRequest) -> None: ...
 
     def load_repair_requests(self) -> list[RepairRequest]: ...
@@ -141,6 +146,7 @@ class JsonFileRepository:
         self.equity_curve_path = self.root / "equity_curve.jsonl"
         self.risk_snapshots_path = self.root / "risk_snapshots.jsonl"
         self.provider_runs_path = self.root / "provider_runs.jsonl"
+        self.automation_runs_path = self.root / "automation_runs.jsonl"
         self.repair_requests_path = self.root / "repair_requests.jsonl"
         self.research_datasets_path = self.root / "research_datasets.jsonl"
         self.backtest_runs_path = self.root / "backtest_runs.jsonl"
@@ -322,6 +328,16 @@ class JsonFileRepository:
 
     def load_provider_runs(self) -> list[ProviderRun]:
         return self._load_lines(self.provider_runs_path, ProviderRun.from_dict)
+
+    def save_automation_run(self, run: AutomationRun) -> None:
+        self._append_unique(
+            self.automation_runs_path,
+            run.to_dict(),
+            identity_key="automation_run_id",
+        )
+
+    def load_automation_runs(self) -> list[AutomationRun]:
+        return self._load_lines(self.automation_runs_path, AutomationRun.from_dict)
 
     def save_repair_request(self, repair_request: RepairRequest) -> None:
         self._append_unique(

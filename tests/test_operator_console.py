@@ -5,7 +5,7 @@ import socket
 import pytest
 
 from forecast_loop.cli import main
-from forecast_loop.models import PaperControlEvent, PaperPortfolioSnapshot, PaperPosition, RepairRequest, RiskSnapshot, StrategyDecision
+from forecast_loop.models import AutomationRun, PaperControlEvent, PaperPortfolioSnapshot, PaperPosition, RepairRequest, RiskSnapshot, StrategyDecision
 from forecast_loop.operator_console import (
     build_operator_console_snapshot,
     local_address_family_for_host,
@@ -150,6 +150,26 @@ def _control_event(now: datetime) -> PaperControlEvent:
     )
 
 
+def _automation_run(now: datetime) -> AutomationRun:
+    return AutomationRun(
+        automation_run_id="automation-run:test",
+        started_at=now,
+        completed_at=now,
+        status="completed",
+        symbol="BTC-USD",
+        provider="sample",
+        command="run-once",
+        steps=[
+            {"name": "forecast", "status": "created", "artifact_id": "forecast:test"},
+            {"name": "decide", "status": "completed", "artifact_id": "decision:test"},
+        ],
+        health_check_id="health:test",
+        decision_id="decision:test",
+        repair_request_id=None,
+        decision_basis="test",
+    )
+
+
 def test_operator_console_renders_required_pages_read_only(tmp_path):
     now = datetime(2026, 4, 25, 1, 30, tzinfo=UTC)
     repository = JsonFileRepository(tmp_path)
@@ -157,6 +177,7 @@ def test_operator_console_renders_required_pages_read_only(tmp_path):
     repository.save_portfolio_snapshot(_portfolio(now))
     repository.save_risk_snapshot(_risk(now))
     repository.save_control_event(_control_event(now))
+    repository.save_automation_run(_automation_run(now))
 
     snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
 
@@ -165,6 +186,10 @@ def test_operator_console_renders_required_pages_read_only(tmp_path):
     assert "Operator console sections" in overview
     assert "買進" in overview
     assert "Paper-only" in overview
+    assert "Automation Run" in overview
+    assert "automation-run:test" in overview
+    assert "forecast" in overview
+    assert "decision:test" in overview
     assert "<form" not in overview.lower()
 
     for page_title, page in [

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
@@ -128,8 +128,8 @@ class PaperBrokerAdapter:
 
 @dataclass(slots=True)
 class BinanceTestnetBrokerAdapter:
-    api_key: str
-    api_secret: str
+    api_key: str = field(repr=False)
+    api_secret: str = field(repr=False)
     http_client: BrokerHttpClient
     base_url: str = "https://testnet.binance.vision"
 

@@ -73,6 +73,7 @@ def test_binance_testnet_health_redacts_secrets_and_blocks_lifecycle_methods():
 
     health = adapter.health_check(now=now)
     snapshot = adapter.get_account_snapshot(now=now)
+    representation = repr(adapter)
 
     assert health["status"] == "healthy"
     assert health["base_url"] == "https://testnet.binance.vision"
@@ -80,6 +81,8 @@ def test_binance_testnet_health_redacts_secrets_and_blocks_lifecycle_methods():
     assert health["secret_values_redacted"] is True
     assert "test-key" not in str(health)
     assert "test-secret" not in str(health)
+    assert "test-key" not in representation
+    assert "test-secret" not in representation
     assert snapshot.equity == 12_345.0
     assert adapter.cancel_order(order_id="broker-order:test")["status"] == "blocked"
     assert adapter.get_order_status(order_id="broker-order:test")["status"] == "unavailable"

@@ -212,6 +212,41 @@ def render_operator_console_page(
       box-shadow: 0 18px 42px rgba(40, 50, 42, 0.08);
     }}
     .panel h3 {{ margin: 0 0 0.85rem; font-size: 1.05rem; }}
+    .timeline {{
+      display: grid;
+      gap: 1rem;
+    }}
+    .decision-card {{
+      border: 1px solid var(--line);
+      border-radius: 1rem;
+      padding: 1rem;
+      background: #fffdfa;
+    }}
+    .decision-card header {{
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 0.75rem;
+    }}
+    .decision-card h4 {{
+      margin: 0;
+      font-size: 1.25rem;
+    }}
+    .evidence-list, .conditions {{
+      margin: 0.5rem 0 0;
+      padding-left: 1.1rem;
+    }}
+    .evidence-list li, .conditions li {{
+      margin: 0.25rem 0;
+      overflow-wrap: anywhere;
+    }}
+    .badge-row {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 0.65rem 0;
+    }}
     .metric {{
       font-size: 2rem;
       line-height: 1;
@@ -418,16 +453,25 @@ def _render_overview(snapshot: OperatorConsoleSnapshot) -> str:
 
 
 def _render_decisions(snapshot: OperatorConsoleSnapshot) -> str:
-    rows = "\n".join(_decision_row(decision) for decision in sorted(snapshot.decisions, key=lambda item: item.created_at, reverse=True)[:20])
-    if not rows:
-        rows = '<tr><td colspan="7">目前沒有 strategy_decisions artifact。</td></tr>'
+    decisions = sorted(snapshot.decisions, key=lambda item: item.created_at, reverse=True)
+    latest = decisions[0] if decisions else None
+    timeline = "\n".join(_decision_card(decision, is_latest=index == 0) for index, decision in enumerate(decisions[:20]))
+    if not timeline:
+        timeline = '<p class="muted">目前沒有 strategy_decisions artifact。</p>'
     return f"""
-<section class="panel">
-  <h3>Decision Timeline Skeleton</h3>
-  <table>
-    <thead><tr><th>時間</th><th>Symbol</th><th>Action</th><th>Evidence</th><th>Risk</th><th>Tradeable</th><th>Blocked</th></tr></thead>
-    <tbody>{rows}</tbody>
-  </table>
+<section class="grid">
+  <article class="panel wide">
+    <h3>最新決策</h3>
+    {_latest_decision_summary(latest)}
+  </article>
+  <article class="panel">
+    <h3>讀法</h3>
+    <p>此頁把每筆 paper-only strategy decision 的理由、證據連結、失效條件與 blocked reason 展開，方便追溯判斷來源。</p>
+  </article>
+  <article class="panel wide">
+    <h3>Decision Timeline</h3>
+    <div class="timeline">{timeline}</div>
+  </article>
 </section>
 """
 
@@ -562,19 +606,71 @@ def _render_control(snapshot: OperatorConsoleSnapshot) -> str:
 """
 
 
-def _decision_row(decision: StrategyDecision) -> str:
+def _latest_decision_summary(decision: StrategyDecision | None) -> str:
+    if decision is None:
+        return "<p class=\"muted\">目前沒有最新決策。</p>"
     blocked = decision.blocked_reason or "none"
-    return (
-        "<tr>"
-        f"<td>{_format_dt(decision.created_at)}</td>"
-        f"<td>{escape(decision.symbol)}</td>"
-        f"<td>{escape(_translate_action(decision.action))}</td>"
-        f"<td>{escape(decision.evidence_grade)}</td>"
-        f"<td>{escape(decision.risk_level)}</td>"
-        f"<td>{'是' if decision.tradeable else '否'}</td>"
-        f"<td><code>{escape(blocked)}</code></td>"
-        "</tr>"
-    )
+    return f"""
+<div class="metric">{escape(_translate_action(decision.action))}</div>
+<p>{escape(decision.reason_summary)}</p>
+<div class="badge-row">
+  <span class="status">Evidence {escape(decision.evidence_grade)}</span>
+  <span class="status">Risk {escape(decision.risk_level)}</span>
+  <span class="status">Tradeable {'是' if decision.tradeable else '否'}</span>
+</div>
+<p class="muted">Blocked reason：<code>{escape(blocked)}</code></p>
+"""
+
+
+def _decision_card(decision: StrategyDecision, *, is_latest: bool) -> str:
+    blocked = decision.blocked_reason or "none"
+    latest_label = '<span class="status">最新</span>' if is_latest else ""
+    return f"""
+<article class="decision-card">
+  <header>
+    <div>
+      <h4>{escape(_translate_action(decision.action))} / {escape(decision.symbol)}</h4>
+      <div class="muted">{_format_dt(decision.created_at)} · horizon {decision.horizon_hours}h</div>
+    </div>
+    {latest_label}
+  </header>
+  <p>{escape(decision.reason_summary)}</p>
+  <div class="badge-row">
+    <span class="status">Evidence {escape(decision.evidence_grade)}</span>
+    <span class="status">Risk {escape(decision.risk_level)}</span>
+    <span class="status">Tradeable {'是' if decision.tradeable else '否'}</span>
+  </div>
+  <p>建議部位：{_format_pct(decision.recommended_position_pct)} / 目前部位：{_format_pct(decision.current_position_pct)} / 上限：{_format_pct(decision.max_position_pct)}</p>
+  <p>Blocked reason：<code>{escape(blocked)}</code></p>
+  <h5>Evidence Links</h5>
+  {_evidence_links(decision)}
+  <h5>Invalidation Conditions</h5>
+  {_conditions(decision.invalidation_conditions)}
+</article>
+"""
+
+
+def _evidence_links(decision: StrategyDecision) -> str:
+    groups = [
+        ("Forecast", decision.forecast_ids),
+        ("Score", decision.score_ids),
+        ("Review", decision.review_ids),
+        ("Baseline", decision.baseline_ids),
+    ]
+    rows = []
+    for label, ids in groups:
+        if ids:
+            for artifact_id in ids:
+                rows.append(f"<li>{label}: <code>{escape(artifact_id)}</code></li>")
+        else:
+            rows.append(f"<li>{label}: <span class=\"muted\">none</span></li>")
+    return f"<ul class=\"evidence-list\">{''.join(rows)}</ul>"
+
+
+def _conditions(conditions: list[str]) -> str:
+    if not conditions:
+        return '<p class="muted">未記錄失效條件。</p>'
+    return "<ul class=\"conditions\">" + "".join(f"<li>{escape(condition)}</li>" for condition in conditions) + "</ul>"
 
 
 def _render_counts(counts: dict[str, int]) -> str:

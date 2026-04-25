@@ -289,6 +289,8 @@ Current practical V1 path:
 - M4E adds generated Markdown research reports from existing research artifacts
 - M4F adds research-quality gates before BUY/SELL decisions
 - M5A adds a local-only read-only operator console skeleton
+- M5B expands the operator console decision timeline with decision reasons,
+  evidence links, invalidation conditions, and blocked reasons
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation
@@ -343,6 +345,8 @@ V1 MVP should include:
   evidence before BUY/SELL
 - local-only read-only operator console skeleton with overview, decisions,
   portfolio, research, health, and control-placeholder pages
+- decision timeline view exposing latest decision, reason summary, evidence
+  grade, linked artifacts, invalidation conditions, and blocked reason
 - health-check output
 - Codex repair request artifacts
 - minimal CLI

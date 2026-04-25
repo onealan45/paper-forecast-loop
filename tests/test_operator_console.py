@@ -40,6 +40,31 @@ def _decision(now: datetime) -> StrategyDecision:
     )
 
 
+def _blocked_decision(now: datetime) -> StrategyDecision:
+    return StrategyDecision(
+        decision_id="decision:blocked",
+        created_at=now,
+        symbol="BTC-USD",
+        horizon_hours=24,
+        action="HOLD",
+        confidence=None,
+        evidence_grade="INSUFFICIENT",
+        risk_level="UNKNOWN",
+        tradeable=False,
+        blocked_reason="research_backtest_missing",
+        recommended_position_pct=0.0,
+        current_position_pct=0.0,
+        max_position_pct=0.15,
+        invalidation_conditions=["backtest artifact arrives"],
+        reason_summary="測試用 blocked 決策。",
+        forecast_ids=["forecast:blocked"],
+        score_ids=["score:blocked"],
+        review_ids=["review:blocked"],
+        baseline_ids=["baseline:blocked"],
+        decision_basis="test",
+    )
+
+
 def _portfolio(now: datetime) -> PaperPortfolioSnapshot:
     position = PaperPosition(
         symbol="BTC-USD",
@@ -95,6 +120,40 @@ def test_operator_console_renders_required_pages_read_only(tmp_path):
     assert "控制面板在 M5A 只顯示 skeleton" in control
     assert "disabled" in control
     assert "submit_order" not in control
+
+
+def test_decision_timeline_shows_reason_evidence_and_invalidation(tmp_path):
+    now = datetime(2026, 4, 25, 1, 30, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    repository.save_strategy_decision(_decision(now))
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    html = render_operator_console_page(snapshot, page="decisions")
+
+    assert "最新決策" in html
+    assert "Decision Timeline" in html
+    assert "測試用 paper-only BUY 決策。" in html
+    assert "Evidence Links" in html
+    assert "Forecast: <code>forecast:test</code>" in html
+    assert "Score: <code>score:test</code>" in html
+    assert "Baseline: <code>baseline:test</code>" in html
+    assert "Invalidation Conditions" in html
+    assert "health-check blocking" in html
+    assert "Blocked reason" in html
+
+
+def test_decision_timeline_orders_newest_first_and_shows_review_ids(tmp_path):
+    now = datetime(2026, 4, 25, 1, 30, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    repository.save_strategy_decision(_blocked_decision(now))
+    repository.save_strategy_decision(_decision(now.replace(hour=2)))
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    html = render_operator_console_page(snapshot, page="decisions")
+
+    assert html.index("買進 / BTC-USD") < html.index("持有 / BTC-USD")
+    assert "Review: <code>review:blocked</code>" in html
+    assert "research_backtest_missing" in html
 
 
 def test_operator_console_cli_renders_one_page(tmp_path, capsys):

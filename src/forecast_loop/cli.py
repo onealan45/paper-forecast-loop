@@ -21,6 +21,7 @@ from forecast_loop.control import record_control_event
 from forecast_loop.dashboard import write_dashboard_html
 from forecast_loop.decision import generate_strategy_decision
 from forecast_loop.evaluation import build_evaluation_summary
+from forecast_loop.execution_safety import evaluate_execution_safety_gate
 from forecast_loop.health import run_health_check
 from forecast_loop.macro_events import import_macro_events, macro_calendar
 from forecast_loop.maintenance import repair_storage
@@ -164,6 +165,18 @@ def main(argv: list[str] | None = None) -> int:
     broker_reconcile.add_argument("--equity-tolerance", type=float, default=0.01)
     broker_reconcile.add_argument("--position-tolerance", type=float, default=1e-9)
     broker_reconcile.add_argument("--now")
+
+    execution_gate = subparsers.add_parser("execution-gate")
+    execution_gate.add_argument("--storage-dir", required=True)
+    execution_gate.add_argument("--symbol", default="BTC-USD")
+    execution_gate.add_argument("--decision-id", default="latest")
+    execution_gate.add_argument("--order-id", default="latest")
+    execution_gate.add_argument("--broker", default="binance_testnet")
+    execution_gate.add_argument("--broker-mode", choices=["EXTERNAL_PAPER", "SANDBOX"], default="SANDBOX")
+    execution_gate.add_argument("--broker-health", required=True)
+    execution_gate.add_argument("--min-evidence-grade", choices=["A", "B", "C", "D"], default="B")
+    execution_gate.add_argument("--max-order-position-pct", type=float, default=0.10)
+    execution_gate.add_argument("--now")
 
     paper_fill = subparsers.add_parser("paper-fill")
     paper_fill.add_argument("--storage-dir", required=True)
@@ -314,6 +327,8 @@ def main(argv: list[str] | None = None) -> int:
             return _broker_order(args)
         if args.command == "broker-reconcile":
             return _broker_reconcile(args)
+        if args.command == "execution-gate":
+            return _execution_gate(args)
         if args.command == "paper-fill":
             return _paper_fill(args)
         if args.command == "portfolio-snapshot":
@@ -917,6 +932,34 @@ def _broker_reconcile(args) -> int:
     )
     print(json.dumps(reconciliation.to_dict(), ensure_ascii=False))
     return 0 if reconciliation.severity != "blocking" else 2
+
+
+def _execution_gate(args) -> int:
+    now = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    health_path = Path(args.broker_health)
+    if not health_path.exists():
+        raise ValueError(f"broker health file does not exist: {health_path}")
+    try:
+        broker_health = json.loads(health_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"broker health file is not valid JSON: {health_path}: {exc}") from exc
+    storage_dir = Path(args.storage_dir)
+    repository = JsonFileRepository(storage_dir)
+    gate = evaluate_execution_safety_gate(
+        repository=repository,
+        storage_dir=storage_dir,
+        symbol=args.symbol,
+        now=now,
+        broker=args.broker,
+        broker_mode=args.broker_mode,
+        broker_health=broker_health,
+        decision_id=args.decision_id,
+        order_id=args.order_id,
+        min_evidence_grade=args.min_evidence_grade,
+        max_order_position_pct=args.max_order_position_pct,
+    )
+    print(json.dumps(gate.to_dict(), ensure_ascii=False))
+    return 0 if gate.allowed else 2
 
 
 def _paper_fill(args) -> int:

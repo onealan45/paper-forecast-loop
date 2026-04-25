@@ -325,6 +325,10 @@ Current practical V1 path:
 - M6E adds local broker reconciliation artifacts that compare broker lifecycle,
   positions, cash, and equity against an external paper/sandbox snapshot and
   mark blocking mismatches as repair-required
+- M6F adds paper/sandbox execution safety gates that require healthy storage,
+  operator control allowance, tradeable decisions, evidence/risk gates, broker
+  health, max order size, duplicate-order checks, reconciliation, and market
+  open checks before any future sandbox submit may proceed
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation

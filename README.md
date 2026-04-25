@@ -225,6 +225,13 @@ external paper/sandbox snapshot fixture. Unknown external orders, missing
 tracked local orders, duplicate broker order references, status mismatches, or
 cash/equity/position mismatches are blocking and set `repair_required=true`.
 
+M6F adds paper/sandbox execution safety gates in
+`execution_safety_gates.jsonl`. The `execution-gate` CLI checks health,
+operator controls, decision tradeability, evidence grade, risk state, broker
+health fixture, order sizing, duplicate active orders, latest reconciliation,
+and market-open constraints before a future sandbox submit path may proceed.
+It performs no submit/cancel operation.
+
 Live broker or exchange modes are intentionally unavailable. There is no API key
 handling in source and no real live order path. M2B/M2C add local paper order
 and fill artifacts; M6C adds only a gated sandbox/testnet adapter surface for

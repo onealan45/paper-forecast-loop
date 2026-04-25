@@ -12,6 +12,7 @@ from forecast_loop.models import (
     BacktestRun,
     BrokerOrder,
     BrokerReconciliation,
+    ExecutionSafetyGate,
     EquityCurvePoint,
     EvaluationSummary,
     Forecast,
@@ -96,6 +97,11 @@ def run_health_check(
             BrokerReconciliation.from_dict,
             findings,
         ),
+        "execution_safety_gates": _load_jsonl(
+            storage_path / "execution_safety_gates.jsonl",
+            ExecutionSafetyGate.from_dict,
+            findings,
+        ),
         "paper_fills": _load_jsonl(storage_path / "paper_fills.jsonl", PaperFill.from_dict, findings),
         "control_events": _load_jsonl(storage_path / "control_events.jsonl", PaperControlEvent.from_dict, findings),
         "baselines": _load_jsonl(storage_path / "baseline_evaluations.jsonl", BaselineEvaluation.from_dict, findings),
@@ -125,6 +131,7 @@ def run_health_check(
     paper_orders: list[PaperOrder] = artifact_rows["paper_orders"]
     broker_orders: list[BrokerOrder] = artifact_rows["broker_orders"]
     broker_reconciliations: list[BrokerReconciliation] = artifact_rows["broker_reconciliations"]
+    execution_safety_gates: list[ExecutionSafetyGate] = artifact_rows["execution_safety_gates"]
     paper_fills: list[PaperFill] = artifact_rows["paper_fills"]
     control_events: list[PaperControlEvent] = artifact_rows["control_events"]
     baselines: list[BaselineEvaluation] = artifact_rows["baselines"]
@@ -155,6 +162,7 @@ def run_health_check(
         storage_path / "broker_reconciliations.jsonl",
         findings,
     )
+    _check_duplicate_ids(execution_safety_gates, "gate_id", storage_path / "execution_safety_gates.jsonl", findings)
     _check_duplicate_ids(paper_fills, "fill_id", storage_path / "paper_fills.jsonl", findings)
     _check_duplicate_ids(control_events, "control_id", storage_path / "control_events.jsonl", findings)
     _check_duplicate_ids(baselines, "baseline_id", storage_path / "baseline_evaluations.jsonl", findings)

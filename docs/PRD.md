@@ -318,6 +318,8 @@ Current practical V1 path:
   adapter submit/cancel paths blocked
 - M6B adds safe example config files, secret-management documentation, `.env`
   ignore rules, and health-check detection for obvious secret leakage
+- M6C adds a first mockable `BinanceTestnetBrokerAdapter` for sandbox/testnet
+  experimentation with missing-key fail-safe behavior and no live endpoint
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation

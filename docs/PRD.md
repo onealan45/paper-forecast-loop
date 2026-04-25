@@ -313,6 +313,9 @@ Current practical V1 path:
 - M5G adds local notification artifacts for new decisions, blocked BUY/SELL
   gates, stop-new-entries, health blocking, repair requests, and drawdown
   breaches
+- M6A defines Broker Adapter Contract V2 with internal paper, external paper,
+  and sandbox mode names while keeping only internal paper implemented and all
+  adapter submit/cancel paths blocked
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation

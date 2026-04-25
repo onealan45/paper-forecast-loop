@@ -4,7 +4,7 @@ import json
 import pytest
 
 from forecast_loop.baselines import build_baseline_evaluation
-from forecast_loop.broker import PaperBrokerAdapter, build_broker_adapter
+from forecast_loop.broker import BrokerMode, PaperBrokerAdapter, build_broker_adapter
 from forecast_loop.cli import main
 from forecast_loop.decision import generate_strategy_decision
 from forecast_loop.health import run_health_check
@@ -357,11 +357,25 @@ def test_paper_broker_is_only_available_mode():
     broker = build_broker_adapter("paper")
     snapshot = broker.get_account_snapshot(now=datetime(2026, 4, 24, 12, 0, tzinfo=UTC))
     order = broker.submit_order(symbol="BTC-USD", side="BUY", quantity=1)
+    health = broker.health_check(now=datetime(2026, 4, 24, 12, 0, tzinfo=UTC))
 
     assert isinstance(broker, PaperBrokerAdapter)
+    assert broker.mode == BrokerMode.INTERNAL_PAPER
     assert snapshot.equity == 10_000
-    assert order["status"] == "paper_rejected"
-    with pytest.raises(ValueError, match="only paper mode"):
+    assert broker.get_positions(now=datetime(2026, 4, 24, 12, 0, tzinfo=UTC)) == []
+    assert broker.get_fills() == []
+    assert broker.get_order_status(order_id="paper-order:test")["status"] == "unavailable"
+    assert broker.cancel_order(order_id="paper-order:test")["status"] == "blocked"
+    assert order["status"] == "blocked"
+    assert order["mode"] == "INTERNAL_PAPER"
+    assert health["live_trading_available"] is False
+    assert health["external_submit_available"] is False
+    assert build_broker_adapter("INTERNAL_PAPER").mode == BrokerMode.INTERNAL_PAPER
+    with pytest.raises(ValueError, match="only INTERNAL_PAPER"):
+        build_broker_adapter("EXTERNAL_PAPER")
+    with pytest.raises(ValueError, match="only INTERNAL_PAPER"):
+        build_broker_adapter("SANDBOX")
+    with pytest.raises(ValueError, match="live mode is unsupported"):
         build_broker_adapter("live")
 
 

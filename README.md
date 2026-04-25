@@ -170,13 +170,31 @@ Decision gates:
 
 ## Paper Broker Boundary
 
-M1 includes a broker interface only to keep future integration boundaries clean.
-The only implementation is `PaperBrokerAdapter`.
+The broker layer exists only to keep future integration boundaries clean.
+
+M6A defines the broker adapter contract with these methods:
+
+- `get_account_snapshot`
+- `get_positions`
+- `submit_order`
+- `cancel_order`
+- `get_order_status`
+- `get_fills`
+- `health_check`
+
+Supported contract modes are:
+
+- `INTERNAL_PAPER`
+- `EXTERNAL_PAPER`
+- `SANDBOX`
+
+Only `INTERNAL_PAPER` is implemented. `EXTERNAL_PAPER` and `SANDBOX` are
+contract names for later milestones and fail closed if requested.
 
 Live broker or exchange modes are intentionally unavailable. There is no API key
 handling and no real order path. M2B/M2C add local paper order and fill
-artifacts, but broker submission remains unavailable until a later paper/sandbox
-execution stage.
+artifacts, but adapter submission remains blocked until later gated
+paper/sandbox execution stages.
 
 ## Forecast Contract
 

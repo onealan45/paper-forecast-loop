@@ -52,7 +52,10 @@ class BrokerAdapter(Protocol):
 @dataclass(slots=True)
 class PaperBrokerAdapter:
     starting_equity: float = 10_000.0
-    mode: BrokerMode = BrokerMode.INTERNAL_PAPER
+
+    @property
+    def mode(self) -> BrokerMode:
+        return BrokerMode.INTERNAL_PAPER
 
     def get_account_snapshot(self, *, now: datetime) -> PaperPortfolioSnapshot:
         return PaperPortfolioSnapshot.empty(created_at=now, equity=self.starting_equity)

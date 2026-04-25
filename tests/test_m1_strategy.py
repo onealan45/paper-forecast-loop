@@ -371,6 +371,10 @@ def test_paper_broker_is_only_available_mode():
     assert health["live_trading_available"] is False
     assert health["external_submit_available"] is False
     assert build_broker_adapter("INTERNAL_PAPER").mode == BrokerMode.INTERNAL_PAPER
+    with pytest.raises(TypeError):
+        PaperBrokerAdapter(mode=BrokerMode.SANDBOX)
+    with pytest.raises(TypeError):
+        PaperBrokerAdapter(mode=BrokerMode.EXTERNAL_PAPER)
     with pytest.raises(ValueError, match="only INTERNAL_PAPER"):
         build_broker_adapter("EXTERNAL_PAPER")
     with pytest.raises(ValueError, match="only INTERNAL_PAPER"):

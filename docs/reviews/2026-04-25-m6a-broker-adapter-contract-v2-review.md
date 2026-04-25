@@ -44,9 +44,40 @@ or live trading.
 - `git diff --check`
   - Result: passed; only CRLF normalization warnings were printed
 
+After reviewer P1 fix:
+
+- `python -m pytest tests\test_m1_strategy.py::test_paper_broker_is_only_available_mode -q`
+  - Result: `1 passed in 0.31s`
+- `python -m pytest -q`
+  - Result: `191 passed in 7.21s`
+- `python -m compileall -q src tests run_forecast_loop.py sitecustomize.py`
+  - Result: passed
+- `python .\run_forecast_loop.py --help`
+  - Result: passed
+- `git diff --check`
+  - Result: passed; only CRLF normalization warnings were printed
+
 ## Reviewer Status
 
-Pending final reviewer subagent.
+Initial final reviewer subagent: `Zeno`
+(`019dc2a7-2893-72a2-bf04-d31a771812ad`).
+
+Initial result: `BLOCKED`.
+
+Blocking finding:
+
+- `PaperBrokerAdapter` exposed `mode` as a dataclass field, so callers could
+  directly instantiate `PaperBrokerAdapter(mode=BrokerMode.SANDBOX)` and bypass
+  `build_broker_adapter`.
+
+Fix:
+
+- Replaced `mode` with a read-only property hardcoded to
+  `BrokerMode.INTERNAL_PAPER`.
+- Added regression coverage proving direct constructor attempts with
+  `SANDBOX` and `EXTERNAL_PAPER` fail.
+
+Final reviewer status after fix: pending re-review.
 
 ## Safety Status
 

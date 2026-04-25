@@ -16,6 +16,7 @@ from forecast_loop.models import (
     HealthCheckResult,
     HealthFinding,
     MarketCandleRecord,
+    NotificationArtifact,
     PaperFill,
     PaperControlEvent,
     PaperOrder,
@@ -94,6 +95,7 @@ def run_health_check(
         "risk_snapshots": _load_jsonl(storage_path / "risk_snapshots.jsonl", RiskSnapshot.from_dict, findings),
         "provider_runs": _load_jsonl(storage_path / "provider_runs.jsonl", ProviderRun.from_dict, findings),
         "automation_runs": _load_jsonl(storage_path / "automation_runs.jsonl", AutomationRun.from_dict, findings),
+        "notification_artifacts": _load_jsonl(storage_path / "notification_artifacts.jsonl", NotificationArtifact.from_dict, findings),
         "evaluation_summaries": _load_jsonl(storage_path / "evaluation_summaries.jsonl", EvaluationSummary.from_dict, findings),
         "repair_requests": _load_jsonl(storage_path / "repair_requests.jsonl", RepairRequest.from_dict, findings),
         "research_datasets": _load_jsonl(storage_path / "research_datasets.jsonl", ResearchDataset.from_dict, findings),
@@ -120,6 +122,7 @@ def run_health_check(
     risk_snapshots: list[RiskSnapshot] = artifact_rows["risk_snapshots"]
     provider_runs: list[ProviderRun] = artifact_rows["provider_runs"]
     automation_runs: list[AutomationRun] = artifact_rows["automation_runs"]
+    notification_artifacts: list[NotificationArtifact] = artifact_rows["notification_artifacts"]
     evaluation_summaries: list[EvaluationSummary] = artifact_rows["evaluation_summaries"]
     repair_requests: list[RepairRequest] = artifact_rows["repair_requests"]
     research_datasets: list[ResearchDataset] = artifact_rows["research_datasets"]
@@ -142,6 +145,7 @@ def run_health_check(
     _check_duplicate_ids(risk_snapshots, "risk_id", storage_path / "risk_snapshots.jsonl", findings)
     _check_duplicate_ids(provider_runs, "provider_run_id", storage_path / "provider_runs.jsonl", findings)
     _check_duplicate_ids(automation_runs, "automation_run_id", storage_path / "automation_runs.jsonl", findings)
+    _check_duplicate_ids(notification_artifacts, "notification_id", storage_path / "notification_artifacts.jsonl", findings)
     _check_duplicate_ids(evaluation_summaries, "summary_id", storage_path / "evaluation_summaries.jsonl", findings)
     _check_duplicate_ids(repair_requests, "repair_request_id", storage_path / "repair_requests.jsonl", findings)
     _check_duplicate_ids(research_datasets, "dataset_id", storage_path / "research_datasets.jsonl", findings)

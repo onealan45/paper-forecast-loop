@@ -225,7 +225,16 @@ Notification behavior should be:
 - active by default
 - customizable by the user
 
-V1 should support:
+Current M5G implementation:
+
+- creates local `notification_artifacts.jsonl` records during paper-only cycles
+- shows newest local notifications in the read-only operator console overview
+- covers new decisions, BUY/SELL blocked, `STOP_NEW_ENTRIES`, health blocking,
+  repair request creation, and drawdown breach events
+- stores only local artifact metadata and source links
+- sends no external messages and stores no notification secrets
+
+Future V1 should support:
 
 - in-app notifications
 - immediate push-like or Telegram-like notifications
@@ -301,6 +310,9 @@ Current practical V1 path:
   controls
 - M5F adds automation run logs that link each paper cycle to step status,
   health-check id, strategy decision id, and repair request id
+- M5G adds local notification artifacts for new decisions, blocked BUY/SELL
+  gates, stop-new-entries, health blocking, repair requests, and drawdown
+  breaches
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation

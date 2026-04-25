@@ -15,6 +15,7 @@ from forecast_loop.models import (
     ForecastScore,
     MacroEvent,
     MarketCandleRecord,
+    NotificationArtifact,
     PaperFill,
     PaperControlEvent,
     PaperOrder,
@@ -105,6 +106,10 @@ class ArtifactRepository(Protocol):
 
     def load_automation_runs(self) -> list[AutomationRun]: ...
 
+    def save_notification_artifact(self, notification: NotificationArtifact) -> None: ...
+
+    def load_notification_artifacts(self) -> list[NotificationArtifact]: ...
+
     def save_repair_request(self, repair_request: RepairRequest) -> None: ...
 
     def load_repair_requests(self) -> list[RepairRequest]: ...
@@ -147,6 +152,7 @@ class JsonFileRepository:
         self.risk_snapshots_path = self.root / "risk_snapshots.jsonl"
         self.provider_runs_path = self.root / "provider_runs.jsonl"
         self.automation_runs_path = self.root / "automation_runs.jsonl"
+        self.notification_artifacts_path = self.root / "notification_artifacts.jsonl"
         self.repair_requests_path = self.root / "repair_requests.jsonl"
         self.research_datasets_path = self.root / "research_datasets.jsonl"
         self.backtest_runs_path = self.root / "backtest_runs.jsonl"
@@ -338,6 +344,16 @@ class JsonFileRepository:
 
     def load_automation_runs(self) -> list[AutomationRun]:
         return self._load_lines(self.automation_runs_path, AutomationRun.from_dict)
+
+    def save_notification_artifact(self, notification: NotificationArtifact) -> None:
+        self._append_unique(
+            self.notification_artifacts_path,
+            notification.to_dict(),
+            identity_key="notification_id",
+        )
+
+    def load_notification_artifacts(self) -> list[NotificationArtifact]:
+        return self._load_lines(self.notification_artifacts_path, NotificationArtifact.from_dict)
 
     def save_repair_request(self, repair_request: RepairRequest) -> None:
         self._append_unique(

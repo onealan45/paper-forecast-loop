@@ -23,6 +23,7 @@ from forecast_loop.health import run_health_check
 from forecast_loop.macro_events import import_macro_events, macro_calendar
 from forecast_loop.maintenance import repair_storage
 from forecast_loop.models import PaperControlAction, StrategyDecision
+from forecast_loop.notifications import generate_notification_artifacts
 from forecast_loop.operator_console import (
     OPERATOR_CONSOLE_PAGES,
     serve_operator_console,
@@ -361,7 +362,20 @@ def _run_once(args) -> int:
             now=now,
             create_repair_request=True,
         )
+        notifications = generate_notification_artifacts(
+            repository=repository,
+            symbol=args.symbol,
+            now=now,
+            health_result=health_result,
+        )
         steps.append(automation_step("run_cycle", "failed", type(exc).__name__))
+        steps.append(
+            automation_step(
+                "notifications",
+                "completed" if notifications else "skipped",
+                ",".join(notification.notification_id for notification in notifications) if notifications else None,
+            )
+        )
         automation_run = record_automation_run(
             repository=repository,
             started_at=started_at,
@@ -384,6 +398,7 @@ def _run_once(args) -> int:
                     "repair_required": health_result.repair_required,
                     "repair_request_id": health_result.repair_request_id,
                     "automation_run_id": automation_run.automation_run_id,
+                    "notification_count": len(notifications),
                 }
             )
         )
@@ -397,6 +412,7 @@ def _run_once(args) -> int:
     )
     decision = None
     health_result = None
+    notifications = []
     if args.also_decide:
         health_result = run_health_check(
             storage_dir=args.storage_dir,
@@ -424,6 +440,21 @@ def _run_once(args) -> int:
             risk_snapshot=risk_snapshot,
         )
         steps.append(automation_step("decide", "completed", decision.decision_id))
+        notifications = generate_notification_artifacts(
+            repository=repository,
+            symbol=args.symbol,
+            now=now,
+            decision=decision,
+            health_result=health_result,
+            risk_snapshot=risk_snapshot,
+        )
+        steps.append(
+            automation_step(
+                "notifications",
+                "completed" if notifications else "skipped",
+                ",".join(notification.notification_id for notification in notifications) if notifications else None,
+            )
+        )
     automation_status = "repair_required" if health_result and health_result.repair_required else "completed"
     automation_run = record_automation_run(
         repository=repository,
@@ -448,6 +479,7 @@ def _run_once(args) -> int:
                 "decision_id": decision.decision_id if decision else None,
                 "decision_action": decision.action if decision else None,
                 "automation_run_id": automation_run.automation_run_id,
+                "notification_count": len(notifications),
             }
         )
     )

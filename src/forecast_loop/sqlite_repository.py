@@ -18,6 +18,7 @@ from forecast_loop.models import (
     ForecastScore,
     MacroEvent,
     MarketCandleRecord,
+    NotificationArtifact,
     PaperFill,
     PaperControlEvent,
     PaperOrder,
@@ -64,6 +65,12 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("risk_snapshots", "risk_snapshots.jsonl", "risk_id", RiskSnapshot.from_dict),
     ArtifactSpec("provider_runs", "provider_runs.jsonl", "provider_run_id", ProviderRun.from_dict),
     ArtifactSpec("automation_runs", "automation_runs.jsonl", "automation_run_id", AutomationRun.from_dict),
+    ArtifactSpec(
+        "notification_artifacts",
+        "notification_artifacts.jsonl",
+        "notification_id",
+        NotificationArtifact.from_dict,
+    ),
     ArtifactSpec("repair_requests", "repair_requests.jsonl", "repair_request_id", RepairRequest.from_dict),
     ArtifactSpec("research_datasets", "research_datasets.jsonl", "dataset_id", ResearchDataset.from_dict),
     ArtifactSpec("backtest_runs", "backtest_runs.jsonl", "backtest_id", BacktestRun.from_dict),
@@ -248,6 +255,12 @@ class SQLiteRepository:
     def load_automation_runs(self) -> list[AutomationRun]:
         return self._load("automation_runs", AutomationRun.from_dict)
 
+    def save_notification_artifact(self, notification: NotificationArtifact) -> None:
+        self._save_unique("notification_artifacts", notification.notification_id, notification.to_dict())
+
+    def load_notification_artifacts(self) -> list[NotificationArtifact]:
+        return self._load("notification_artifacts", NotificationArtifact.from_dict)
+
     def save_repair_request(self, repair_request: RepairRequest) -> None:
         self._save_unique("repair_requests", repair_request.repair_request_id, repair_request.to_dict())
 
@@ -389,6 +402,8 @@ def migrate_jsonl_to_sqlite(storage_dir: Path | str, db_path: Path | str | None 
         sqlite_repository.save_provider_run(provider_run)
     for run in json_repository.load_automation_runs():
         sqlite_repository.save_automation_run(run)
+    for notification in json_repository.load_notification_artifacts():
+        sqlite_repository.save_notification_artifact(notification)
     for repair_request in json_repository.load_repair_requests():
         sqlite_repository.save_repair_request(repair_request)
     for dataset in json_repository.load_research_datasets():

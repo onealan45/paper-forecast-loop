@@ -316,6 +316,8 @@ Current practical V1 path:
 - M6A defines Broker Adapter Contract V2 with internal paper, external paper,
   and sandbox mode names while keeping only internal paper implemented and all
   adapter submit/cancel paths blocked
+- M6B adds safe example config files, secret-management documentation, `.env`
+  ignore rules, and health-check detection for obvious secret leakage
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation

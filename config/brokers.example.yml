@@ -1,0 +1,34 @@
+# Example broker configuration.
+#
+# This file is intentionally non-secret and safe to commit.
+# M6B does not implement external broker connectivity.
+
+default_mode: INTERNAL_PAPER
+
+brokers:
+  internal_paper:
+    mode: INTERNAL_PAPER
+    enabled: true
+    submit_enabled: false
+    live_trading_available: false
+    notes: "Local paper-only adapter. Adapter submit/cancel remain blocked."
+
+  alpaca_paper:
+    mode: EXTERNAL_PAPER
+    enabled: false
+    submit_enabled: false
+    live_trading_available: false
+    base_url: "https://paper-api.alpaca.markets"
+    api_key_env: "ALPACA_PAPER_API_KEY"
+    api_secret_env: "ALPACA_PAPER_API_SECRET"
+    notes: "Reserved for a later milestone. Do not put secrets in this file."
+
+  binance_testnet:
+    mode: SANDBOX
+    enabled: false
+    submit_enabled: false
+    live_trading_available: false
+    base_url: "https://testnet.binance.vision"
+    api_key_env: "BINANCE_TESTNET_API_KEY"
+    api_secret_env: "BINANCE_TESTNET_API_SECRET"
+    notes: "Reserved for a later milestone. Do not put secrets in this file."

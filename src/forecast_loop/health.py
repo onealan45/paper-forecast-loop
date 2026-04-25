@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 import json
 from pathlib import Path
+import re
 
 from forecast_loop.models import (
     AutomationRun,
@@ -205,6 +206,7 @@ def run_health_check(
     )
     _check_research_dataset_leakage(storage_path, research_datasets, findings)
     _check_dashboard(storage_path, findings)
+    _check_secret_leakage(storage_path, findings)
 
     return _finalize_health_result(
         storage_path=storage_path,
@@ -255,6 +257,84 @@ def _check_duplicate_ids(rows: list, attribute: str, path: Path, findings: list[
                 repair_required=True,
             )
         )
+
+
+_SECRET_ASSIGNMENT_RE = re.compile(
+    r"(?i)['\"]?([A-Z0-9_-]*"
+    r"(?:api[_-]?key|api[_-]?secret|secret[_-]?key|token|webhook[_-]?url|private[_-]?key)"
+    r"[A-Z0-9_-]*)['\"]?"
+    r"[ \t]*[:=][ \t]*['\"]?([^'\"\s,}\r\n]*)"
+)
+_SAFE_SECRET_PLACEHOLDERS = {
+    "",
+    "changeme",
+    "example",
+    "placeholder",
+    "none",
+    "null",
+    "your_api_key",
+    "your_api_secret",
+    "<redacted>",
+    "redacted",
+}
+_SECRET_SCAN_FILENAMES = {
+    "provider_runs.jsonl",
+    "repair_requests.jsonl",
+    "notification_artifacts.jsonl",
+    "last_run_meta.json",
+    "storage_repair_report.json",
+}
+
+
+def _check_secret_leakage(storage_path: Path, findings: list[HealthFinding]) -> None:
+    scan_paths = [path for path in _repo_secret_scan_paths()]
+    scan_paths.extend(storage_path / filename for filename in _SECRET_SCAN_FILENAMES)
+    for path in scan_paths:
+        if not path.exists() or not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        if _contains_secret_assignment(text):
+            _append_secret_finding(path, "secret-looking value found; remove it or replace with a blank placeholder", findings)
+
+
+def _repo_secret_scan_paths() -> list[Path]:
+    root = Path.cwd()
+    paths = [
+        root / ".env",
+        root / ".env.example",
+        root / "config" / "brokers.example.yml",
+    ]
+    return paths
+
+
+def _contains_secret_assignment(text: str) -> bool:
+    for match in _SECRET_ASSIGNMENT_RE.finditer(text):
+        key = match.group(1).strip().strip("'\"").lower()
+        value = match.group(2).strip().strip("'\"")
+        normalized = value.lower()
+        if key.endswith("_env") or key.endswith("-env"):
+            continue
+        if normalized in _SAFE_SECRET_PLACEHOLDERS:
+            continue
+        if normalized.startswith("${") or normalized.endswith("_env"):
+            continue
+        return True
+    return False
+
+
+def _append_secret_finding(path: Path, message: str, findings: list[HealthFinding]) -> None:
+    findings.append(
+        HealthFinding(
+            code="secret_leak_detected",
+            severity="blocking",
+            message=f"{path.name}: {message}.",
+            artifact_path=str(path),
+            repair_required=True,
+        )
+    )
 
 
 def _check_last_run_meta(

@@ -8,12 +8,14 @@ from pathlib import Path
 import socket
 from urllib.parse import urlparse
 
+from forecast_loop.control import PaperControlState, current_control_state
 from forecast_loop.health import run_health_check
 from forecast_loop.models import (
     BacktestResult,
     BaselineEvaluation,
     HealthCheckResult,
     HealthFinding,
+    PaperControlEvent,
     PaperPortfolioSnapshot,
     RepairRequest,
     RiskSnapshot,
@@ -41,6 +43,8 @@ class OperatorConsoleSnapshot:
     latest_backtest: BacktestResult | None
     latest_walk_forward: WalkForwardValidation | None
     repair_requests: list[RepairRequest]
+    control_events: list[PaperControlEvent]
+    control_state: PaperControlState
     counts: dict[str, int]
 
 
@@ -74,6 +78,8 @@ def build_operator_console_snapshot(
     backtests = [item for item in _safe_load(repository.load_backtest_results) if item.symbol == symbol]
     walk_forwards = [item for item in _safe_load(repository.load_walk_forward_validations) if item.symbol == symbol]
     repair_requests = _safe_load(repository.load_repair_requests)
+    control_events = _safe_load(repository.load_control_events)
+    control_state = current_control_state(control_events, symbol=symbol)
 
     return OperatorConsoleSnapshot(
         storage_dir=storage_path,
@@ -88,6 +94,8 @@ def build_operator_console_snapshot(
         latest_backtest=_latest(backtests),
         latest_walk_forward=_latest(walk_forwards),
         repair_requests=repair_requests,
+        control_events=control_events,
+        control_state=control_state,
         counts={
             "forecasts": len(forecasts),
             "scores": len(scores),
@@ -96,6 +104,7 @@ def build_operator_console_snapshot(
             "orders": len(_safe_load(repository.load_paper_orders)),
             "fills": len(_safe_load(repository.load_paper_fills)),
             "repair_requests": len(repair_requests),
+            "control_events": len(control_events),
             "backtests": len(backtests),
             "walk_forward_validations": len(walk_forwards),
         },
@@ -649,14 +658,52 @@ def _render_health(snapshot: OperatorConsoleSnapshot) -> str:
 
 
 def _render_control(snapshot: OperatorConsoleSnapshot) -> str:
-    del snapshot
-    labels = ["PAUSE", "RESUME", "STOP_NEW_ENTRIES", "REDUCE_RISK", "EMERGENCY_STOP", "SET_MAX_POSITION"]
-    buttons = "\n".join(f"<button disabled>{label}（未啟用）</button>" for label in labels)
+    state = snapshot.control_state
+    events = sorted(snapshot.control_events, key=lambda item: item.created_at, reverse=True)[:20]
+    event_rows = "\n".join(
+        "<tr>"
+        f"<td>{_format_dt(event.created_at)}</td>"
+        f"<td><code>{escape(event.action)}</code></td>"
+        f"<td>{escape(event.actor)}</td>"
+        f"<td>{escape(event.symbol or 'global')}</td>"
+        f"<td>{escape(event.reason)}</td>"
+        f"<td>{'是' if event.requires_confirmation else '否'} / {'是' if event.confirmed else '否'}</td>"
+        "</tr>"
+        for event in events
+    )
+    if not event_rows:
+        event_rows = '<tr><td colspan="6">目前沒有 control audit event。</td></tr>'
     return f"""
-<section class="panel">
-  <h3>Paper-only Control Placeholder</h3>
-  <p>控制面板在 M5A 只顯示 skeleton。所有控制都停用，不寫入 audit log，不改變 automation，不提交任何 order。</p>
-  <div class="disabled-controls">{buttons}</div>
+<section class="grid">
+  <article class="panel">
+    <h3>目前控制狀態</h3>
+    <div class="metric">{escape(_translate_control_status(state.status))}</div>
+    <p>paused：{str(state.paused).lower()}</p>
+    <p>stop_new_entries：{str(state.stop_new_entries).lower()}</p>
+    <p>reduce_risk：{str(state.reduce_risk).lower()}</p>
+    <p>emergency_stop：{str(state.emergency_stop).lower()}</p>
+    <p>max_position_pct：{_format_pct(state.max_position_pct)}</p>
+    <p>latest_control_id：<code>{escape(state.latest_control_id or "none")}</code></p>
+  </article>
+  <article class="panel wide">
+    <h3>Audit Log</h3>
+    <table>
+      <thead><tr><th>時間</th><th>Action</th><th>Actor</th><th>Scope</th><th>Reason</th><th>需確認 / 已確認</th></tr></thead>
+      <tbody>{event_rows}</tbody>
+    </table>
+  </article>
+  <article class="panel wide">
+    <h3>可用 CLI 控制</h3>
+    <p>此 console 仍然不提供表單；所有控制必須透過 CLI 寫入 audit log。</p>
+    <ul class="conditions">
+      <li><code>python run_forecast_loop.py operator-control --storage-dir &lt;path&gt; --action PAUSE --reason "..."</code></li>
+      <li><code>python run_forecast_loop.py operator-control --storage-dir &lt;path&gt; --action STOP_NEW_ENTRIES --reason "..."</code></li>
+      <li><code>python run_forecast_loop.py operator-control --storage-dir &lt;path&gt; --action REDUCE_RISK --reason "..."</code></li>
+      <li><code>python run_forecast_loop.py operator-control --storage-dir &lt;path&gt; --action EMERGENCY_STOP --reason "..." --confirm</code></li>
+      <li><code>python run_forecast_loop.py operator-control --storage-dir &lt;path&gt; --action SET_MAX_POSITION --max-position-pct 0.10 --reason "..." --confirm</code></li>
+      <li><code>python run_forecast_loop.py operator-control --storage-dir &lt;path&gt; --action RESUME --reason "..." --confirm</code></li>
+    </ul>
+  </article>
 </section>
 """
 
@@ -811,7 +858,7 @@ def _page_title(page: str) -> str:
         "portfolio": "投資組合",
         "research": "研究",
         "health": "健康 / 修復",
-        "control": "控制 Placeholder",
+        "control": "控制",
     }[page]
 
 
@@ -830,6 +877,16 @@ def _translate_health(status: str) -> str:
         "healthy": "健康",
         "degraded": "注意",
         "unhealthy": "阻塞",
+    }.get(status, status)
+
+
+def _translate_control_status(status: str) -> str:
+    return {
+        "ACTIVE": "啟用",
+        "PAUSED": "已暫停",
+        "STOP_NEW_ENTRIES": "停止新進場",
+        "REDUCE_RISK": "降低風險",
+        "EMERGENCY_STOP": "緊急停止",
     }.get(status, status)
 
 

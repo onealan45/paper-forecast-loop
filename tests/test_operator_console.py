@@ -5,7 +5,7 @@ import socket
 import pytest
 
 from forecast_loop.cli import main
-from forecast_loop.models import PaperPortfolioSnapshot, PaperPosition, RepairRequest, RiskSnapshot, StrategyDecision
+from forecast_loop.models import PaperControlEvent, PaperPortfolioSnapshot, PaperPosition, RepairRequest, RiskSnapshot, StrategyDecision
 from forecast_loop.operator_console import (
     build_operator_console_snapshot,
     local_address_family_for_host,
@@ -135,12 +135,28 @@ def _repair_request(now: datetime) -> RepairRequest:
     )
 
 
+def _control_event(now: datetime) -> PaperControlEvent:
+    return PaperControlEvent(
+        control_id="control:test",
+        created_at=now,
+        action="STOP_NEW_ENTRIES",
+        actor="operator",
+        reason="測試用停止新進場控制。",
+        status="ACTIVE",
+        symbol="BTC-USD",
+        requires_confirmation=False,
+        confirmed=False,
+        decision_basis="test",
+    )
+
+
 def test_operator_console_renders_required_pages_read_only(tmp_path):
     now = datetime(2026, 4, 25, 1, 30, tzinfo=UTC)
     repository = JsonFileRepository(tmp_path)
     repository.save_strategy_decision(_decision(now))
     repository.save_portfolio_snapshot(_portfolio(now))
     repository.save_risk_snapshot(_risk(now))
+    repository.save_control_event(_control_event(now))
 
     snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
 
@@ -156,15 +172,18 @@ def test_operator_console_renders_required_pages_read_only(tmp_path):
         ("投資組合", "portfolio"),
         ("研究", "research"),
         ("健康 / 修復", "health"),
-        ("控制 Placeholder", "control"),
+        ("控制", "control"),
     ]:
         html = render_operator_console_page(snapshot, page=page)
         assert page_title in html
         assert "<form" not in html.lower()
 
     control = render_operator_console_page(snapshot, page="control")
-    assert "控制面板在 M5A 只顯示 skeleton" in control
-    assert "disabled" in control
+    assert "目前控制狀態" in control
+    assert "停止新進場" in control
+    assert "Audit Log" in control
+    assert "測試用停止新進場控制。" in control
+    assert "operator-control" in control
     assert "submit_order" not in control
 
 

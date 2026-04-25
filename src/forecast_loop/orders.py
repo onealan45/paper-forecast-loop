@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from forecast_loop.control import current_control_state, paper_order_control_block_reason
 from forecast_loop.models import (
     HealthCheckResult,
     PaperOrder,
@@ -81,6 +82,16 @@ def create_paper_order_from_decision(
         return PaperOrderResult(
             status="skipped",
             reason="decision_not_tradeable",
+            decision_id=decision.decision_id,
+            order=None,
+        )
+
+    control_state = current_control_state(repository.load_control_events(), symbol=decision.symbol)
+    control_block_reason = paper_order_control_block_reason(state=control_state, decision=decision)
+    if control_block_reason is not None:
+        return PaperOrderResult(
+            status="skipped",
+            reason=control_block_reason,
             decision_id=decision.decision_id,
             order=None,
         )

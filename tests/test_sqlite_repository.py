@@ -15,6 +15,7 @@ from forecast_loop.models import (
     MarketCandle,
     MarketCandleRecord,
     PaperFill,
+    PaperControlEvent,
     PaperOrder,
     PaperOrderStatus,
     PaperOrderType,
@@ -213,6 +214,21 @@ def _repair_request(now: datetime) -> RepairRequest:
         safety_boundary="paper-only; no live trading",
         acceptance_criteria=["db-health healthy"],
         finding_codes=["test"],
+    )
+
+
+def _control_event(now: datetime) -> PaperControlEvent:
+    return PaperControlEvent(
+        control_id="control:sqlite",
+        created_at=now,
+        action="STOP_NEW_ENTRIES",
+        actor="operator",
+        reason="test control",
+        status="ACTIVE",
+        symbol="BTC-USD",
+        requires_confirmation=False,
+        confirmed=False,
+        decision_basis="test",
     )
 
 
@@ -436,6 +452,7 @@ def _seed_repository(repository) -> dict:
     market_candle = _market_candle(now)
     macro_event = _macro_event(now)
     repair_request = _repair_request(now)
+    control_event = _control_event(now)
     dataset = _research_dataset(now, forecast, score)
     backtest_run = _backtest_run(now, market_candle)
     backtest_result = _backtest_result(now, backtest_run)
@@ -457,6 +474,7 @@ def _seed_repository(repository) -> dict:
     repository.save_risk_snapshot(risk_snapshot)
     repository.save_provider_run(provider_run)
     repository.save_repair_request(repair_request)
+    repository.save_control_event(control_event)
     repository.save_research_dataset(dataset)
     repository.save_backtest_run(backtest_run)
     repository.save_backtest_result(backtest_result)
@@ -478,6 +496,7 @@ def _seed_repository(repository) -> dict:
         "market_candle": market_candle,
         "macro_event": macro_event,
         "repair_request": repair_request,
+        "control_event": control_event,
         "dataset": dataset,
         "backtest_run": backtest_run,
         "backtest_result": backtest_result,
@@ -507,6 +526,7 @@ def test_sqlite_repository_round_trips_and_dedupes_m1_artifacts(tmp_path):
     assert repository.load_risk_snapshots() == [artifacts["risk_snapshot"]]
     assert repository.load_provider_runs() == [artifacts["provider_run"]]
     assert repository.load_repair_requests() == [artifacts["repair_request"]]
+    assert repository.load_control_events() == [artifacts["control_event"]]
     assert repository.load_research_datasets() == [artifacts["dataset"]]
     assert repository.load_backtest_runs() == [artifacts["backtest_run"]]
     assert repository.load_backtest_results() == [artifacts["backtest_result"]]
@@ -555,6 +575,7 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert sqlite_repository.load_strategy_decisions() == [artifacts["decision"]]
     assert sqlite_repository.load_paper_orders() == [artifacts["order"]]
     assert sqlite_repository.load_paper_fills() == [artifacts["fill"]]
+    assert sqlite_repository.load_control_events() == [artifacts["control_event"]]
     assert sqlite_repository.load_research_datasets() == [artifacts["dataset"]]
     assert sqlite_repository.load_backtest_runs() == [artifacts["backtest_run"]]
     assert sqlite_repository.load_backtest_results() == [artifacts["backtest_result"]]
@@ -568,6 +589,7 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert health_result["artifact_counts"]["strategy_decisions"] == 1
     assert health_result["artifact_counts"]["paper_orders"] == 1
     assert health_result["artifact_counts"]["paper_fills"] == 1
+    assert health_result["artifact_counts"]["control_events"] == 1
     assert health_result["artifact_counts"]["equity_curve"] == 1
     assert health_result["artifact_counts"]["risk_snapshots"] == 1
     assert health_result["artifact_counts"]["provider_runs"] == 1
@@ -622,6 +644,7 @@ def test_export_jsonl_writes_compatibility_artifacts(tmp_path, capsys):
     assert exported_repository.load_strategy_decisions() == [artifacts["decision"]]
     assert exported_repository.load_paper_orders() == [artifacts["order"]]
     assert exported_repository.load_paper_fills() == [artifacts["fill"]]
+    assert exported_repository.load_control_events() == [artifacts["control_event"]]
     assert exported_repository.load_equity_curve_points() == [artifacts["equity_point"]]
     assert exported_repository.load_risk_snapshots() == [artifacts["risk_snapshot"]]
     assert exported_repository.load_provider_runs() == [artifacts["provider_run"]]

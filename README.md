@@ -46,6 +46,7 @@ This version intentionally includes:
     - `strategy_decisions.jsonl`
     - `paper_orders.jsonl`
     - `paper_fills.jsonl`
+    - `control_events.jsonl`
     - `equity_curve.jsonl`
     - `risk_snapshots.jsonl`
     - `provider_runs.jsonl`
@@ -59,6 +60,7 @@ This version intentionally includes:
   - `replay-range`
   - `render-dashboard`
   - `operator-console`
+  - `operator-control`
   - `repair-storage`
   - `decide`
   - `decide-all`
@@ -87,7 +89,7 @@ This version intentionally includes:
 
 This version intentionally excludes:
 
-- interactive UI controls; the M5A local operator console is read-only
+- browser UI forms; the local operator console remains read-only
 - live trading
 - real capital
 - portfolio optimizer or cross-asset allocation engine
@@ -329,6 +331,19 @@ Each risk snapshot records:
 Risk snapshots are paper-only gates. They can block or reduce later paper
 decisions, but they do not submit broker or exchange orders.
 
+### Control Event Artifact
+
+Each control event records an audited paper-only operator control:
+
+- action (`PAUSE`, `RESUME`, `STOP_NEW_ENTRIES`, `REDUCE_RISK`,
+  `EMERGENCY_STOP`, or `SET_MAX_POSITION`)
+- actor, reason, timestamp, and optional symbol scope
+- whether confirmation was required and supplied
+- optional parameter such as `max_position_pct`
+
+Control events are local audit artifacts only. They can block local paper order
+creation, but they do not call brokers, exchanges, sandboxes, or live APIs.
+
 ### Provider Run Artifact
 
 Each provider run records:
@@ -557,6 +572,26 @@ The health page does not execute repairs, mutate repair status, run Codex, or
 trigger automation. It only makes existing health-check and repair-request
 artifacts inspectable.
 
+M5E adds an audited paper-only control plane through CLI-written
+`control_events.jsonl` artifacts and a read-only control page. The control page
+shows the current paper-control state, recent audit events, and the exact CLI
+commands to write controls.
+
+Supported controls:
+
+- `PAUSE`
+- `RESUME`
+- `STOP_NEW_ENTRIES`
+- `REDUCE_RISK`
+- `EMERGENCY_STOP`
+- `SET_MAX_POSITION`
+
+`RESUME`, `EMERGENCY_STOP`, and `SET_MAX_POSITION` require `--confirm`.
+`EMERGENCY_STOP` and `PAUSE` block local paper order creation. `STOP_NEW_ENTRIES`
+and `REDUCE_RISK` block new BUY paper orders while still allowing risk-reducing
+SELL orders. `SET_MAX_POSITION` blocks oversized BUY paper orders. No control
+event submits a broker/exchange order.
+
 ## Failure and Degrade Behavior
 
 The loop degrades conservatively:
@@ -635,6 +670,20 @@ Run paper-only risk gates against the latest portfolio state:
 
 ```powershell
 python run_forecast_loop.py risk-check --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD
+```
+
+Write an audited paper-only operator control:
+
+```powershell
+python run_forecast_loop.py operator-control --storage-dir .\paper_storage\manual-coingecko --action STOP_NEW_ENTRIES --reason "provider incident"
+```
+
+Riskier controls require explicit confirmation:
+
+```powershell
+python run_forecast_loop.py operator-control --storage-dir .\paper_storage\manual-coingecko --action EMERGENCY_STOP --reason "manual safety stop" --confirm
+python run_forecast_loop.py operator-control --storage-dir .\paper_storage\manual-coingecko --action SET_MAX_POSITION --max-position-pct 0.10 --reason "lower risk cap" --confirm
+python run_forecast_loop.py operator-control --storage-dir .\paper_storage\manual-coingecko --action RESUME --reason "operator reviewed health" --confirm
 ```
 
 List registered assets:
@@ -814,8 +863,8 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - order lifecycle is minimal: created orders can be filled locally, but cancellation and partial fill lifecycle are deferred
 - proposal logic is still heuristic and conservative
 - health-check creates repair requests, but there is no autonomous repair daemon in this repo
-- the static dashboard and local operator console remain read-only; audited
-  operator controls are deferred to M5E
+- the static dashboard and local operator console remain read-only; controls
+  are written through audited CLI events rather than browser forms
 - replay still writes summary metadata into the base storage directory instead of a more formal run registry or database
 - US ETF/stock support is fixture-only; no live or paid data provider is wired
 - Taiwan ETF calendar/provider support remains deferred

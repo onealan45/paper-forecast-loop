@@ -296,6 +296,9 @@ Current practical V1 path:
 - M5D expands the operator console health/repair page with health status,
   blocking findings, repair request prompt paths, affected artifacts,
   recommended tests, and acceptance criteria
+- M5E adds audited paper-only control events and a read-only control page for
+  pause/resume, stop-new-entries, reduce-risk, emergency-stop, and max-position
+  controls
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation
@@ -357,6 +360,9 @@ V1 MVP should include:
 - health/repair queue view exposing current health, blocking findings, repair
   request status, repair prompts, affected artifacts, recommended tests, and
   acceptance criteria
+- audited paper-only control event artifacts with confirmation requirements for
+  risky controls and paper-order blocking gates for emergency stop, pause, stop
+  new entries, reduce risk, and max position
 - health-check output
 - Codex repair request artifacts
 - minimal CLI
@@ -388,8 +394,8 @@ Remaining gaps are now product and operations scope, not known loop-blocking
 correctness defects:
 
 - strategy and regime classification remain intentionally simple
-- the current read-only UX includes static HTML plus a local operator console
-  skeleton; audited interactive controls are still deferred
+- the current read-only UX includes static HTML plus a local operator console;
+  controls are audited CLI events, while browser forms remain deferred
 - automation is local and paper-only, with manual evidence checks before any resume
 - paper portfolio accounting and risk gates are local simulations and not broker reconciliation or external execution
 - SQLite repository migration/export now exists, while the hourly loop and dashboard still use JSONL artifacts by default until later M2 integration

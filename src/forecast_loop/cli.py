@@ -14,13 +14,14 @@ from forecast_loop.candle_store import (
     run_candle_health,
 )
 from forecast_loop.config import LoopConfig
+from forecast_loop.control import record_control_event
 from forecast_loop.dashboard import write_dashboard_html
 from forecast_loop.decision import generate_strategy_decision
 from forecast_loop.evaluation import build_evaluation_summary
 from forecast_loop.health import run_health_check
 from forecast_loop.macro_events import import_macro_events, macro_calendar
 from forecast_loop.maintenance import repair_storage
-from forecast_loop.models import StrategyDecision
+from forecast_loop.models import PaperControlAction, StrategyDecision
 from forecast_loop.operator_console import (
     OPERATOR_CONSOLE_PAGES,
     serve_operator_console,
@@ -86,6 +87,16 @@ def main(argv: list[str] | None = None) -> int:
     operator_console.add_argument("--page", choices=OPERATOR_CONSOLE_PAGES, default="overview")
     operator_console.add_argument("--output")
     operator_console.add_argument("--now")
+
+    operator_control = subparsers.add_parser("operator-control")
+    operator_control.add_argument("--storage-dir", required=True)
+    operator_control.add_argument("--action", choices=[item.value for item in PaperControlAction], required=True)
+    operator_control.add_argument("--reason", required=True)
+    operator_control.add_argument("--actor", default="operator")
+    operator_control.add_argument("--symbol")
+    operator_control.add_argument("--confirm", action="store_true")
+    operator_control.add_argument("--max-position-pct", type=float)
+    operator_control.add_argument("--now")
 
     repair_storage_cmd = subparsers.add_parser("repair-storage")
     repair_storage_cmd.add_argument("--storage-dir", required=True)
@@ -256,6 +267,8 @@ def main(argv: list[str] | None = None) -> int:
             return _render_dashboard(args)
         if args.command == "operator-console":
             return _operator_console(args)
+        if args.command == "operator-control":
+            return _operator_control(args)
         if args.command == "repair-storage":
             return _repair_storage(args)
         if args.command == "decide":
@@ -538,6 +551,28 @@ def _operator_console(args) -> int:
         now=now,
     )
     return 0
+
+
+def _operator_control(args) -> int:
+    now = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    storage_dir = Path(args.storage_dir)
+    if not storage_dir.exists():
+        raise ValueError(f"storage directory does not exist: {storage_dir}")
+    if not storage_dir.is_dir():
+        raise ValueError(f"storage path is not a directory: {storage_dir}")
+    repository = JsonFileRepository(storage_dir)
+    result = record_control_event(
+        repository=repository,
+        action=args.action,
+        now=now,
+        reason=args.reason,
+        actor=args.actor,
+        symbol=args.symbol,
+        confirmed=args.confirm,
+        max_position_pct=args.max_position_pct,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0 if result.status == "recorded" else 2
 
 
 def _repair_storage(args) -> int:

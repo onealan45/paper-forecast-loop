@@ -15,6 +15,7 @@ from forecast_loop.models import (
     MacroEvent,
     MarketCandleRecord,
     PaperFill,
+    PaperControlEvent,
     PaperOrder,
     PaperPortfolioSnapshot,
     Proposal,
@@ -79,6 +80,10 @@ class ArtifactRepository(Protocol):
 
     def load_paper_fills(self) -> list[PaperFill]: ...
 
+    def save_control_event(self, event: PaperControlEvent) -> None: ...
+
+    def load_control_events(self) -> list[PaperControlEvent]: ...
+
     def save_portfolio_snapshot(self, snapshot: PaperPortfolioSnapshot) -> None: ...
 
     def load_portfolio_snapshots(self) -> list[PaperPortfolioSnapshot]: ...
@@ -131,6 +136,7 @@ class JsonFileRepository:
         self.strategy_decisions_path = self.root / "strategy_decisions.jsonl"
         self.paper_orders_path = self.root / "paper_orders.jsonl"
         self.paper_fills_path = self.root / "paper_fills.jsonl"
+        self.control_events_path = self.root / "control_events.jsonl"
         self.portfolio_snapshots_path = self.root / "portfolio_snapshots.jsonl"
         self.equity_curve_path = self.root / "equity_curve.jsonl"
         self.risk_snapshots_path = self.root / "risk_snapshots.jsonl"
@@ -266,6 +272,16 @@ class JsonFileRepository:
 
     def load_paper_fills(self) -> list[PaperFill]:
         return self._load_lines(self.paper_fills_path, PaperFill.from_dict)
+
+    def save_control_event(self, event: PaperControlEvent) -> None:
+        self._append_unique(
+            self.control_events_path,
+            event.to_dict(),
+            identity_key="control_id",
+        )
+
+    def load_control_events(self) -> list[PaperControlEvent]:
+        return self._load_lines(self.control_events_path, PaperControlEvent.from_dict)
 
     def save_portfolio_snapshot(self, snapshot: PaperPortfolioSnapshot) -> None:
         self._append_unique(

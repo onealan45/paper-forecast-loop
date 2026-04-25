@@ -38,7 +38,7 @@ external network calls, or automatic execution.
 
 ## Reviewer Status
 
-Pending final reviewer subagent.
+Final reviewer subagent returned `APPROVED`.
 
 ## Safety Status
 

@@ -69,7 +69,23 @@ Fix:
 - Added regression coverage proving the adapter repr does not contain key or
   secret values.
 
-Final reviewer status after fix: pending re-review.
+Final reviewer status after fix: `APPROVED`.
+
+Re-review result:
+
+- P1 is resolved.
+- `api_key` and `api_secret` now use `field(repr=False)`.
+- Regression test and direct probe confirm `repr(adapter)` no longer contains
+  key or secret values.
+- Safety boundary was rechecked: no real secrets, no secret loading, no usable
+  live endpoint path, no live trading path, broker calls go through injected
+  `http_client`, tests use fake clients, and no runtime artifacts are tracked.
+
+Residual non-blocking risk:
+
+- Actual Binance signing and real testnet smoke behavior remain deferred. M6C
+  is a mockable `/api/v3/order/test` adapter surface, not a production-ready
+  broker lifecycle.
 
 ## Safety Status
 

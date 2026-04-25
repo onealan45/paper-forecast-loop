@@ -1,25 +1,52 @@
 # Paper Forecast Loop
 
-Paper-only public-data strategy research robot for `BTC-USD`.
+Backtesting, prediction, and strategy-simulation research loop.
 
 This repository is intentionally narrow. The M1 goal is not feature breadth. The
-goal is the first **auditable strategy research robot**:
+current foundation is the first **auditable strategy research robot**:
 
 - create a forecast on a reproducible hourly boundary
 - wait for the target window to complete
 - only score when provider coverage is complete
 - generate review and proposal artifacts with provenance
 - compare prediction quality against baselines
-- produce a paper-only strategy decision for the next horizon
+- produce a simulated strategy decision for the next horizon
 - create Codex repair requests when health checks find blocking issues
 - keep reruns safe and idempotent
+
+## Updated Priority
+
+The project direction is research-first, not safety-first and not
+productization-first.
+
+The highest-value outcomes are:
+
+- stronger prediction quality;
+- stronger strategy research;
+- broader backtesting and simulation;
+- self-improving strategy skills;
+- concrete strategy visibility in the UX;
+- more data sources and research tools when they improve analysis.
+
+The hard execution boundary is simple: do not place real orders and do not move
+real capital. Everything else is allowed when it is used for research,
+backtesting, prediction, simulation, or strategy reflection.
+
+Natural-language strategy generation is acceptable. Tool-rich automated loops
+are acceptable. Self-evolving skills are desirable. Sandbox or broker gates
+should not block research, prediction, backtesting, or simulation work; they
+only exist to prevent accidental real execution.
+
+Some existing artifact names still use `paper` for compatibility. In the current
+direction, read those as simulation/research artifacts, not as a limit on data
+sources or research methods.
 
 ## Research Background
 
 The post-M1-M6 research direction is documented in
 [`docs/architecture/alpha-factory-research-background.md`](docs/architecture/alpha-factory-research-background.md).
-The target is a paper-only, evidence-gated, multi-strategy Alpha Factory, not a
-live auto-trading system.
+The target is a research-capable, prediction-focused, multi-strategy Alpha
+Factory. It is not a live auto-trading system.
 
 The core research rule is: **放開策略搜尋空間，鎖死評估流程。** Strategy
 ideas may broaden, but candidate evaluation must stay fixed, auditable, and
@@ -32,15 +59,17 @@ factory:
 
 - M1-M6 provide the paper-only decision, health, research, portfolio, UI, and
   sandbox-safety spine.
-- M7+ should improve data contracts, canonical market data, experiment registry,
-  validation depth, leaderboard governance, and paper-shadow quarantine before
-  adding more strategy search.
+- M7+ should improve strategy generation, data-source breadth, canonical market
+  data, experiment registry, validation depth, leaderboard governance, and
+  self-evolving research skills.
+- Vibe-Trading is a useful reference for skills, swarm workflows, MCP tools,
+  agent memory, backtest breadth, data loaders, and UX surfaces.
 - CoinGecko remains useful for prototype and cross-check work, but serious
   intraday crypto research needs canonical provider comparison before promotion.
 - BUY/SELL should remain blocked when evidence is weak, when the model does not
   beat baselines, when research gates fail, or when health/risk gates are not
   clean.
-- No research result in this repository is a live trading instruction.
+- No research result in this repository should be treated as a real-money order.
 
 ## Current Scope
 

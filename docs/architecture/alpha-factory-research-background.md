@@ -5,14 +5,20 @@
 This document integrates the user-provided 2026-04-25 deep research report into
 the project background. It records the direction for the next research phase
 after M1-M6: the repository should evolve from a paper-only strategy research
-robot into a trustworthy, reproducible, and extensible Alpha Factory.
+robot into a prediction-focused, strategy-generating, self-improving Alpha
+Factory.
 
 Current M1-M6 work is a useful foundation. It provides auditable artifacts,
 paper-only decisions, health checks, repair requests, research datasets,
 baselines, backtests, walk-forward validation, risk gates, and sandbox broker
-visibility. It is not yet a full Alpha Factory because it still lacks broad
-strategy generation, locked experiment governance, deeper validation statistics,
-canonical provider comparison, and evidence-driven promotion/demotion.
+visibility. It is not yet a full Alpha Factory because it still lacks strong
+strategy generation, self-evolving skills, broad data/tool surfaces, deeper
+validation statistics, canonical provider comparison, and visible strategy
+learning.
+
+The user's updated priority is research and prediction strength. Safety
+machinery is not the product goal. The only hard execution boundary is that the
+system must not place real orders or move real capital.
 
 ## Current Implementation Interpretation
 
@@ -25,14 +31,15 @@ as the completed factory.
 | Health and repair | Detects artifact and runtime issues and can write repair requests. | Needs research-specific findings for provider distortion, experiment invalidation, and promotion quarantine. |
 | Storage | Has SQLite migration support and JSONL audit/export compatibility. | Needs stronger research snapshot metadata and larger dataset storage conventions. |
 | Data providers | Supports sample, CoinGecko, stored candles, and CSV stock fixtures. | Needs canonical primary/secondary provider comparison before serious promotion. |
-| Research evidence | Supports baselines, research datasets, backtests, reports, walk-forward, and research gates. | Needs locked split manifests, trial registry, CPCV-like paths, PBO, DSR, bootstrap, and parameter stability. |
-| UI and operations | Shows read-only decisions, health, portfolio, risk, automation, and broker/sandbox state. | Needs leaderboard, candidate lifecycle, paper-shadow status, and quarantine visibility. |
+| Research evidence | Supports baselines, research datasets, backtests, reports, walk-forward, and research gates. | Needs strategy generation, self-evolving skills, locked split manifests, trial registry, CPCV-like paths, PBO, DSR, bootstrap, and parameter stability. |
+| UI and operations | Shows read-only decisions, health, portfolio, risk, automation, and broker/sandbox state. | Needs concrete strategy visibility, candidate lifecycle, hypothesis changes, leaderboard, paper-shadow status, and quarantine visibility. |
 
 ## Core Direction
 
 The long-term target is:
 
-> Paper-only, evidence-gated, multi-strategy, artifact-native Alpha Factory.
+> Research-capable, prediction-focused, multi-strategy, self-improving Alpha
+> Factory.
 
 The guiding principle is:
 
@@ -44,15 +51,38 @@ cost model, validation suite, and promotion rules. The system should be allowed
 to explore many candidate alphas, but it must reject false positives
 aggressively.
 
-The project must keep these boundaries:
+The project must keep this boundary:
 
-- Paper-only research remains the default operating mode.
-- Live trading, live broker order submission, real capital, and automatic
-  promotion to live remain out of scope.
-- Sandbox/testnet interfaces are allowed only behind explicit paper/sandbox
-  safety gates.
-- Research output should answer whether a candidate is trustworthy, not only
-  whether one backtest looked profitable.
+- Do not place real orders.
+- Do not move real capital.
+- Do not require or store real live-trading secrets.
+
+Everything else should be evaluated by whether it improves research,
+prediction, simulation, backtesting, strategy learning, or strategy explanation.
+Research output should answer what strategy is being tested, why it might work,
+how it performed, why it failed, and what the system should try next.
+
+## Vibe-Trading Lessons To Adopt
+
+Vibe-Trading is a useful reference because it is much stronger as a broad
+research workbench. The project should learn from these patterns:
+
+| Vibe-Trading pattern | How this project should adapt it |
+|---|---|
+| Finance skill registry | Add first-class strategy and research skills that can be loaded, improved, and reused by the loop. |
+| Self-evolving skills | Let the system propose, revise, and retire strategy skills based on backtest and prediction evidence. |
+| Swarm workflows | Add research teams such as idea generator, data checker, backtester, prediction reviewer, risk critic, and strategy refiner. |
+| MCP tools | Expose research commands as tools so external agents can run backtests, predictions, strategy generation, dataset checks, and reports. |
+| Broad data loaders | Add more data-source adapters when useful for prediction, not only when they are public or already normalized. |
+| Cross-market backtests | Expand beyond a single BTC loop into multi-market simulation and comparison. |
+| Statistical validation utilities | Add Monte Carlo, bootstrap confidence intervals, walk-forward upgrades, and then deeper CPCV/PBO/DSR checks. |
+| Agent memory | Persist research lessons, failed hypotheses, strategy preferences, and observed market regimes. |
+| Strategy export/review surfaces | Show generated strategy logic, code, assumptions, metrics, and revisions in the UX. |
+| Shadow account concept | Compare the system's strategy behavior against a user or baseline behavior in simulation. |
+
+The adaptation should favor research power over conservative UX. Tool-rich loops
+are acceptable. Natural-language strategy generation is acceptable. Large tool
+access is acceptable when it does not place real orders.
 
 ## Research Factory Operating Model
 
@@ -72,6 +102,10 @@ Future strategy expansion should follow this controlled path:
    the idea generator during search.
 7. Paper-shadow gate monitors the candidate without live execution.
 8. Promotion or demotion writes immutable artifacts and updates the leaderboard.
+9. Skill evolution updates or creates reusable strategy skills when evidence
+   suggests a durable lesson.
+10. The UX exposes the concrete strategy, hypothesis, evidence, failure mode,
+    and next research action.
 
 This model lets the search space grow without letting the evaluation path move
 after results are known.
@@ -171,25 +205,31 @@ and demotion reasons.
 ## M7+ Roadmap Implications
 
 The research report suggests that the next major stage should not be live
-execution. It should harden the research factory:
+execution. It should make the research factory materially stronger:
 
 | Stage | Direction | Definition of done |
 |---|---|---|
-| M7A | Data contracts and audit spine | Ingests produce schema-checked provider audits with response hashes and normalization metadata. |
-| M7B | Canonical market data layer | Primary and secondary providers can be compared, gaps and duplicates are detected, and snapshots are reproducible. |
-| M7C | Experiment registry and locked splits | Every trial, including failures, is recorded with dataset snapshot, split manifest, seed, code hash, and trial budget. |
-| M7D | Validation engine upgrade | Purged folds, CPCV-like paths, PBO, DSR, bootstrap intervals, and stability reports are available. |
-| M7E | Leaderboard and promotion engine | Candidates move through research, holdout, shadow, promoted, demoted, and archived states by artifact-driven gates. |
-| M7F | Paper shadow sandbox and quarantine | Paper-only shadow monitoring can quarantine candidates on data, cost, risk, or execution anomalies. |
+| M7A | Vibe-Trading capability assimilation plan | Identify which skills, swarm, MCP, data-loader, backtest, memory, and UX patterns should be implemented first. |
+| M7B | Strategy skill registry | Strategies and research methods become loadable, testable, versioned skills. |
+| M7C | Self-evolving strategy loop | The system can propose, revise, retire, and document strategy skills from evidence. |
+| M7D | Broad data and backtest expansion | Add useful provider adapters and richer cross-market simulation paths. |
+| M7E | Validation engine upgrade | Monte Carlo, bootstrap intervals, purged folds, CPCV-like paths, PBO, DSR, and stability reports are available. |
+| M7F | Strategy-visible UX | Dashboard/console shows concrete strategy logic, backtests, prediction rationale, strategy revisions, and next experiments. |
+| M7G | Experiment registry and leaderboard | Every trial, including failures, is recorded and ranked by evidence, prediction quality, and robustness. |
 
-These stages should preserve the M1-M6 safety boundary: paper-only by default,
-sandbox/testnet only when explicitly gated, and no live trading path.
+These stages should preserve the only hard execution boundary: no real orders
+and no real capital movement.
 
 ## Minimum Acceptance Gates For M7+
 
 The next implementation stage should not be considered complete unless it can
 prove these gates with tests and artifacts:
 
+- The UX exposes at least one concrete strategy, its hypothesis, parameters,
+  backtest result, prediction rationale, and next revision.
+- The loop can create or revise a reusable strategy skill from prior evidence.
+- Vibe-Trading-inspired skills, swarm, MCP, data-loader, memory, and validation
+  patterns are evaluated and prioritized in repo documentation.
 - No candidate can read or modify the locked holdout path during research
   search.
 - Every trial has a stable dataset snapshot id, split manifest id, strategy
@@ -204,3 +244,22 @@ prove these gates with tests and artifacts:
 - Paper-shadow promotion can be demoted or quarantined by data, cost, risk,
   execution, or health anomalies.
 - No code path can submit live orders or require live broker secrets.
+
+## Sandbox Gate Clarification
+
+Sandbox and broker gates are execution guards, not research guards. They should
+not prevent:
+
+- forecast generation;
+- strategy generation;
+- natural-language strategy editing;
+- backtesting;
+- simulation;
+- prediction;
+- research reports;
+- strategy skill evolution;
+- tool-rich automated research loops.
+
+They should only prevent accidental real broker submission or movement of real
+capital. If a gate blocks harmless research, backtesting, or simulation, it is
+too strict for this project direction.

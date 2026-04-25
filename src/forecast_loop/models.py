@@ -1253,6 +1253,89 @@ class AutomationRun:
 
 
 @dataclass(slots=True)
+class NotificationArtifact:
+    notification_id: str
+    created_at: datetime
+    symbol: str
+    notification_type: str
+    severity: str
+    title: str
+    message: str
+    status: str
+    delivery_channel: str
+    action: str | None
+    source_artifact_ids: list[str]
+    decision_id: str | None
+    health_check_id: str | None
+    repair_request_id: str | None
+    risk_id: str | None
+    decision_basis: str
+
+    ALLOWED_TYPES = {
+        "NEW_DECISION",
+        "BUY_SELL_BLOCKED",
+        "STOP_NEW_ENTRIES",
+        "HEALTH_BLOCKING",
+        "REPAIR_REQUEST_CREATED",
+        "DRAWDOWN_BREACH",
+    }
+    ALLOWED_SEVERITIES = {"info", "warning", "blocking"}
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        created_at: datetime,
+        symbol: str,
+        notification_type: str,
+        source_artifact_ids: list[str],
+        message: str,
+    ) -> str:
+        return _stable_artifact_id(
+            "notification",
+            {
+                "created_at": created_at.isoformat(),
+                "symbol": symbol,
+                "notification_type": notification_type,
+                "source_artifact_ids": sorted(source_artifact_ids),
+                "message": message,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "NotificationArtifact":
+        notification_type = _require_string(payload, "notification_type")
+        if notification_type not in cls.ALLOWED_TYPES:
+            raise ValueError(f"unsupported notification type: {notification_type}")
+        severity = _require_string(payload, "severity")
+        if severity not in cls.ALLOWED_SEVERITIES:
+            raise ValueError(f"unsupported notification severity: {severity}")
+        return cls(
+            notification_id=_require_string(payload, "notification_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            symbol=_require_string(payload, "symbol"),
+            notification_type=notification_type,
+            severity=severity,
+            title=_require_string(payload, "title"),
+            message=_require_string(payload, "message"),
+            status=payload.get("status", "pending"),
+            delivery_channel=payload.get("delivery_channel", "local_artifact"),
+            action=payload.get("action"),
+            source_artifact_ids=list(payload.get("source_artifact_ids", [])),
+            decision_id=payload.get("decision_id"),
+            health_check_id=payload.get("health_check_id"),
+            repair_request_id=payload.get("repair_request_id"),
+            risk_id=payload.get("risk_id"),
+            decision_basis=payload.get("decision_basis", "legacy_notification_artifact"),
+        )
+
+
+@dataclass(slots=True)
 class PaperOrder:
     order_id: str
     created_at: datetime

@@ -376,6 +376,25 @@ Each automation run records one paper-only cycle:
 `run-once` writes this log after each cycle. It is an audit trail only; it does
 not create a scheduler, mutate Codex automation TOML, or execute live trades.
 
+### Notification Artifact
+
+M5G adds local notification artifacts in `notification_artifacts.jsonl`.
+
+These are not external push messages. They are read-only, paper-only local
+records that mark events an operator should notice:
+
+- new strategy decision
+- BUY/SELL blocked by weak evidence, health, research, or risk gates
+- `STOP_NEW_ENTRIES`
+- blocking health-check result
+- repair request created
+- drawdown breach
+
+Each notification records severity, title, message, action, source artifact ids,
+linked decision/health/repair/risk ids, and `delivery_channel=local_artifact`.
+No Telegram token, webhook, broker, exchange, or external notification service
+is configured in M5G.
+
 ### Repair Request Artifact
 
 Each repair request records:
@@ -612,6 +631,10 @@ M5F adds automation run logs. The operator console overview shows the latest
 automation run, status, linked health/decision/repair ids, and step artifacts.
 This remains an inspection surface only.
 
+M5G adds notification artifacts and shows the newest local notifications on the
+operator console overview. These notifications are local artifacts only; they do
+not send Telegram, push, email, broker, exchange, or external webhook traffic.
+
 ## Failure and Degrade Behavior
 
 The loop degrades conservatively:
@@ -623,6 +646,8 @@ The loop degrades conservatively:
 - if evidence is weak, the decision engine blocks BUY/SELL
 - if storage or artifact health is blocking, the decision engine emits `STOP_NEW_ENTRIES`
 - health-check writes repair requests instead of relying on silent failures
+- run-once writes local notification artifacts for decisions, blocked BUY/SELL
+  gates, repair requests, health blocking, and drawdown breaches
 - the dashboard degrades read-only: if no artifacts exist yet, it renders explicit empty states instead of failing
 
 ## Local Commands

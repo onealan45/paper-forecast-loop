@@ -16,6 +16,7 @@ from forecast_loop.models import (
     BaselineEvaluation,
     HealthCheckResult,
     HealthFinding,
+    NotificationArtifact,
     PaperControlEvent,
     PaperPortfolioSnapshot,
     RepairRequest,
@@ -48,6 +49,7 @@ class OperatorConsoleSnapshot:
     control_state: PaperControlState
     automation_runs: list[AutomationRun]
     latest_automation_run: AutomationRun | None
+    notifications: list[NotificationArtifact]
     counts: dict[str, int]
 
 
@@ -84,6 +86,7 @@ def build_operator_console_snapshot(
     control_events = _safe_load(repository.load_control_events)
     control_state = current_control_state(control_events, symbol=symbol)
     automation_runs = [item for item in _safe_load(repository.load_automation_runs) if item.symbol == symbol]
+    notifications = [item for item in _safe_load(repository.load_notification_artifacts) if item.symbol == symbol]
 
     return OperatorConsoleSnapshot(
         storage_dir=storage_path,
@@ -102,6 +105,7 @@ def build_operator_console_snapshot(
         control_state=control_state,
         automation_runs=automation_runs,
         latest_automation_run=_latest(automation_runs, "completed_at"),
+        notifications=notifications,
         counts={
             "forecasts": len(forecasts),
             "scores": len(scores),
@@ -112,6 +116,7 @@ def build_operator_console_snapshot(
             "repair_requests": len(repair_requests),
             "control_events": len(control_events),
             "automation_runs": len(automation_runs),
+            "notifications": len(notifications),
             "backtests": len(backtests),
             "walk_forward_validations": len(walk_forwards),
         },
@@ -472,6 +477,10 @@ def _render_overview(snapshot: OperatorConsoleSnapshot) -> str:
   <article class="panel wide">
     <h3>Automation Run</h3>
     {_automation_run_summary(snapshot.latest_automation_run)}
+  </article>
+  <article class="panel wide">
+    <h3>Notifications</h3>
+    {_notification_summary(snapshot.notifications)}
   </article>
   <article class="panel">
     <h3>研究證據</h3>
@@ -937,6 +946,28 @@ def _automation_steps(run: AutomationRun) -> str:
 def _automation_status_class(status: str) -> str:
     if status in {"failed", "repair_required"}:
         return "status alert"
+    return "status"
+
+
+def _notification_summary(notifications: list[NotificationArtifact]) -> str:
+    if not notifications:
+        return '<p class="muted">目前沒有 notification artifacts。</p>'
+    rows = "".join(
+        "<li>"
+        f"<span class=\"{_notification_severity_class(notification.severity)}\">{escape(notification.severity)}</span> "
+        f"{escape(notification.title)}：{escape(notification.message)} "
+        f"<code>{escape(notification.notification_id)}</code>"
+        "</li>"
+        for notification in sorted(notifications, key=lambda item: item.created_at, reverse=True)[:5]
+    )
+    return f'<ul class="conditions">{rows}</ul>'
+
+
+def _notification_severity_class(severity: str) -> str:
+    if severity == "blocking":
+        return "status alert"
+    if severity == "warning":
+        return "status warn"
     return "status"
 
 

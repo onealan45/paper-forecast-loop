@@ -5,7 +5,16 @@ import socket
 import pytest
 
 from forecast_loop.cli import main
-from forecast_loop.models import AutomationRun, PaperControlEvent, PaperPortfolioSnapshot, PaperPosition, RepairRequest, RiskSnapshot, StrategyDecision
+from forecast_loop.models import (
+    AutomationRun,
+    NotificationArtifact,
+    PaperControlEvent,
+    PaperPortfolioSnapshot,
+    PaperPosition,
+    RepairRequest,
+    RiskSnapshot,
+    StrategyDecision,
+)
 from forecast_loop.operator_console import (
     build_operator_console_snapshot,
     local_address_family_for_host,
@@ -170,6 +179,27 @@ def _automation_run(now: datetime) -> AutomationRun:
     )
 
 
+def _notification(now: datetime) -> NotificationArtifact:
+    return NotificationArtifact(
+        notification_id="notification:test",
+        created_at=now,
+        symbol="BTC-USD",
+        notification_type="BUY_SELL_BLOCKED",
+        severity="warning",
+        title="買進/賣出訊號被擋",
+        message="BTC-USD 不產生 BUY/SELL：research_backtest_missing。",
+        status="pending",
+        delivery_channel="local_artifact",
+        action="HOLD",
+        source_artifact_ids=["decision:test"],
+        decision_id="decision:test",
+        health_check_id=None,
+        repair_request_id=None,
+        risk_id=None,
+        decision_basis="test",
+    )
+
+
 def test_operator_console_renders_required_pages_read_only(tmp_path):
     now = datetime(2026, 4, 25, 1, 30, tzinfo=UTC)
     repository = JsonFileRepository(tmp_path)
@@ -178,6 +208,7 @@ def test_operator_console_renders_required_pages_read_only(tmp_path):
     repository.save_risk_snapshot(_risk(now))
     repository.save_control_event(_control_event(now))
     repository.save_automation_run(_automation_run(now))
+    repository.save_notification_artifact(_notification(now))
 
     snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
 
@@ -188,6 +219,9 @@ def test_operator_console_renders_required_pages_read_only(tmp_path):
     assert "Paper-only" in overview
     assert "Automation Run" in overview
     assert "automation-run:test" in overview
+    assert "Notifications" in overview
+    assert "notification:test" in overview
+    assert "買進/賣出訊號被擋" in overview
     assert "forecast" in overview
     assert "decision:test" in overview
     assert "<form" not in overview.lower()

@@ -43,7 +43,7 @@ broker dashboard, or automatic execution.
 ## Reviewer Status
 
 Reviewer subagent found a P1 duplicate active broker-order blocker. The blocker
-was fixed and is pending re-review.
+was fixed and re-review returned `APPROVED`.
 
 ## Safety Status
 

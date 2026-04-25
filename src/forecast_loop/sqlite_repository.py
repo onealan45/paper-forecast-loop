@@ -8,6 +8,7 @@ import sqlite3
 from typing import Callable
 
 from forecast_loop.models import (
+    AutomationRun,
     BaselineEvaluation,
     BacktestResult,
     BacktestRun,
@@ -62,6 +63,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("equity_curve", "equity_curve.jsonl", "point_id", EquityCurvePoint.from_dict),
     ArtifactSpec("risk_snapshots", "risk_snapshots.jsonl", "risk_id", RiskSnapshot.from_dict),
     ArtifactSpec("provider_runs", "provider_runs.jsonl", "provider_run_id", ProviderRun.from_dict),
+    ArtifactSpec("automation_runs", "automation_runs.jsonl", "automation_run_id", AutomationRun.from_dict),
     ArtifactSpec("repair_requests", "repair_requests.jsonl", "repair_request_id", RepairRequest.from_dict),
     ArtifactSpec("research_datasets", "research_datasets.jsonl", "dataset_id", ResearchDataset.from_dict),
     ArtifactSpec("backtest_runs", "backtest_runs.jsonl", "backtest_id", BacktestRun.from_dict),
@@ -240,6 +242,12 @@ class SQLiteRepository:
     def load_provider_runs(self) -> list[ProviderRun]:
         return self._load("provider_runs", ProviderRun.from_dict)
 
+    def save_automation_run(self, run: AutomationRun) -> None:
+        self._save_unique("automation_runs", run.automation_run_id, run.to_dict())
+
+    def load_automation_runs(self) -> list[AutomationRun]:
+        return self._load("automation_runs", AutomationRun.from_dict)
+
     def save_repair_request(self, repair_request: RepairRequest) -> None:
         self._save_unique("repair_requests", repair_request.repair_request_id, repair_request.to_dict())
 
@@ -379,6 +387,8 @@ def migrate_jsonl_to_sqlite(storage_dir: Path | str, db_path: Path | str | None 
         sqlite_repository.save_risk_snapshot(snapshot)
     for provider_run in json_repository.load_provider_runs():
         sqlite_repository.save_provider_run(provider_run)
+    for run in json_repository.load_automation_runs():
+        sqlite_repository.save_automation_run(run)
     for repair_request in json_repository.load_repair_requests():
         sqlite_repository.save_repair_request(repair_request)
     for dataset in json_repository.load_research_datasets():

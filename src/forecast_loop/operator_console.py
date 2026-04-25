@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 from forecast_loop.control import PaperControlState, current_control_state
 from forecast_loop.health import run_health_check
 from forecast_loop.models import (
+    AutomationRun,
     BacktestResult,
     BaselineEvaluation,
     HealthCheckResult,
@@ -45,6 +46,8 @@ class OperatorConsoleSnapshot:
     repair_requests: list[RepairRequest]
     control_events: list[PaperControlEvent]
     control_state: PaperControlState
+    automation_runs: list[AutomationRun]
+    latest_automation_run: AutomationRun | None
     counts: dict[str, int]
 
 
@@ -80,6 +83,7 @@ def build_operator_console_snapshot(
     repair_requests = _safe_load(repository.load_repair_requests)
     control_events = _safe_load(repository.load_control_events)
     control_state = current_control_state(control_events, symbol=symbol)
+    automation_runs = [item for item in _safe_load(repository.load_automation_runs) if item.symbol == symbol]
 
     return OperatorConsoleSnapshot(
         storage_dir=storage_path,
@@ -96,6 +100,8 @@ def build_operator_console_snapshot(
         repair_requests=repair_requests,
         control_events=control_events,
         control_state=control_state,
+        automation_runs=automation_runs,
+        latest_automation_run=_latest(automation_runs, "completed_at"),
         counts={
             "forecasts": len(forecasts),
             "scores": len(scores),
@@ -105,6 +111,7 @@ def build_operator_console_snapshot(
             "fills": len(_safe_load(repository.load_paper_fills)),
             "repair_requests": len(repair_requests),
             "control_events": len(control_events),
+            "automation_runs": len(automation_runs),
             "backtests": len(backtests),
             "walk_forward_validations": len(walk_forwards),
         },
@@ -461,6 +468,10 @@ def _render_overview(snapshot: OperatorConsoleSnapshot) -> str:
   <article class="panel">
     <h3>Artifact Counts</h3>
     {_render_counts(snapshot.counts)}
+  </article>
+  <article class="panel wide">
+    <h3>Automation Run</h3>
+    {_automation_run_summary(snapshot.latest_automation_run)}
   </article>
   <article class="panel">
     <h3>研究證據</h3>
@@ -898,8 +909,39 @@ def _status_class(severity: str) -> str:
     return "status"
 
 
-def _latest(items: list):
-    return max(items, key=lambda item: item.created_at) if items else None
+def _automation_run_summary(run: AutomationRun | None) -> str:
+    if run is None:
+        return '<p class="muted">目前沒有 automation run log。</p>'
+    return f"""
+<p>Status：<span class="{_automation_status_class(run.status)}">{escape(run.status)}</span></p>
+<p>Run ID：<code>{escape(run.automation_run_id)}</code></p>
+<p>Health：<code>{escape(run.health_check_id or "none")}</code> / Decision：<code>{escape(run.decision_id or "none")}</code></p>
+<p>Repair：<code>{escape(run.repair_request_id or "none")}</code></p>
+{_automation_steps(run)}
+"""
+
+
+def _automation_steps(run: AutomationRun) -> str:
+    if not run.steps:
+        return '<p class="muted">沒有 step 記錄。</p>'
+    rows = "".join(
+        "<li>"
+        f"{escape(step.get('name') or '')}: {escape(step.get('status') or '')} "
+        f"<code>{escape(step.get('artifact_id') or 'none')}</code>"
+        "</li>"
+        for step in run.steps
+    )
+    return f'<ul class="conditions">{rows}</ul>'
+
+
+def _automation_status_class(status: str) -> str:
+    if status in {"failed", "repair_required"}:
+        return "status alert"
+    return "status"
+
+
+def _latest(items: list, field: str = "created_at"):
+    return max(items, key=lambda item: getattr(item, field)) if items else None
 
 
 def _artifact_id(item: object | None, field: str) -> str:

@@ -50,6 +50,7 @@ This version intentionally includes:
     - `equity_curve.jsonl`
     - `risk_snapshots.jsonl`
     - `provider_runs.jsonl`
+    - `automation_runs.jsonl`
     - `repair_requests.jsonl`
     - `research_datasets.jsonl`
     - `backtest_runs.jsonl`
@@ -360,6 +361,21 @@ Provider runs are audit artifacts only. They make ingestion failures visible to
 health-check and the dashboard without adding new data providers or live
 execution.
 
+### Automation Run Artifact
+
+Each automation run records one paper-only cycle:
+
+- start and completion time
+- status (`completed`, `repair_required`, or `failed`)
+- symbol, provider, and command
+- ordered step list with step status and linked artifact ids
+- linked health-check id
+- linked strategy decision id
+- linked repair request id when one exists
+
+`run-once` writes this log after each cycle. It is an audit trail only; it does
+not create a scheduler, mutate Codex automation TOML, or execute live trades.
+
 ### Repair Request Artifact
 
 Each repair request records:
@@ -592,6 +608,10 @@ and `REDUCE_RISK` block new BUY paper orders while still allowing risk-reducing
 SELL orders. `SET_MAX_POSITION` blocks oversized BUY paper orders. No control
 event submits a broker/exchange order.
 
+M5F adds automation run logs. The operator console overview shows the latest
+automation run, status, linked health/decision/repair ids, and step artifacts.
+This remains an inspection surface only.
+
 ## Failure and Degrade Behavior
 
 The loop degrades conservatively:
@@ -630,6 +650,9 @@ Run a cycle and produce a strategy decision:
 ```powershell
 python run_forecast_loop.py run-once --provider coingecko --symbol BTC-USD --storage-dir .\paper_storage\manual-coingecko --also-decide
 ```
+
+`run-once` also appends `automation_runs.jsonl` so each cycle can be traced
+without reading `last_run_meta.json` alone.
 
 Generate a paper-only strategy decision from existing artifacts:
 
@@ -865,6 +888,8 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - health-check creates repair requests, but there is no autonomous repair daemon in this repo
 - the static dashboard and local operator console remain read-only; controls
   are written through audited CLI events rather than browser forms
+- automation run logs are audit artifacts only; scheduler orchestration and
+  external run management remain outside the repo
 - replay still writes summary metadata into the base storage directory instead of a more formal run registry or database
 - US ETF/stock support is fixture-only; no live or paid data provider is wired
 - Taiwan ETF calendar/provider support remains deferred

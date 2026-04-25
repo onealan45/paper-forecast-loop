@@ -42,7 +42,7 @@ gates, broker dashboard, or live trading.
 ## Reviewer Status
 
 Reviewer subagent found a P1 live-mode acceptance blocker. The blocker was fixed
-and is pending re-review.
+and re-review returned `APPROVED`.
 
 ## Safety Status
 

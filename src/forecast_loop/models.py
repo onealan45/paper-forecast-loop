@@ -1104,6 +1104,18 @@ class PaperOrderType(StrEnum):
     TARGET_PERCENT = "TARGET_PERCENT"
 
 
+class BrokerOrderStatus(StrEnum):
+    CREATED = "CREATED"
+    SUBMITTED = "SUBMITTED"
+    ACKNOWLEDGED = "ACKNOWLEDGED"
+    PARTIALLY_FILLED = "PARTIALLY_FILLED"
+    FILLED = "FILLED"
+    CANCELLED = "CANCELLED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
+    ERROR = "ERROR"
+
+
 class PaperControlAction(StrEnum):
     PAUSE = "PAUSE"
     RESUME = "RESUME"
@@ -1332,6 +1344,71 @@ class NotificationArtifact:
             repair_request_id=payload.get("repair_request_id"),
             risk_id=payload.get("risk_id"),
             decision_basis=payload.get("decision_basis", "legacy_notification_artifact"),
+        )
+
+
+@dataclass(slots=True)
+class BrokerOrder:
+    broker_order_id: str
+    created_at: datetime
+    updated_at: datetime
+    local_order_id: str
+    decision_id: str
+    symbol: str
+    side: str
+    quantity: float | None
+    target_position_pct: float | None
+    broker: str
+    broker_mode: str
+    status: str
+    broker_status: str | None
+    broker_order_ref: str | None
+    client_order_id: str | None
+    error_message: str | None
+    raw_response: dict
+    decision_basis: str
+
+    @classmethod
+    def build_id(cls, *, local_order_id: str, broker: str, broker_mode: str) -> str:
+        return _stable_artifact_id(
+            "broker-order",
+            {
+                "local_order_id": local_order_id,
+                "broker": broker,
+                "broker_mode": broker_mode,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        payload["updated_at"] = self.updated_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "BrokerOrder":
+        status = _require_string(payload, "status")
+        if status not in {item.value for item in BrokerOrderStatus}:
+            raise ValueError(f"unsupported broker order status: {status}")
+        return cls(
+            broker_order_id=_require_string(payload, "broker_order_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            updated_at=_require_aware_datetime(payload, "updated_at"),
+            local_order_id=_require_string(payload, "local_order_id"),
+            decision_id=_require_string(payload, "decision_id"),
+            symbol=_require_string(payload, "symbol"),
+            side=_require_string(payload, "side"),
+            quantity=_optional_float(payload.get("quantity")),
+            target_position_pct=_optional_float(payload.get("target_position_pct")),
+            broker=payload.get("broker", "unknown"),
+            broker_mode=payload.get("broker_mode", "SANDBOX"),
+            status=status,
+            broker_status=payload.get("broker_status"),
+            broker_order_ref=payload.get("broker_order_ref"),
+            client_order_id=payload.get("client_order_id"),
+            error_message=payload.get("error_message"),
+            raw_response=dict(payload.get("raw_response", {})),
+            decision_basis=payload.get("decision_basis", "legacy_broker_order"),
         )
 
 

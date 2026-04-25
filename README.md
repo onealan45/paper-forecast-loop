@@ -200,6 +200,24 @@ Supported contract modes are:
 - defaults to a blocking HTTP client unless a caller injects a mock/client
 - never enables live trading
 
+M6D adds local broker order lifecycle artifacts in `broker_orders.jsonl`.
+These records connect local `paper_orders.jsonl` orders to a broker/sandbox
+lifecycle status:
+
+- `CREATED`
+- `SUBMITTED`
+- `ACKNOWLEDGED`
+- `PARTIALLY_FILLED`
+- `FILLED`
+- `CANCELLED`
+- `REJECTED`
+- `EXPIRED`
+- `ERROR`
+
+The `broker-order` CLI writes local lifecycle records from existing paper
+orders. It uses mock submit status metadata only and does not call an external
+broker.
+
 Live broker or exchange modes are intentionally unavailable. There is no API key
 handling in source and no real live order path. M2B/M2C add local paper order
 and fill artifacts; M6C adds only a gated sandbox/testnet adapter surface for

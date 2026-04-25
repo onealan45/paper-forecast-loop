@@ -8,6 +8,7 @@ from pathlib import Path
 from forecast_loop.assets import get_asset, list_assets
 from forecast_loop.automation_log import automation_step, record_automation_run
 from forecast_loop.backtest import run_backtest
+from forecast_loop.broker_lifecycle import create_broker_order_lifecycle
 from forecast_loop.candle_store import (
     StoredCandleProvider,
     export_market_candles,
@@ -143,6 +144,15 @@ def main(argv: list[str] | None = None) -> int:
     paper_order.add_argument("--decision-id", required=True)
     paper_order.add_argument("--symbol", default="BTC-USD")
     paper_order.add_argument("--now")
+
+    broker_order = subparsers.add_parser("broker-order")
+    broker_order.add_argument("--storage-dir", required=True)
+    broker_order.add_argument("--order-id", required=True)
+    broker_order.add_argument("--broker", default="binance_testnet")
+    broker_order.add_argument("--broker-mode", default="SANDBOX")
+    broker_order.add_argument("--mock-submit-status", default="CREATED")
+    broker_order.add_argument("--broker-order-ref")
+    broker_order.add_argument("--now")
 
     paper_fill = subparsers.add_parser("paper-fill")
     paper_fill.add_argument("--storage-dir", required=True)
@@ -289,6 +299,8 @@ def main(argv: list[str] | None = None) -> int:
             return _db_health(args)
         if args.command == "paper-order":
             return _paper_order(args)
+        if args.command == "broker-order":
+            return _broker_order(args)
         if args.command == "paper-fill":
             return _paper_fill(args)
         if args.command == "portfolio-snapshot":
@@ -849,6 +861,22 @@ def _paper_order(args) -> int:
         symbol=args.symbol,
         now=now,
         health_result=health_result,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _broker_order(args) -> int:
+    now = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    repository = JsonFileRepository(args.storage_dir)
+    result = create_broker_order_lifecycle(
+        repository=repository,
+        order_id=args.order_id,
+        now=now,
+        broker=args.broker,
+        broker_mode=args.broker_mode,
+        mock_submit_status=args.mock_submit_status,
+        broker_order_ref=args.broker_order_ref,
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0

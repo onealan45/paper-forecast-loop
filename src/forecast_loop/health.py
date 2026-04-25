@@ -10,6 +10,7 @@ from forecast_loop.models import (
     BaselineEvaluation,
     BacktestResult,
     BacktestRun,
+    BrokerOrder,
     EquityCurvePoint,
     EvaluationSummary,
     Forecast,
@@ -88,6 +89,7 @@ def run_health_check(
         "proposals": _load_jsonl(storage_path / "proposals.jsonl", Proposal.from_dict, findings),
         "decisions": _load_jsonl(storage_path / "strategy_decisions.jsonl", StrategyDecision.from_dict, findings),
         "paper_orders": _load_jsonl(storage_path / "paper_orders.jsonl", PaperOrder.from_dict, findings),
+        "broker_orders": _load_jsonl(storage_path / "broker_orders.jsonl", BrokerOrder.from_dict, findings),
         "paper_fills": _load_jsonl(storage_path / "paper_fills.jsonl", PaperFill.from_dict, findings),
         "control_events": _load_jsonl(storage_path / "control_events.jsonl", PaperControlEvent.from_dict, findings),
         "baselines": _load_jsonl(storage_path / "baseline_evaluations.jsonl", BaselineEvaluation.from_dict, findings),
@@ -115,6 +117,7 @@ def run_health_check(
     proposals: list[Proposal] = artifact_rows["proposals"]
     decisions: list[StrategyDecision] = artifact_rows["decisions"]
     paper_orders: list[PaperOrder] = artifact_rows["paper_orders"]
+    broker_orders: list[BrokerOrder] = artifact_rows["broker_orders"]
     paper_fills: list[PaperFill] = artifact_rows["paper_fills"]
     control_events: list[PaperControlEvent] = artifact_rows["control_events"]
     baselines: list[BaselineEvaluation] = artifact_rows["baselines"]
@@ -138,6 +141,7 @@ def run_health_check(
     _check_duplicate_ids(proposals, "proposal_id", storage_path / "proposals.jsonl", findings)
     _check_duplicate_ids(decisions, "decision_id", storage_path / "strategy_decisions.jsonl", findings)
     _check_duplicate_ids(paper_orders, "order_id", storage_path / "paper_orders.jsonl", findings)
+    _check_duplicate_ids(broker_orders, "broker_order_id", storage_path / "broker_orders.jsonl", findings)
     _check_duplicate_ids(paper_fills, "fill_id", storage_path / "paper_fills.jsonl", findings)
     _check_duplicate_ids(control_events, "control_id", storage_path / "control_events.jsonl", findings)
     _check_duplicate_ids(baselines, "baseline_id", storage_path / "baseline_evaluations.jsonl", findings)

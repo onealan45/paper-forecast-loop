@@ -752,5 +752,8 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - macro events are calendar artifacts only; they do not yet influence decisions
 - research datasets are artifact builders only; no model training or optimizer is included yet
 - backtests are local paper simulations over stored candles; no broker or live execution path is involved
-- walk-forward validation is a research artifact only; it does not yet gate BUY/SELL decisions
+- walk-forward validation is now research evidence for BUY/SELL gates, but it
+  still does not train models or execute trades
 - research reports summarize existing artifacts only; they do not create new strategy gates
+- research quality gates now block BUY/SELL unless sample size, baseline edge,
+  backtest, drawdown, and walk-forward evidence pass

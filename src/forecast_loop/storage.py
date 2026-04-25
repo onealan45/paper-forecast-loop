@@ -11,6 +11,7 @@ from forecast_loop.models import (
     BacktestRun,
     BrokerOrder,
     BrokerReconciliation,
+    ExecutionSafetyGate,
     EquityCurvePoint,
     EvaluationSummary,
     Forecast,
@@ -88,6 +89,10 @@ class ArtifactRepository(Protocol):
 
     def load_broker_reconciliations(self) -> list[BrokerReconciliation]: ...
 
+    def save_execution_safety_gate(self, gate: ExecutionSafetyGate) -> None: ...
+
+    def load_execution_safety_gates(self) -> list[ExecutionSafetyGate]: ...
+
     def save_paper_fill(self, fill: PaperFill) -> None: ...
 
     def load_paper_fills(self) -> list[PaperFill]: ...
@@ -157,6 +162,7 @@ class JsonFileRepository:
         self.paper_orders_path = self.root / "paper_orders.jsonl"
         self.broker_orders_path = self.root / "broker_orders.jsonl"
         self.broker_reconciliations_path = self.root / "broker_reconciliations.jsonl"
+        self.execution_safety_gates_path = self.root / "execution_safety_gates.jsonl"
         self.paper_fills_path = self.root / "paper_fills.jsonl"
         self.control_events_path = self.root / "control_events.jsonl"
         self.portfolio_snapshots_path = self.root / "portfolio_snapshots.jsonl"
@@ -306,6 +312,16 @@ class JsonFileRepository:
 
     def load_broker_reconciliations(self) -> list[BrokerReconciliation]:
         return self._load_lines(self.broker_reconciliations_path, BrokerReconciliation.from_dict)
+
+    def save_execution_safety_gate(self, gate: ExecutionSafetyGate) -> None:
+        self._append_unique(
+            self.execution_safety_gates_path,
+            gate.to_dict(),
+            identity_key="gate_id",
+        )
+
+    def load_execution_safety_gates(self) -> list[ExecutionSafetyGate]:
+        return self._load_lines(self.execution_safety_gates_path, ExecutionSafetyGate.from_dict)
 
     def save_paper_fill(self, fill: PaperFill) -> None:
         self._append_unique(

@@ -1122,6 +1122,11 @@ class BrokerReconciliationStatus(StrEnum):
     ERROR = "ERROR"
 
 
+class ExecutionSafetyGateStatus(StrEnum):
+    PASS = "PASS"
+    BLOCKED = "BLOCKED"
+
+
 class PaperControlAction(StrEnum):
     PAUSE = "PAUSE"
     RESUME = "RESUME"
@@ -1496,6 +1501,81 @@ class BrokerReconciliation:
             equity_mismatch=payload.get("equity_mismatch"),
             findings=list(payload.get("findings", [])),
             decision_basis=payload.get("decision_basis", "legacy_broker_reconciliation"),
+        )
+
+
+@dataclass(slots=True)
+class ExecutionSafetyGate:
+    gate_id: str
+    created_at: datetime
+    symbol: str
+    decision_id: str | None
+    order_id: str | None
+    broker: str
+    broker_mode: str
+    status: str
+    severity: str
+    allowed: bool
+    checks: list[dict]
+    health_check_id: str | None
+    risk_id: str | None
+    broker_reconciliation_id: str | None
+    decision_basis: str
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        created_at: datetime,
+        symbol: str,
+        decision_id: str | None,
+        order_id: str | None,
+        broker: str,
+        broker_mode: str,
+        checks: list[dict],
+    ) -> str:
+        return _stable_artifact_id(
+            "execution-gate",
+            {
+                "created_at": created_at.isoformat(),
+                "symbol": symbol,
+                "decision_id": decision_id,
+                "order_id": order_id,
+                "broker": broker,
+                "broker_mode": broker_mode,
+                "checks": checks,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "ExecutionSafetyGate":
+        status = _require_string(payload, "status")
+        if status not in {item.value for item in ExecutionSafetyGateStatus}:
+            raise ValueError(f"unsupported execution safety gate status: {status}")
+        severity = payload.get("severity", "none")
+        if severity not in {"none", "blocking"}:
+            raise ValueError(f"unsupported execution safety gate severity: {severity}")
+        return cls(
+            gate_id=_require_string(payload, "gate_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            symbol=_require_string(payload, "symbol"),
+            decision_id=payload.get("decision_id"),
+            order_id=payload.get("order_id"),
+            broker=_require_string(payload, "broker"),
+            broker_mode=_require_string(payload, "broker_mode"),
+            status=status,
+            severity=severity,
+            allowed=bool(payload.get("allowed", False)),
+            checks=list(payload.get("checks", [])),
+            health_check_id=payload.get("health_check_id"),
+            risk_id=payload.get("risk_id"),
+            broker_reconciliation_id=payload.get("broker_reconciliation_id"),
+            decision_basis=payload.get("decision_basis", "legacy_execution_safety_gate"),
         )
 
 

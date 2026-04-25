@@ -14,6 +14,7 @@ from forecast_loop.models import (
     BacktestRun,
     BrokerOrder,
     BrokerReconciliation,
+    ExecutionSafetyGate,
     EquityCurvePoint,
     EvaluationSummary,
     Forecast,
@@ -67,6 +68,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         "reconciliation_id",
         BrokerReconciliation.from_dict,
     ),
+    ArtifactSpec("execution_safety_gates", "execution_safety_gates.jsonl", "gate_id", ExecutionSafetyGate.from_dict),
     ArtifactSpec("paper_fills", "paper_fills.jsonl", "fill_id", PaperFill.from_dict),
     ArtifactSpec("control_events", "control_events.jsonl", "control_id", PaperControlEvent.from_dict),
     ArtifactSpec("portfolio_snapshots", "portfolio_snapshots.jsonl", "snapshot_id", PaperPortfolioSnapshot.from_dict),
@@ -231,6 +233,12 @@ class SQLiteRepository:
 
     def load_broker_reconciliations(self) -> list[BrokerReconciliation]:
         return self._load("broker_reconciliations", BrokerReconciliation.from_dict)
+
+    def save_execution_safety_gate(self, gate: ExecutionSafetyGate) -> None:
+        self._save_unique("execution_safety_gates", gate.gate_id, gate.to_dict())
+
+    def load_execution_safety_gates(self) -> list[ExecutionSafetyGate]:
+        return self._load("execution_safety_gates", ExecutionSafetyGate.from_dict)
 
     def replace_paper_orders(self, orders: list[PaperOrder]) -> None:
         with self._connect() as connection:
@@ -417,6 +425,8 @@ def migrate_jsonl_to_sqlite(storage_dir: Path | str, db_path: Path | str | None 
         sqlite_repository.save_broker_order(order)
     for reconciliation in json_repository.load_broker_reconciliations():
         sqlite_repository.save_broker_reconciliation(reconciliation)
+    for gate in json_repository.load_execution_safety_gates():
+        sqlite_repository.save_execution_safety_gate(gate)
     for fill in json_repository.load_paper_fills():
         sqlite_repository.save_paper_fill(fill)
     for event in json_repository.load_control_events():

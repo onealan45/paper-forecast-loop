@@ -11,6 +11,7 @@ from forecast_loop.models import (
     BrokerOrder,
     BrokerReconciliation,
     BrokerOrderStatus,
+    ExecutionSafetyGate,
     EquityCurvePoint,
     EvaluationSummary,
     Forecast,
@@ -474,6 +475,31 @@ def _broker_reconciliation(now: datetime, broker_order: BrokerOrder) -> BrokerRe
     )
 
 
+def _execution_gate(
+    now: datetime,
+    decision: StrategyDecision,
+    order: PaperOrder,
+    reconciliation: BrokerReconciliation,
+) -> ExecutionSafetyGate:
+    return ExecutionSafetyGate(
+        gate_id="execution-gate:sqlite",
+        created_at=now,
+        symbol=decision.symbol,
+        decision_id=decision.decision_id,
+        order_id=order.order_id,
+        broker="binance_testnet",
+        broker_mode="SANDBOX",
+        status="PASS",
+        severity="none",
+        allowed=True,
+        checks=[{"code": "test", "status": "pass"}],
+        health_check_id="health:sqlite",
+        risk_id="risk:sqlite",
+        broker_reconciliation_id=reconciliation.reconciliation_id,
+        decision_basis="test",
+    )
+
+
 def _equity_point(now: datetime) -> EquityCurvePoint:
     return EquityCurvePoint(
         point_id="equity:sqlite",
@@ -539,6 +565,7 @@ def _seed_repository(repository) -> dict:
     order = _paper_order(now, decision)
     broker_order = _broker_order(now, order)
     broker_reconciliation = _broker_reconciliation(now, broker_order)
+    execution_gate = _execution_gate(now, decision, order, broker_reconciliation)
     fill = _paper_fill(now, order)
     snapshot = PaperPortfolioSnapshot.empty(created_at=now)
     equity_point = _equity_point(now)
@@ -567,6 +594,7 @@ def _seed_repository(repository) -> dict:
     repository.save_paper_order(order)
     repository.save_broker_order(broker_order)
     repository.save_broker_reconciliation(broker_reconciliation)
+    repository.save_execution_safety_gate(execution_gate)
     repository.save_paper_fill(fill)
     repository.save_portfolio_snapshot(snapshot)
     repository.save_equity_curve_point(equity_point)
@@ -591,6 +619,7 @@ def _seed_repository(repository) -> dict:
         "order": order,
         "broker_order": broker_order,
         "broker_reconciliation": broker_reconciliation,
+        "execution_gate": execution_gate,
         "fill": fill,
         "snapshot": snapshot,
         "equity_point": equity_point,
@@ -627,6 +656,7 @@ def test_sqlite_repository_round_trips_and_dedupes_m1_artifacts(tmp_path):
     assert repository.load_paper_orders() == [artifacts["order"]]
     assert repository.load_broker_orders() == [artifacts["broker_order"]]
     assert repository.load_broker_reconciliations() == [artifacts["broker_reconciliation"]]
+    assert repository.load_execution_safety_gates() == [artifacts["execution_gate"]]
     assert repository.load_paper_fills() == [artifacts["fill"]]
     assert repository.load_portfolio_snapshots() == [artifacts["snapshot"]]
     assert repository.load_equity_curve_points() == [artifacts["equity_point"]]
@@ -685,6 +715,7 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert sqlite_repository.load_paper_orders() == [artifacts["order"]]
     assert sqlite_repository.load_broker_orders() == [artifacts["broker_order"]]
     assert sqlite_repository.load_broker_reconciliations() == [artifacts["broker_reconciliation"]]
+    assert sqlite_repository.load_execution_safety_gates() == [artifacts["execution_gate"]]
     assert sqlite_repository.load_paper_fills() == [artifacts["fill"]]
     assert sqlite_repository.load_control_events() == [artifacts["control_event"]]
     assert sqlite_repository.load_automation_runs() == [artifacts["automation_run"]]
@@ -703,6 +734,7 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert health_result["artifact_counts"]["paper_orders"] == 1
     assert health_result["artifact_counts"]["broker_orders"] == 1
     assert health_result["artifact_counts"]["broker_reconciliations"] == 1
+    assert health_result["artifact_counts"]["execution_safety_gates"] == 1
     assert health_result["artifact_counts"]["paper_fills"] == 1
     assert health_result["artifact_counts"]["control_events"] == 1
     assert health_result["artifact_counts"]["automation_runs"] == 1
@@ -762,6 +794,7 @@ def test_export_jsonl_writes_compatibility_artifacts(tmp_path, capsys):
     assert exported_repository.load_paper_orders() == [artifacts["order"]]
     assert exported_repository.load_broker_orders() == [artifacts["broker_order"]]
     assert exported_repository.load_broker_reconciliations() == [artifacts["broker_reconciliation"]]
+    assert exported_repository.load_execution_safety_gates() == [artifacts["execution_gate"]]
     assert exported_repository.load_paper_fills() == [artifacts["fill"]]
     assert exported_repository.load_control_events() == [artifacts["control_event"]]
     assert exported_repository.load_automation_runs() == [artifacts["automation_run"]]

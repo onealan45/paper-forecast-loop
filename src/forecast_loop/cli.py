@@ -149,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
     broker_order.add_argument("--storage-dir", required=True)
     broker_order.add_argument("--order-id", required=True)
     broker_order.add_argument("--broker", default="binance_testnet")
-    broker_order.add_argument("--broker-mode", default="SANDBOX")
+    broker_order.add_argument("--broker-mode", choices=["EXTERNAL_PAPER", "SANDBOX"], default="SANDBOX")
     broker_order.add_argument("--mock-submit-status", default="CREATED")
     broker_order.add_argument("--broker-order-ref")
     broker_order.add_argument("--now")

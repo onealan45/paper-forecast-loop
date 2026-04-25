@@ -38,8 +38,10 @@ Create a local broker lifecycle record:
 python .\run_forecast_loop.py broker-order --storage-dir <storage> --order-id latest --mock-submit-status ACKNOWLEDGED
 ```
 
-The command uses mock submit metadata only. It does not call the M6C adapter or
-any external broker.
+The command accepts only `--broker-mode EXTERNAL_PAPER` or
+`--broker-mode SANDBOX`. It uses mock submit metadata only. It does not call the
+M6C adapter or any external broker. `LIVE` and unknown modes fail before
+`broker_orders.jsonl` is written.
 
 ## Storage
 

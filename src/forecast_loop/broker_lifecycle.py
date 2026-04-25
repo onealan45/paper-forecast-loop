@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from forecast_loop.broker import BrokerMode
 from forecast_loop.models import BrokerOrder, BrokerOrderStatus, PaperOrder, PaperOrderStatus
 
 
@@ -33,6 +34,7 @@ def create_broker_order_lifecycle(
     mock_submit_status: str | None = None,
     broker_order_ref: str | None = None,
 ) -> BrokerOrderResult:
+    normalized_broker_mode = _normalize_broker_mode(broker_mode)
     local_order = _select_local_order(repository.load_paper_orders(), order_id=order_id)
     if local_order is None:
         return BrokerOrderResult(
@@ -48,7 +50,12 @@ def create_broker_order_lifecycle(
             broker_order=None,
             local_order_id=local_order.order_id,
         )
-    existing = _existing_broker_order(repository.load_broker_orders(), local_order.order_id, broker, broker_mode)
+    existing = _existing_broker_order(
+        repository.load_broker_orders(),
+        local_order.order_id,
+        broker,
+        normalized_broker_mode,
+    )
     if existing is not None:
         return BrokerOrderResult(
             status="skipped",
@@ -63,7 +70,7 @@ def create_broker_order_lifecycle(
         local_order=local_order,
         now=now,
         broker=broker,
-        broker_mode=broker_mode,
+        broker_mode=normalized_broker_mode,
         status=status,
         raw_response=raw_response,
         broker_order_ref=broker_order_ref or raw_response.get("broker_order_ref"),
@@ -97,6 +104,17 @@ def _existing_broker_order(
         ),
         None,
     )
+
+
+def _normalize_broker_mode(mode: str) -> str:
+    normalized = mode.upper().replace("-", "_")
+    allowed = {BrokerMode.EXTERNAL_PAPER.value, BrokerMode.SANDBOX.value}
+    if normalized not in allowed:
+        raise ValueError(
+            f"unsupported broker order lifecycle mode: {mode}; "
+            "allowed modes are EXTERNAL_PAPER and SANDBOX. Live trading is unavailable."
+        )
+    return normalized
 
 
 def _normalize_status(status: str | None) -> str:

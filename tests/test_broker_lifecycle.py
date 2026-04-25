@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 import json
 
+import pytest
+
 from forecast_loop.broker_lifecycle import create_broker_order_lifecycle
 from forecast_loop.cli import main
 from forecast_loop.health import run_health_check
@@ -133,6 +135,22 @@ def test_broker_order_lifecycle_blocks_duplicate_for_same_local_order(tmp_path):
     assert len(repository.load_broker_orders()) == 1
 
 
+def test_broker_order_lifecycle_blocks_live_mode(tmp_path):
+    now = datetime(2026, 4, 25, 7, 0, tzinfo=UTC)
+    repository = _repository(tmp_path, now)
+
+    with pytest.raises(ValueError, match="Live trading is unavailable"):
+        create_broker_order_lifecycle(
+            repository=repository,
+            order_id="latest",
+            now=now,
+            broker="binance",
+            broker_mode="LIVE",
+        )
+
+    assert repository.load_broker_orders() == []
+
+
 def test_cli_broker_order_records_rejected_lifecycle(tmp_path, capsys):
     now = datetime(2026, 4, 25, 7, 0, tzinfo=UTC)
     _repository(tmp_path, now)
@@ -156,6 +174,32 @@ def test_cli_broker_order_records_rejected_lifecycle(tmp_path, capsys):
     assert payload["status"] == "created"
     assert payload["broker_order"]["status"] == "REJECTED"
     assert payload["broker_order"]["raw_response"]["mock"] is True
+
+
+def test_cli_broker_order_rejects_live_mode_before_writing(tmp_path, capsys):
+    now = datetime(2026, 4, 25, 7, 0, tzinfo=UTC)
+    _repository(tmp_path, now)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "broker-order",
+                "--storage-dir",
+                str(tmp_path),
+                "--order-id",
+                "latest",
+                "--broker-mode",
+                "LIVE",
+                "--now",
+                now.isoformat(),
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 2
+    assert "invalid choice" in captured.err
+    assert "LIVE" in captured.err
+    assert not (tmp_path / "broker_orders.jsonl").exists()
 
 
 def test_health_check_audits_bad_and_duplicate_broker_orders(tmp_path):

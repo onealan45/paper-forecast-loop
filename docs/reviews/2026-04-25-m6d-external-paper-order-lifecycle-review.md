@@ -20,15 +20,18 @@ gates, broker dashboard, or live trading.
 - Added `broker_lifecycle.py`.
 - Added `broker-order` CLI command.
 - Added tests for lifecycle creation, duplicate blocking, CLI rejected
-  lifecycle record, health audit, and SQLite parity.
+  lifecycle record, live-mode rejection, health audit, and SQLite parity.
 - Kept the implementation local and mock-only; no external broker call is made.
+- Follow-up reviewer P1 fixed: `broker-order` now accepts only
+  `EXTERNAL_PAPER` or `SANDBOX`, and core lifecycle creation rejects `LIVE`
+  before writing broker-order artifacts.
 
 ## Verification
 
 - `python -m pytest tests\test_broker_lifecycle.py tests\test_sqlite_repository.py -q`
-  - Result: `10 passed in 2.23s`
+  - Result: `12 passed in 2.19s`
 - `python -m pytest -q`
-  - Result: `204 passed in 7.45s`
+  - Result: `206 passed in 9.73s`
 - `python -m compileall -q src tests run_forecast_loop.py sitecustomize.py`
   - Result: passed
 - `python .\run_forecast_loop.py --help`
@@ -38,7 +41,8 @@ gates, broker dashboard, or live trading.
 
 ## Reviewer Status
 
-Pending final reviewer subagent.
+Reviewer subagent found a P1 live-mode acceptance blocker. The blocker was fixed
+and is pending re-review.
 
 ## Safety Status
 

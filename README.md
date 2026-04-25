@@ -215,8 +215,8 @@ lifecycle status:
 - `ERROR`
 
 The `broker-order` CLI writes local lifecycle records from existing paper
-orders. It uses mock submit status metadata only and does not call an external
-broker.
+orders. It accepts only `EXTERNAL_PAPER` or `SANDBOX` broker modes, uses mock
+submit status metadata only, and does not call an external broker.
 
 Live broker or exchange modes are intentionally unavailable. There is no API key
 handling in source and no real live order path. M2B/M2C add local paper order

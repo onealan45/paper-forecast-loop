@@ -110,7 +110,18 @@ Reviewer also confirmed the PR had no external notification delivery, no
 scheduler mutation, no live trading path, no broker/exchange submit path, and
 no secrets/runtime artifacts.
 
-Final reviewer status after fix: pending re-review.
+Final reviewer status after fix: `APPROVED`.
+
+Re-review result:
+
+- P1 is resolved.
+- `_drawdown_breached()` now only fires on the drawdown threshold.
+- Regression test covers exposure-only `REDUCE_RISK` without
+  `DRAWDOWN_BREACH`.
+- No new blocking issues were found.
+- Safety boundary was rechecked: no external notification delivery, scheduler
+  mutation, live trading path, broker/exchange submit path, or secrets/runtime
+  artifacts were added.
 
 ## Automation Status
 

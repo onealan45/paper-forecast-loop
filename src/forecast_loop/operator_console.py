@@ -13,6 +13,7 @@ from forecast_loop.models import (
     BacktestResult,
     BaselineEvaluation,
     HealthCheckResult,
+    HealthFinding,
     PaperPortfolioSnapshot,
     RepairRequest,
     RiskSnapshot,
@@ -57,19 +58,22 @@ def build_operator_console_snapshot(
 
     generated_at = now or datetime.now(tz=UTC)
     repository = JsonFileRepository(storage_path)
-    decisions = [item for item in repository.load_strategy_decisions() if item.symbol == symbol]
-    portfolios = repository.load_portfolio_snapshots()
-    risks = [item for item in repository.load_risk_snapshots() if item.symbol == symbol]
-    baselines = [item for item in repository.load_baseline_evaluations() if item.symbol == symbol]
-    backtests = [item for item in repository.load_backtest_results() if item.symbol == symbol]
-    walk_forwards = [item for item in repository.load_walk_forward_validations() if item.symbol == symbol]
-    repair_requests = repository.load_repair_requests()
     health = run_health_check(
         storage_dir=storage_path,
         symbol=symbol,
         now=generated_at,
         create_repair_request=False,
     )
+    forecasts = _safe_load(repository.load_forecasts)
+    scores = _safe_load(repository.load_scores)
+    reviews = _safe_load(repository.load_reviews)
+    decisions = [item for item in _safe_load(repository.load_strategy_decisions) if item.symbol == symbol]
+    portfolios = _safe_load(repository.load_portfolio_snapshots)
+    risks = [item for item in _safe_load(repository.load_risk_snapshots) if item.symbol == symbol]
+    baselines = [item for item in _safe_load(repository.load_baseline_evaluations) if item.symbol == symbol]
+    backtests = [item for item in _safe_load(repository.load_backtest_results) if item.symbol == symbol]
+    walk_forwards = [item for item in _safe_load(repository.load_walk_forward_validations) if item.symbol == symbol]
+    repair_requests = _safe_load(repository.load_repair_requests)
 
     return OperatorConsoleSnapshot(
         storage_dir=storage_path,
@@ -85,12 +89,12 @@ def build_operator_console_snapshot(
         latest_walk_forward=_latest(walk_forwards),
         repair_requests=repair_requests,
         counts={
-            "forecasts": len(repository.load_forecasts()),
-            "scores": len(repository.load_scores()),
-            "reviews": len(repository.load_reviews()),
+            "forecasts": len(forecasts),
+            "scores": len(scores),
+            "reviews": len(reviews),
             "decisions": len(decisions),
-            "orders": len(repository.load_paper_orders()),
-            "fills": len(repository.load_paper_fills()),
+            "orders": len(_safe_load(repository.load_paper_orders)),
+            "fills": len(_safe_load(repository.load_paper_fills)),
             "repair_requests": len(repair_requests),
             "backtests": len(backtests),
             "walk_forward_validations": len(walk_forwards),
@@ -342,6 +346,13 @@ def write_operator_console_page(
     return output_path
 
 
+def _safe_load(loader) -> list:
+    try:
+        return loader()
+    except Exception:
+        return []
+
+
 def serve_operator_console(
     *,
     storage_dir: Path | str,
@@ -572,6 +583,8 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
 
 
 def _render_health(snapshot: OperatorConsoleSnapshot) -> str:
+    health_class = _status_class(snapshot.health.severity)
+    blocking_findings = [finding for finding in snapshot.health.findings if finding.repair_required]
     finding_rows = "\n".join(
         "<tr>"
         f"<td>{escape(finding.severity)}</td>"
@@ -594,21 +607,42 @@ def _render_health(snapshot: OperatorConsoleSnapshot) -> str:
     )
     if not repair_rows:
         repair_rows = '<tr><td colspan="4">目前沒有 repair request。</td></tr>'
+    repair_cards = "\n".join(_repair_request_card(repair) for repair in sorted(snapshot.repair_requests, key=lambda item: item.created_at, reverse=True)[:10])
+    if not repair_cards:
+        repair_cards = '<p class="muted">目前沒有 repair request prompt 可檢查。</p>'
+    blocking_rows = "\n".join(_health_finding_item(finding) for finding in blocking_findings)
+    if not blocking_rows:
+        blocking_rows = '<p class="muted">目前沒有 blocking health finding。</p>'
     return f"""
 <section class="grid">
+  <article class="panel">
+    <h3>健康狀態</h3>
+    <span class="{health_class}">{escape(_translate_health(snapshot.health.status))}</span>
+    <p>嚴重度：{escape(snapshot.health.severity)}</p>
+    <p>repair_required：{str(snapshot.health.repair_required).lower()}</p>
+    <p>repair_request_id：<code>{escape(snapshot.health.repair_request_id or "none")}</code></p>
+  </article>
   <article class="panel wide">
-    <h3>Health Findings</h3>
+    <h3>阻塞項目</h3>
+    {blocking_rows}
+  </article>
+  <article class="panel wide">
+    <h3>健康檢查 Findings</h3>
     <table>
-      <thead><tr><th>Severity</th><th>Code</th><th>Message</th><th>Artifact</th></tr></thead>
+      <thead><tr><th>嚴重度</th><th>代碼</th><th>訊息</th><th>Artifact</th></tr></thead>
       <tbody>{finding_rows}</tbody>
     </table>
   </article>
   <article class="panel wide">
-    <h3>Repair Queue</h3>
+    <h3>修復佇列</h3>
     <table>
-      <thead><tr><th>ID</th><th>Status</th><th>Severity</th><th>Observed Failure</th></tr></thead>
+      <thead><tr><th>ID</th><th>狀態</th><th>嚴重度</th><th>觀察到的失敗</th></tr></thead>
       <tbody>{repair_rows}</tbody>
     </table>
+  </article>
+  <article class="panel wide">
+    <h3>修復請求詳情</h3>
+    <div class="timeline">{repair_cards}</div>
   </article>
 </section>
 """
@@ -625,6 +659,64 @@ def _render_control(snapshot: OperatorConsoleSnapshot) -> str:
   <div class="disabled-controls">{buttons}</div>
 </section>
 """
+
+
+def _health_finding_item(finding: HealthFinding) -> str:
+    return (
+        "<article class=\"decision-card\">"
+        f"<h4><code>{escape(finding.code)}</code></h4>"
+        f"<p>{escape(finding.message)}</p>"
+        f"<p>嚴重度：{escape(finding.severity)} / repair_required={str(finding.repair_required).lower()}</p>"
+        f"<p>Artifact：<code>{escape(finding.artifact_path or 'none')}</code></p>"
+        "</article>"
+    )
+
+
+def _repair_request_card(repair: RepairRequest) -> str:
+    return f"""
+<article class="decision-card">
+  <header>
+    <div>
+      <h4><code>{escape(repair.repair_request_id)}</code></h4>
+      <div class="muted">{_format_dt(repair.created_at)}</div>
+    </div>
+    <span class="{_repair_status_class(repair.status, repair.severity)}">{escape(_translate_repair_status(repair.status))}</span>
+  </header>
+  <p>{escape(repair.observed_failure)}</p>
+  <p>嚴重度：{escape(repair.severity)}</p>
+  <p>Prompt：<code>{escape(repair.prompt_path or "none")}</code></p>
+  <h5>重現指令</h5>
+  <p><code>{escape(repair.reproduction_command)}</code></p>
+  <h5>受影響 Artifacts</h5>
+  {_string_list(repair.affected_artifacts)}
+  <h5>建議測試</h5>
+  {_string_list(repair.recommended_tests)}
+  <h5>驗收條件</h5>
+  {_string_list(repair.acceptance_criteria)}
+</article>
+"""
+
+
+def _repair_status_class(status: str, severity: str) -> str:
+    if status == "pending" and severity == "blocking":
+        return "status alert"
+    if status == "pending":
+        return "status warn"
+    return "status"
+
+
+def _translate_repair_status(status: str) -> str:
+    return {
+        "pending": "待處理 (pending)",
+        "resolved": "已解決 (resolved)",
+        "ignored": "已忽略 (ignored)",
+    }.get(status, status)
+
+
+def _string_list(items: list[str]) -> str:
+    if not items:
+        return '<p class="muted">none</p>'
+    return "<ul class=\"conditions\">" + "".join(f"<li><code>{escape(item)}</code></li>" for item in items) + "</ul>"
 
 
 def _latest_decision_summary(decision: StrategyDecision | None) -> str:

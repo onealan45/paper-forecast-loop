@@ -293,6 +293,9 @@ Current practical V1 path:
   evidence links, invalidation conditions, and blocked reasons
 - M5C expands the operator console portfolio/risk page with NAV, PnL,
   exposure, drawdown, positions, and risk gates
+- M5D expands the operator console health/repair page with health status,
+  blocking findings, repair request prompt paths, affected artifacts,
+  recommended tests, and acceptance criteria
 - Taiwan provider and market calendar support remain deferred
 
 ## 10.4 Automation
@@ -351,6 +354,9 @@ V1 MVP should include:
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,
   positions, drawdown, exposure, risk gate thresholds, and risk findings
+- health/repair queue view exposing current health, blocking findings, repair
+  request status, repair prompts, affected artifacts, recommended tests, and
+  acceptance criteria
 - health-check output
 - Codex repair request artifacts
 - minimal CLI
@@ -387,7 +393,8 @@ correctness defects:
 - automation is local and paper-only, with manual evidence checks before any resume
 - paper portfolio accounting and risk gates are local simulations and not broker reconciliation or external execution
 - SQLite repository migration/export now exists, while the hourly loop and dashboard still use JSONL artifacts by default until later M2 integration
-- health-check creates repair requests, but there is no autonomous repair daemon in this repo
+- health-check creates repair requests and the operator console can inspect
+  them, but there is no autonomous repair daemon in this repo
 - there is no live execution layer, and live broker/exchange integration remains explicitly unavailable
 - CoinGecko moving-window replay remains disabled; replay can now use imported stored candles
 - ETF/stock support is fixture-only and US-calendar-only; no live stock API or paid provider is wired

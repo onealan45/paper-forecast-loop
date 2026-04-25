@@ -5,7 +5,7 @@ import socket
 import pytest
 
 from forecast_loop.cli import main
-from forecast_loop.models import PaperPortfolioSnapshot, PaperPosition, RiskSnapshot, StrategyDecision
+from forecast_loop.models import PaperPortfolioSnapshot, PaperPosition, RepairRequest, RiskSnapshot, StrategyDecision
 from forecast_loop.operator_console import (
     build_operator_console_snapshot,
     local_address_family_for_host,
@@ -112,6 +112,29 @@ def _risk(now: datetime) -> RiskSnapshot:
     )
 
 
+def _repair_request(now: datetime) -> RepairRequest:
+    return RepairRequest(
+        repair_request_id="repair:test",
+        created_at=now,
+        status="pending",
+        severity="blocking",
+        observed_failure="No latest forecast exists for BTC-USD.",
+        reproduction_command=(
+            "python .\\run_forecast_loop.py health-check --storage-dir storage --symbol BTC-USD"
+        ),
+        expected_behavior="Health check should be non-blocking.",
+        affected_artifacts=["forecasts.jsonl", "provider_runs.jsonl"],
+        recommended_tests=[
+            "python -m pytest -q",
+            "python -m compileall -q src tests run_forecast_loop.py sitecustomize.py",
+        ],
+        safety_boundary="paper-only; no live trading",
+        acceptance_criteria=["health-check returns healthy", "dashboard renders repair status"],
+        finding_codes=["missing_latest_forecast"],
+        prompt_path=".codex/repair_requests/pending/repair_test.md",
+    )
+
+
 def test_operator_console_renders_required_pages_read_only(tmp_path):
     now = datetime(2026, 4, 25, 1, 30, tzinfo=UTC)
     repository = JsonFileRepository(tmp_path)
@@ -176,6 +199,45 @@ def test_portfolio_page_shows_nav_pnl_exposure_drawdown_and_risk_gates(tmp_path)
     assert "drawdown_reduce_risk" in html
     assert "Avg Price" in html
     assert "Market Price" in html
+
+
+def test_health_page_shows_blocking_findings_and_repair_request_detail(tmp_path):
+    now = datetime(2026, 4, 25, 1, 30, tzinfo=UTC)
+    JsonFileRepository(tmp_path).save_repair_request(_repair_request(now))
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    html = render_operator_console_page(snapshot, page="health")
+
+    assert "健康狀態" in html
+    assert "阻塞項目" in html
+    assert "missing_latest_forecast" in html
+    assert "repair_required：true" in html
+    assert "修復佇列" in html
+    assert "修復請求詳情" in html
+    assert "repair:test" in html
+    assert "待處理 (pending)" in html
+    assert ".codex/repair_requests/pending/repair_test.md" in html
+    assert "forecasts.jsonl" in html
+    assert "provider_runs.jsonl" in html
+    assert "python -m pytest -q" in html
+    assert "health-check returns healthy" in html
+    assert "<form" not in html.lower()
+
+
+def test_health_page_renders_when_repair_request_log_is_corrupt(tmp_path):
+    now = datetime(2026, 4, 25, 1, 30, tzinfo=UTC)
+    (tmp_path / "repair_requests.jsonl").write_text("{bad json\n", encoding="utf-8")
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    html = render_operator_console_page(snapshot, page="health")
+
+    assert "健康狀態" in html
+    assert "阻塞項目" in html
+    assert "bad_json_row" in html
+    assert "repair_requests.jsonl" in html
+    assert "repair_required：true" in html
+    assert "目前沒有 repair request prompt 可檢查。" in html
+    assert "<form" not in html.lower()
 
 
 def test_decision_timeline_shows_reason_evidence_and_invalidation(tmp_path):

@@ -545,6 +545,18 @@ M5C expands the `portfolio` page with:
 
 This also remains read-only and paper-only.
 
+M5D expands the `health` page into a read-only health / repair queue:
+
+- current health status, severity, and repair-required state
+- blocking health findings surfaced before the raw finding table
+- repair request queue with pending/resolved/ignored status visibility
+- repair request detail cards with prompt path, reproduction command, affected
+  artifacts, recommended tests, and acceptance criteria
+
+The health page does not execute repairs, mutate repair status, run Codex, or
+trigger automation. It only makes existing health-check and repair-request
+artifacts inspectable.
+
 ## Failure and Degrade Behavior
 
 The loop degrades conservatively:
@@ -802,7 +814,7 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - order lifecycle is minimal: created orders can be filled locally, but cancellation and partial fill lifecycle are deferred
 - proposal logic is still heuristic and conservative
 - health-check creates repair requests, but there is no autonomous repair daemon in this repo
-- the static dashboard and M5A local operator console remain read-only; audited
+- the static dashboard and local operator console remain read-only; audited
   operator controls are deferred to M5E
 - replay still writes summary metadata into the base storage directory instead of a more formal run registry or database
 - US ETF/stock support is fixture-only; no live or paid data provider is wired

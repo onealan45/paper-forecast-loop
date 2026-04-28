@@ -6,14 +6,14 @@ This file captures the repo-level Codex collaboration rules for this project.
 
 - Use Traditional Chinese for user-facing status and final reports unless the user explicitly asks otherwise.
 - Optimize for research ability, prediction quality, backtesting, strategy simulation, and continuous strategy learning. Do not treat operational safety or productization as the primary project goal.
-- The hard execution boundary is: do not submit real orders, do not move real capital, and do not commit secrets. Live-money execution remains prohibited.
+- The current execution boundary is: do not submit real orders, do not move real capital, and do not commit secrets. This is the present project boundary, not a permanent product statement; future automated trading work would require an explicit new user request and a separate design stage.
 - `paper-only` names in existing commands, artifacts, and docs should be treated as simulation/backtest compatibility labels, not as a restriction on research scope or data sources.
 - Any useful information source may be considered for research, prediction, backtesting, and simulation, including market, macro, fundamental, sentiment, flow, alternative, local, and external sources.
 - Natural-language strategy generation and natural-language control by the user are allowed. The loop may turn user strategy instructions into research hypotheses, backtests, simulations, and decision artifacts.
 - Tool-rich automation is acceptable when it improves research, prediction, backtesting, or self-reflection. Sandbox or broker gates should block execution only, not strategy research, forecasting, simulation, or reporting.
 - Learn from Vibe-Trading-style capabilities where useful: strategy skills, self-evolving skills, swarm-style research roles, MCP/tool surfaces, agent memory, broad data loaders, backtest engines, validation utilities, strategy export/review surfaces, and shadow-account style simulation.
 - UX should expose concrete strategy content: current hypothesis, reasoning, evidence, prediction basis, backtest/simulation result, failure conditions, and next research action. Do not let health/status panels dominate strategy visibility.
-- Do not add real broker/exchange order submission, real API key handling, or automatic promotion into live-money execution.
+- Do not add real broker/exchange order submission, real API key handling, or automatic promotion into live-money execution in the current research/simulation scope.
 - Prefer `python .\run_forecast_loop.py ...` in this checkout because it bootstraps `src\` onto `sys.path`.
 - Use PowerShell-safe commands. Do not leave raw placeholders such as `<storageDir>` inside executable commands.
 - Archive every substantive review under `docs/reviews/`.

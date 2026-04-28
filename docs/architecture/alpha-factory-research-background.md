@@ -17,8 +17,10 @@ validation statistics, canonical provider comparison, and visible strategy
 learning.
 
 The user's updated priority is research and prediction strength. Safety
-machinery is not the product goal. The only hard execution boundary is that the
-system must not place real orders or move real capital.
+machinery is not the product goal. The current execution boundary is that the
+system must not place real orders or move real capital. This is the current
+research/simulation boundary, not a permanent statement that automated trading
+will never be designed.
 
 ## Current Implementation Interpretation
 
@@ -51,11 +53,15 @@ cost model, validation suite, and promotion rules. The system should be allowed
 to explore many candidate alphas, but it must reject false positives
 aggressively.
 
-The project must keep this boundary:
+The project must keep this current boundary:
 
 - Do not place real orders.
 - Do not move real capital.
 - Do not require or store real live-trading secrets.
+
+Future automated trading work would require an explicit new user request and a
+separate design stage; it should not be smuggled into the current
+research/simulation milestones.
 
 Everything else should be evaluated by whether it improves research,
 prediction, simulation, backtesting, strategy learning, or strategy explanation.
@@ -217,8 +223,8 @@ execution. It should make the research factory materially stronger:
 | M7F | Strategy-visible UX | Dashboard/console shows concrete strategy logic, backtests, prediction rationale, strategy revisions, and next experiments. |
 | M7G | Experiment registry and leaderboard | Every trial, including failures, is recorded and ranked by evidence, prediction quality, and robustness. |
 
-These stages should preserve the only hard execution boundary: no real orders
-and no real capital movement.
+These stages should preserve the current execution boundary: no real orders and
+no real capital movement.
 
 ## Minimum Acceptance Gates For M7+
 

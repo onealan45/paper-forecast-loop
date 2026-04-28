@@ -28,9 +28,12 @@ The highest-value outcomes are:
 - concrete strategy visibility in the UX;
 - more data sources and research tools when they improve analysis.
 
-The hard execution boundary is simple: do not place real orders and do not move
-real capital. Everything else is allowed when it is used for research,
-backtesting, prediction, simulation, or strategy reflection.
+The current execution boundary is simple: do not place real orders and do not
+move real capital. This is the present research/simulation boundary, not a
+permanent product promise; future automated trading would require an explicit
+new user request and a separate design stage. Everything else is allowed when it
+is used for research, backtesting, prediction, simulation, or strategy
+reflection.
 
 Natural-language strategy generation is acceptable. Tool-rich automated loops
 are acceptable. Self-evolving skills are desirable. Sandbox or broker gates
@@ -46,7 +49,7 @@ sources or research methods.
 The post-M1-M6 research direction is documented in
 [`docs/architecture/alpha-factory-research-background.md`](docs/architecture/alpha-factory-research-background.md).
 The target is a research-capable, prediction-focused, multi-strategy Alpha
-Factory. It is not a live auto-trading system.
+Factory. In its current scope, it is not a live auto-trading system.
 
 The core research rule is: **放開策略搜尋空間，鎖死評估流程。** Strategy
 ideas may broaden, but candidate evaluation must stay fixed, auditable, and

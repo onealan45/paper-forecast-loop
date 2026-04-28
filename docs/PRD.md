@@ -9,7 +9,8 @@
 
 This project is an **AI-first strategy research and prediction lab**.
 
-It is not a productization project and it is not a live order-execution system.
+It is not a productization project and, in the current scope, it is not a live
+order-execution system.
 Its purpose is to:
 
 - generate recurring market forecasts from public data
@@ -28,9 +29,13 @@ The core product idea is:
 
 > The user is using natural language to direct an AI research loop that studies markets, creates strategies, backtests them, predicts outcomes, and reflects on what works.
 
-The hard boundary is narrow:
+The current execution boundary is narrow:
 
 > Do not place real orders and do not move real capital.
+
+This is the present research/simulation boundary, not a permanent product
+statement. Future automated trading would require an explicit new user request
+and a separate design stage.
 
 Other tools, data sources, strategy generation methods, and automated research
 loops are acceptable when they improve research, backtesting, prediction,

@@ -22,6 +22,14 @@ system must not place real orders or move real capital. This is the current
 research/simulation boundary, not a permanent statement that automated trading
 will never be designed.
 
+The 2026-04-28 ChatGPT Pro master decision is now recorded in
+[`autonomous-alpha-factory-master-decision.md`](autonomous-alpha-factory-master-decision.md).
+That decision supersedes loose M7+ sequencing notes when there is a conflict.
+The immediate next stage is PR0 Reviewability And Formatting Gate. After PR0,
+the priority is M7B-M7F Alpha Evidence Engine work: source registry, source
+document import, event reliability, already-priced / market reaction,
+historical edge, and decision integration.
+
 ## Current Implementation Interpretation
 
 The current repository should be interpreted as an Alpha Factory foundation, not
@@ -210,18 +218,20 @@ and demotion reasons.
 
 ## M7+ Roadmap Implications
 
-The research report suggests that the next major stage should not be live
-execution. It should make the research factory materially stronger:
+The research report and the 2026-04-28 master decision suggest that the next
+major stage should not be live execution. It should make the research factory
+materially stronger in this order:
 
 | Stage | Direction | Definition of done |
 |---|---|---|
-| M7A | Vibe-Trading capability assimilation plan | Identify which skills, swarm, MCP, data-loader, backtest, memory, and UX patterns should be implemented first. |
-| M7B | Strategy skill registry | Strategies and research methods become loadable, testable, versioned skills. |
-| M7C | Self-evolving strategy loop | The system can propose, revise, retire, and document strategy skills from evidence. |
-| M7D | Broad data and backtest expansion | Add useful provider adapters and richer cross-market simulation paths. |
-| M7E | Validation engine upgrade | Monte Carlo, bootstrap intervals, purged folds, CPCV-like paths, PBO, DSR, and stability reports are available. |
-| M7F | Strategy-visible UX | Dashboard/console shows concrete strategy logic, backtests, prediction rationale, strategy revisions, and next experiments. |
-| M7G | Experiment registry and leaderboard | Every trial, including failures, is recorded and ranked by evidence, prediction quality, and robustness. |
+| PR0 | Reviewability and formatting gate | Long single-line source/test files are made reviewable without behavior changes, and a lightweight reviewability guard exists. |
+| M7A | Evidence artifact foundation | Source, event, reliability, reaction, edge, and feature artifacts exist with storage and health integrity checks. |
+| M7B | Source registry and source document import | Sources are registered with timestamp, license, rate-limit, reliability, and point-in-time policy; fixture/importable documents exist. |
+| M7C | Event reliability | Source documents become canonical events with dedupe, entity/symbol links, and reliability checks. |
+| M7D | Market reaction | Already-priced / market reaction checks prevent stale or pre-priced events from creating directional evidence. |
+| M7E | Historical edge | Event families are evaluated for after-cost edge, sample sufficiency, adverse excursion, drawdown, and stability. |
+| M7F | Decision integration | Event-derived evidence can influence decisions only after source, reaction, edge, baseline, research, risk, and health gates pass. |
+| M8+ | Strategy factory, experiment registry, locked evaluation, paper-shadow learning, and strategy-visible UX | Strategies become versioned cards/skills, all trials are persisted, holdouts and trial budgets are locked, paper-shadow outcomes feed failure attribution, and UX exposes concrete strategy reasoning. |
 
 These stages should preserve the current execution boundary: no real orders and
 no real capital movement.

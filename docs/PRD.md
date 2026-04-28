@@ -62,6 +62,20 @@ The user's current preference is:
 
 ## 1.1 Research Background: Alpha Factory Direction
 
+The current master decision after M7A is recorded in
+[`docs/architecture/autonomous-alpha-factory-master-decision.md`](architecture/autonomous-alpha-factory-master-decision.md).
+The PRD follows that decision:
+
+- PR0 Reviewability And Formatting Gate comes before more strategy code.
+- M7A is only the evidence artifact foundation.
+- M7B-M7F must implement the Alpha Evidence Engine: source registry, source
+  document import, event reliability, market reaction / already-priced checks,
+  historical edge, and decision integration.
+- ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
+  agendas, acceptance gates, and digests, not a fake runtime service.
+- Strategy generation can be broad, but evaluation protocol and leaderboard
+  gates must stay locked after results are known.
+
 The post-M1-M6 research background is recorded in
 [`docs/architecture/alpha-factory-research-background.md`](architecture/alpha-factory-research-background.md).
 

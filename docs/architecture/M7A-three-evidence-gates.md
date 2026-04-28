@@ -13,6 +13,13 @@ capital movement, and no committed secrets. This is the current
 research/simulation boundary, not a permanent statement about future automated
 trading design.
 
+The post-M7A execution contract is now
+[`autonomous-alpha-factory-master-decision.md`](autonomous-alpha-factory-master-decision.md).
+That decision makes PR0 Reviewability And Formatting Gate the next required
+step before additional strategy intelligence, then prioritizes M7B-M7F source
+registry, event reliability, market reaction, historical edge, and decision
+integration work.
+
 ## Artifact Contracts
 
 M7A adds append-only JSONL and SQLite-compatible artifacts:

@@ -4,6 +4,13 @@ This file captures the repo-level Codex collaboration rules for this project.
 
 ## Core Rules
 
+- Treat `docs/architecture/autonomous-alpha-factory-master-decision.md` as the
+  current master execution decision after M7A. If another local note conflicts
+  with it, follow the master decision unless the user explicitly supersedes it.
+- The immediate next milestone after M7A is PR0 Reviewability And Formatting
+  Gate. Do not continue adding strategy intelligence on top of pathological
+  long-line source files unless PR0 is complete or a reviewer proves it is not
+  needed.
 - Use Traditional Chinese for user-facing status and final reports unless the user explicitly asks otherwise.
 - Optimize for research ability, prediction quality, backtesting, strategy simulation, and continuous strategy learning. Do not treat operational safety or productization as the primary project goal.
 - The current execution boundary is: do not submit real orders, do not move real capital, and do not commit secrets. This is the present project boundary, not a permanent product statement; future automated trading work would require an explicit new user request and a separate design stage.
@@ -13,6 +20,12 @@ This file captures the repo-level Codex collaboration rules for this project.
 - Tool-rich automation is acceptable when it improves research, prediction, backtesting, or self-reflection. Sandbox or broker gates should block execution only, not strategy research, forecasting, simulation, or reporting.
 - Learn from Vibe-Trading-style capabilities where useful: strategy skills, self-evolving skills, swarm-style research roles, MCP/tool surfaces, agent memory, broad data loaders, backtest engines, validation utilities, strategy export/review surfaces, and shadow-account style simulation.
 - UX should expose concrete strategy content: current hypothesis, reasoning, evidence, prediction basis, backtest/simulation result, failure conditions, and next research action. Do not let health/status panels dominate strategy visibility.
+- Do not implement a fake ChatGPT Pro Controller runtime service. Record
+  controller-level decisions as artifacts, docs, prompts, research agendas,
+  acceptance gates, and operator digests.
+- Keep the Alpha Factory principle explicit: strategy search space may broaden,
+  but evaluation protocol, holdout, trial budget, cost model, gates, and
+  leaderboard rules must not move after results are known.
 - Do not add real broker/exchange order submission, real API key handling, or automatic promotion into live-money execution in the current research/simulation scope.
 - Prefer `python .\run_forecast_loop.py ...` in this checkout because it bootstraps `src\` onto `sys.path`.
 - Use PowerShell-safe commands. Do not leave raw placeholders such as `<storageDir>` inside executable commands.

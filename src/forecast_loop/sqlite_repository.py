@@ -40,6 +40,8 @@ from forecast_loop.models import (
     Proposal,
     ProviderRun,
     RepairRequest,
+    ResearchAgenda,
+    ResearchAutopilotRun,
     ResearchDataset,
     RiskSnapshot,
     Review,
@@ -149,6 +151,13 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
     ),
     ArtifactSpec("leaderboard_entries", "leaderboard_entries.jsonl", "entry_id", LeaderboardEntry.from_dict),
     ArtifactSpec("paper_shadow_outcomes", "paper_shadow_outcomes.jsonl", "outcome_id", PaperShadowOutcome.from_dict),
+    ArtifactSpec("research_agendas", "research_agendas.jsonl", "agenda_id", ResearchAgenda.from_dict),
+    ArtifactSpec(
+        "research_autopilot_runs",
+        "research_autopilot_runs.jsonl",
+        "run_id",
+        ResearchAutopilotRun.from_dict,
+    ),
 )
 _SPEC_BY_TYPE = {spec.artifact_type: spec for spec in ARTIFACT_SPECS}
 
@@ -477,6 +486,18 @@ class SQLiteRepository:
     def load_paper_shadow_outcomes(self) -> list[PaperShadowOutcome]:
         return self._load("paper_shadow_outcomes", PaperShadowOutcome.from_dict)
 
+    def save_research_agenda(self, agenda: ResearchAgenda) -> None:
+        self._save_unique("research_agendas", agenda.agenda_id, agenda.to_dict())
+
+    def load_research_agendas(self) -> list[ResearchAgenda]:
+        return self._load("research_agendas", ResearchAgenda.from_dict)
+
+    def save_research_autopilot_run(self, run: ResearchAutopilotRun) -> None:
+        self._save_unique("research_autopilot_runs", run.run_id, run.to_dict())
+
+    def load_research_autopilot_runs(self) -> list[ResearchAutopilotRun]:
+        return self._load("research_autopilot_runs", ResearchAutopilotRun.from_dict)
+
     def artifact_counts(self) -> dict[str, int]:
         with self._connect() as connection:
             rows = connection.execute(
@@ -638,6 +659,10 @@ def migrate_jsonl_to_sqlite(storage_dir: Path | str, db_path: Path | str | None 
         sqlite_repository.save_leaderboard_entry(entry)
     for outcome in json_repository.load_paper_shadow_outcomes():
         sqlite_repository.save_paper_shadow_outcome(outcome)
+    for agenda in json_repository.load_research_agendas():
+        sqlite_repository.save_research_agenda(agenda)
+    for run in json_repository.load_research_autopilot_runs():
+        sqlite_repository.save_research_autopilot_run(run)
 
     after_counts = sqlite_repository.artifact_counts()
     return {

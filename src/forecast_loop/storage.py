@@ -37,6 +37,8 @@ from forecast_loop.models import (
     Proposal,
     ProviderRun,
     RepairRequest,
+    ResearchAgenda,
+    ResearchAutopilotRun,
     ResearchDataset,
     RiskSnapshot,
     Review,
@@ -225,6 +227,14 @@ class ArtifactRepository(Protocol):
 
     def load_paper_shadow_outcomes(self) -> list[PaperShadowOutcome]: ...
 
+    def save_research_agenda(self, agenda: ResearchAgenda) -> None: ...
+
+    def load_research_agendas(self) -> list[ResearchAgenda]: ...
+
+    def save_research_autopilot_run(self, run: ResearchAutopilotRun) -> None: ...
+
+    def load_research_autopilot_runs(self) -> list[ResearchAutopilotRun]: ...
+
 
 class JsonFileRepository:
     def __init__(self, root: Path | str) -> None:
@@ -272,6 +282,8 @@ class JsonFileRepository:
         self.locked_evaluation_results_path = self.root / "locked_evaluation_results.jsonl"
         self.leaderboard_entries_path = self.root / "leaderboard_entries.jsonl"
         self.paper_shadow_outcomes_path = self.root / "paper_shadow_outcomes.jsonl"
+        self.research_agendas_path = self.root / "research_agendas.jsonl"
+        self.research_autopilot_runs_path = self.root / "research_autopilot_runs.jsonl"
 
     def save_market_candle(self, candle: MarketCandleRecord) -> None:
         self._append_unique(
@@ -708,6 +720,26 @@ class JsonFileRepository:
 
     def load_paper_shadow_outcomes(self) -> list[PaperShadowOutcome]:
         return self._load_lines(self.paper_shadow_outcomes_path, PaperShadowOutcome.from_dict)
+
+    def save_research_agenda(self, agenda: ResearchAgenda) -> None:
+        self._append_unique(
+            self.research_agendas_path,
+            agenda.to_dict(),
+            identity_key="agenda_id",
+        )
+
+    def load_research_agendas(self) -> list[ResearchAgenda]:
+        return self._load_lines(self.research_agendas_path, ResearchAgenda.from_dict)
+
+    def save_research_autopilot_run(self, run: ResearchAutopilotRun) -> None:
+        self._append_unique(
+            self.research_autopilot_runs_path,
+            run.to_dict(),
+            identity_key="run_id",
+        )
+
+    def load_research_autopilot_runs(self) -> list[ResearchAutopilotRun]:
+        return self._load_lines(self.research_autopilot_runs_path, ResearchAutopilotRun.from_dict)
 
     def _append(self, path: Path, payload: dict) -> None:
         with path.open("a", encoding="utf-8") as handle:

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from forecast_loop.assets import get_asset, list_assets
+from forecast_loop.autopilot import create_research_agenda, record_research_autopilot_run
 from forecast_loop.automation_log import automation_step, record_automation_run
 from forecast_loop.backtest import run_backtest
 from forecast_loop.broker_lifecycle import create_broker_order_lifecycle
@@ -423,6 +424,27 @@ def main(argv: list[str] | None = None) -> int:
     paper_shadow_cmd.add_argument("--note")
     paper_shadow_cmd.add_argument("--created-at")
 
+    research_agenda_cmd = subparsers.add_parser("create-research-agenda")
+    research_agenda_cmd.add_argument("--storage-dir", required=True)
+    research_agenda_cmd.add_argument("--symbol", required=True)
+    research_agenda_cmd.add_argument("--title", required=True)
+    research_agenda_cmd.add_argument("--hypothesis", required=True)
+    research_agenda_cmd.add_argument("--strategy-family", required=True)
+    research_agenda_cmd.add_argument("--strategy-card-id", action="append", default=[])
+    research_agenda_cmd.add_argument("--priority", default="HIGH")
+    research_agenda_cmd.add_argument("--created-at")
+
+    research_autopilot_cmd = subparsers.add_parser("record-research-autopilot-run")
+    research_autopilot_cmd.add_argument("--storage-dir", required=True)
+    research_autopilot_cmd.add_argument("--agenda-id", required=True)
+    research_autopilot_cmd.add_argument("--strategy-card-id", required=True)
+    research_autopilot_cmd.add_argument("--experiment-trial-id", required=True)
+    research_autopilot_cmd.add_argument("--locked-evaluation-id", required=True)
+    research_autopilot_cmd.add_argument("--leaderboard-entry-id", required=True)
+    research_autopilot_cmd.add_argument("--strategy-decision-id")
+    research_autopilot_cmd.add_argument("--paper-shadow-outcome-id")
+    research_autopilot_cmd.add_argument("--created-at")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -511,6 +533,10 @@ def main(argv: list[str] | None = None) -> int:
             return _evaluate_leaderboard_gate(args)
         if args.command == "record-paper-shadow-outcome":
             return _record_paper_shadow_outcome(args)
+        if args.command == "create-research-agenda":
+            return _create_research_agenda(args)
+        if args.command == "record-research-autopilot-run":
+            return _record_research_autopilot_run(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -1574,6 +1600,39 @@ def _record_paper_shadow_outcome(args) -> int:
         note=args.note,
     )
     print(json.dumps({"paper_shadow_outcome": outcome.to_dict()}, ensure_ascii=False))
+    return 0
+
+
+def _create_research_agenda(args) -> int:
+    created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
+    agenda = create_research_agenda(
+        repository=JsonFileRepository(args.storage_dir),
+        created_at=created_at,
+        symbol=args.symbol.upper(),
+        title=args.title,
+        hypothesis=args.hypothesis,
+        strategy_family=args.strategy_family,
+        strategy_card_ids=args.strategy_card_id,
+        priority=args.priority,
+    )
+    print(json.dumps({"research_agenda": agenda.to_dict()}, ensure_ascii=False))
+    return 0
+
+
+def _record_research_autopilot_run(args) -> int:
+    created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
+    run = record_research_autopilot_run(
+        repository=JsonFileRepository(args.storage_dir),
+        created_at=created_at,
+        agenda_id=args.agenda_id,
+        strategy_card_id=args.strategy_card_id,
+        experiment_trial_id=args.experiment_trial_id,
+        locked_evaluation_id=args.locked_evaluation_id,
+        leaderboard_entry_id=args.leaderboard_entry_id,
+        strategy_decision_id=args.strategy_decision_id,
+        paper_shadow_outcome_id=args.paper_shadow_outcome_id,
+    )
+    print(json.dumps({"research_autopilot_run": run.to_dict()}, ensure_ascii=False))
     return 0
 
 

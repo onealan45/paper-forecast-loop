@@ -1290,6 +1290,149 @@ class PaperShadowOutcome:
 
 
 @dataclass(slots=True)
+class ResearchAgenda:
+    agenda_id: str
+    created_at: datetime
+    symbol: str
+    title: str
+    hypothesis: str
+    priority: str
+    status: str
+    target_strategy_family: str
+    strategy_card_ids: list[str]
+    expected_artifacts: list[str]
+    acceptance_criteria: list[str]
+    blocked_actions: list[str]
+    decision_basis: str
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        symbol: str,
+        title: str,
+        hypothesis: str,
+        target_strategy_family: str,
+        strategy_card_ids: list[str],
+    ) -> str:
+        return _stable_artifact_id(
+            "research-agenda",
+            {
+                "symbol": symbol,
+                "title": title,
+                "hypothesis": hypothesis,
+                "target_strategy_family": target_strategy_family,
+                "strategy_card_ids": sorted(strategy_card_ids),
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "ResearchAgenda":
+        return cls(
+            agenda_id=_require_string(payload, "agenda_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            symbol=_require_string(payload, "symbol"),
+            title=_require_string(payload, "title"),
+            hypothesis=_require_string(payload, "hypothesis"),
+            priority=payload.get("priority", "MEDIUM"),
+            status=payload.get("status", "OPEN"),
+            target_strategy_family=payload.get("target_strategy_family", "unspecified"),
+            strategy_card_ids=list(payload.get("strategy_card_ids", [])),
+            expected_artifacts=list(payload.get("expected_artifacts", [])),
+            acceptance_criteria=list(payload.get("acceptance_criteria", [])),
+            blocked_actions=list(payload.get("blocked_actions", [])),
+            decision_basis=payload.get("decision_basis", "legacy_research_agenda"),
+        )
+
+
+@dataclass(slots=True)
+class ResearchAutopilotRun:
+    run_id: str
+    created_at: datetime
+    symbol: str
+    agenda_id: str
+    strategy_card_id: str
+    experiment_trial_id: str
+    locked_evaluation_id: str
+    leaderboard_entry_id: str
+    strategy_decision_id: str | None
+    paper_shadow_outcome_id: str | None
+    steps: list[dict[str, str | None]]
+    loop_status: str
+    next_research_action: str
+    blocked_reasons: list[str]
+    decision_basis: str
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        agenda_id: str,
+        strategy_card_id: str,
+        experiment_trial_id: str,
+        locked_evaluation_id: str,
+        leaderboard_entry_id: str,
+        strategy_decision_id: str | None,
+        paper_shadow_outcome_id: str | None,
+        loop_status: str,
+    ) -> str:
+        return _stable_artifact_id(
+            "research-autopilot-run",
+            {
+                "agenda_id": agenda_id,
+                "strategy_card_id": strategy_card_id,
+                "experiment_trial_id": experiment_trial_id,
+                "locked_evaluation_id": locked_evaluation_id,
+                "leaderboard_entry_id": leaderboard_entry_id,
+                "strategy_decision_id": strategy_decision_id,
+                "paper_shadow_outcome_id": paper_shadow_outcome_id,
+                "loop_status": loop_status,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "ResearchAutopilotRun":
+        steps = []
+        for step in payload.get("steps", []):
+            if not isinstance(step, dict):
+                raise ValueError("research autopilot step must be an object")
+            steps.append(
+                {
+                    "name": str(step.get("name") or ""),
+                    "status": str(step.get("status") or ""),
+                    "artifact_id": step.get("artifact_id"),
+                }
+            )
+        return cls(
+            run_id=_require_string(payload, "run_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            symbol=_require_string(payload, "symbol"),
+            agenda_id=_require_string(payload, "agenda_id"),
+            strategy_card_id=_require_string(payload, "strategy_card_id"),
+            experiment_trial_id=_require_string(payload, "experiment_trial_id"),
+            locked_evaluation_id=_require_string(payload, "locked_evaluation_id"),
+            leaderboard_entry_id=_require_string(payload, "leaderboard_entry_id"),
+            strategy_decision_id=payload.get("strategy_decision_id"),
+            paper_shadow_outcome_id=payload.get("paper_shadow_outcome_id"),
+            steps=steps,
+            loop_status=payload.get("loop_status", "BLOCKED"),
+            next_research_action=payload.get("next_research_action", "REPAIR_EVIDENCE_CHAIN"),
+            blocked_reasons=list(payload.get("blocked_reasons", [])),
+            decision_basis=payload.get("decision_basis", "legacy_research_autopilot_run"),
+        )
+
+
+@dataclass(slots=True)
 class SourceRegistryEntry:
     source_id: str
     source_name: str

@@ -38,6 +38,7 @@ from forecast_loop.models import (
     Review,
     SourceDocument,
     SourceIngestionRun,
+    SourceRegistryEntry,
     StrategyDecision,
     WalkForwardValidation,
 )
@@ -93,6 +94,11 @@ def run_health_check(
 
     artifact_rows = {
         "forecasts": _load_jsonl(storage_path / "forecasts.jsonl", Forecast.from_dict, findings),
+        "source_registry": _load_jsonl(
+            storage_path / "source_registry.jsonl",
+            SourceRegistryEntry.from_dict,
+            findings,
+        ),
         "source_documents": _load_jsonl(storage_path / "source_documents.jsonl", SourceDocument.from_dict, findings),
         "source_ingestion_runs": _load_jsonl(
             storage_path / "source_ingestion_runs.jsonl",
@@ -175,6 +181,7 @@ def run_health_check(
     repair_requests: list[RepairRequest] = artifact_rows["repair_requests"]
     research_datasets: list[ResearchDataset] = artifact_rows["research_datasets"]
     market_candles: list[MarketCandleRecord] = artifact_rows["market_candles"]
+    source_registry_entries: list[SourceRegistryEntry] = artifact_rows["source_registry"]
     source_documents: list[SourceDocument] = artifact_rows["source_documents"]
     source_ingestion_runs: list[SourceIngestionRun] = artifact_rows["source_ingestion_runs"]
     canonical_events: list[CanonicalEvent] = artifact_rows["canonical_events"]
@@ -213,6 +220,7 @@ def run_health_check(
     _check_duplicate_ids(repair_requests, "repair_request_id", storage_path / "repair_requests.jsonl", findings)
     _check_duplicate_ids(research_datasets, "dataset_id", storage_path / "research_datasets.jsonl", findings)
     _check_duplicate_ids(market_candles, "candle_id", storage_path / "market_candles.jsonl", findings)
+    _check_duplicate_ids(source_registry_entries, "source_id", storage_path / "source_registry.jsonl", findings)
     _check_duplicate_ids(source_documents, "document_id", storage_path / "source_documents.jsonl", findings)
     _check_duplicate_ids(
         source_ingestion_runs,
@@ -291,6 +299,7 @@ def run_health_check(
     )
     _check_m7_evidence_integrity(
         storage_path,
+        source_registry_entries,
         source_documents,
         canonical_events,
         feature_snapshots,
@@ -831,17 +840,39 @@ def _add_link_finding(code: str, path: Path, source_id: str, missing_id: str, fi
 
 def _check_m7_evidence_integrity(
     storage_path: Path,
+    source_registry_entries: list[SourceRegistryEntry],
     source_documents: list[SourceDocument],
     canonical_events: list[CanonicalEvent],
     feature_snapshots: list[FeatureSnapshot],
     findings: list[HealthFinding],
 ) -> None:
+    source_registry_path = storage_path / "source_registry.jsonl"
     source_path = storage_path / "source_documents.jsonl"
     event_path = storage_path / "canonical_events.jsonl"
     feature_path = storage_path / "feature_snapshots.jsonl"
     documents_by_id = {document.document_id: document for document in source_documents}
+    source_registry_ids = {entry.source_id for entry in source_registry_entries}
+
+    for entry in source_registry_entries:
+        invalid_secret_names = [item for item in entry.secret_env_vars if "=" in item]
+        if invalid_secret_names:
+            _add_integrity_finding(
+                "source_registry_secret_assignment_present",
+                source_registry_path,
+                entry.source_id,
+                "source registry secret_env_vars must contain variable names only, not secret assignments",
+                findings,
+            )
 
     for document in source_documents:
+        if document.source_id and document.source_id not in source_registry_ids:
+            _add_integrity_finding(
+                "source_document_missing_source_registry_entry",
+                source_path,
+                document.document_id,
+                f"source document references missing source registry entry: {document.source_id}",
+                findings,
+            )
         if document.published_at is None or document.available_at is None:
             _add_integrity_finding(
                 "source_document_missing_required_timestamp",

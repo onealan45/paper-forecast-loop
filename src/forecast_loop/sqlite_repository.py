@@ -39,6 +39,7 @@ from forecast_loop.models import (
     Review,
     SourceDocument,
     SourceIngestionRun,
+    SourceRegistryEntry,
     StrategyDecision,
     WalkForwardValidation,
 )
@@ -60,6 +61,7 @@ class ArtifactSpec:
 ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("market_candles", "market_candles.jsonl", "candle_id", MarketCandleRecord.from_dict),
     ArtifactSpec("macro_events", "macro_events.jsonl", "event_id", MacroEvent.from_dict),
+    ArtifactSpec("source_registry", "source_registry.jsonl", "source_id", SourceRegistryEntry.from_dict),
     ArtifactSpec("source_documents", "source_documents.jsonl", "document_id", SourceDocument.from_dict),
     ArtifactSpec(
         "source_ingestion_runs",
@@ -191,6 +193,12 @@ class SQLiteRepository:
 
     def load_macro_events(self) -> list[MacroEvent]:
         return self._load("macro_events", MacroEvent.from_dict)
+
+    def save_source_registry_entry(self, entry: SourceRegistryEntry) -> None:
+        self._save_unique("source_registry", entry.source_id, entry.to_dict())
+
+    def load_source_registry_entries(self) -> list[SourceRegistryEntry]:
+        return self._load("source_registry", SourceRegistryEntry.from_dict)
 
     def save_source_document(self, document: SourceDocument) -> None:
         self._save_unique("source_documents", document.document_id, document.to_dict())
@@ -481,6 +489,8 @@ def migrate_jsonl_to_sqlite(storage_dir: Path | str, db_path: Path | str | None 
         sqlite_repository.save_market_candle(candle)
     for event in json_repository.load_macro_events():
         sqlite_repository.save_macro_event(event)
+    for entry in json_repository.load_source_registry_entries():
+        sqlite_repository.save_source_registry_entry(entry)
     for document in json_repository.load_source_documents():
         sqlite_repository.save_source_document(document)
     for run in json_repository.load_source_ingestion_runs():

@@ -36,6 +36,7 @@ from forecast_loop.models import (
     Review,
     SourceDocument,
     SourceIngestionRun,
+    SourceRegistryEntry,
     StrategyDecision,
     WalkForwardValidation,
 )
@@ -49,6 +50,10 @@ class ArtifactRepository(Protocol):
     def save_macro_event(self, event: MacroEvent) -> None: ...
 
     def load_macro_events(self) -> list[MacroEvent]: ...
+
+    def save_source_registry_entry(self, entry: SourceRegistryEntry) -> None: ...
+
+    def load_source_registry_entries(self) -> list[SourceRegistryEntry]: ...
 
     def save_source_document(self, document: SourceDocument) -> None: ...
 
@@ -187,6 +192,7 @@ class JsonFileRepository:
         self.root.mkdir(parents=True, exist_ok=True)
         self.market_candles_path = self.root / "market_candles.jsonl"
         self.macro_events_path = self.root / "macro_events.jsonl"
+        self.source_registry_path = self.root / "source_registry.jsonl"
         self.source_documents_path = self.root / "source_documents.jsonl"
         self.source_ingestion_runs_path = self.root / "source_ingestion_runs.jsonl"
         self.canonical_events_path = self.root / "canonical_events.jsonl"
@@ -238,6 +244,16 @@ class JsonFileRepository:
 
     def load_macro_events(self) -> list[MacroEvent]:
         return self._load_lines(self.macro_events_path, MacroEvent.from_dict)
+
+    def save_source_registry_entry(self, entry: SourceRegistryEntry) -> None:
+        self._append_unique(
+            self.source_registry_path,
+            entry.to_dict(),
+            identity_key="source_id",
+        )
+
+    def load_source_registry_entries(self) -> list[SourceRegistryEntry]:
+        return self._load_lines(self.source_registry_path, SourceRegistryEntry.from_dict)
 
     def save_source_document(self, document: SourceDocument) -> None:
         self._append_unique(

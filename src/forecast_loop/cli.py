@@ -43,6 +43,8 @@ from forecast_loop.research_dataset import build_research_dataset
 from forecast_loop.research_report import generate_research_report
 from forecast_loop.risk import evaluate_risk
 from forecast_loop.market_calendar import parse_date
+from forecast_loop.source_documents import import_source_documents
+from forecast_loop.source_registry import source_registry_payload
 from forecast_loop.stock_data import (
     import_stock_csv,
     market_calendar_payload,
@@ -256,6 +258,16 @@ def main(argv: list[str] | None = None) -> int:
     macro_calendar_cmd.add_argument("--event-type")
     macro_calendar_cmd.add_argument("--region")
 
+    import_source_documents_cmd = subparsers.add_parser("import-source-documents")
+    import_source_documents_cmd.add_argument("--storage-dir", required=True)
+    import_source_documents_cmd.add_argument("--input", required=True)
+    import_source_documents_cmd.add_argument("--source", required=True)
+    import_source_documents_cmd.add_argument("--imported-at")
+
+    source_registry_cmd = subparsers.add_parser("source-registry")
+    source_registry_cmd.add_argument("--storage-dir", required=True)
+    source_registry_cmd.add_argument("--format", choices=["json", "text"], default="json")
+
     build_research_dataset_cmd = subparsers.add_parser("build-research-dataset")
     build_research_dataset_cmd.add_argument("--storage-dir", required=True)
     build_research_dataset_cmd.add_argument("--symbol", default="BTC-USD")
@@ -353,6 +365,10 @@ def main(argv: list[str] | None = None) -> int:
             return _import_macro_events(args)
         if args.command == "macro-calendar":
             return _macro_calendar(args)
+        if args.command == "import-source-documents":
+            return _import_source_documents(args)
+        if args.command == "source-registry":
+            return _source_registry(args)
         if args.command == "build-research-dataset":
             return _build_research_dataset(args)
         if args.command == "research-report":
@@ -1162,6 +1178,29 @@ def _macro_calendar(args) -> int:
         region=args.region,
     )
     print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
+def _import_source_documents(args) -> int:
+    imported_at = _parse_datetime(args.imported_at) if args.imported_at else datetime.now(tz=UTC)
+    result = import_source_documents(
+        storage_dir=args.storage_dir,
+        input_path=args.input,
+        source_id=args.source,
+        imported_at=imported_at,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _source_registry(args) -> int:
+    result = source_registry_payload(storage_dir=args.storage_dir)
+    if args.format == "text":
+        for source in result.sources:
+            decision_status = "decision" if source.allowed_for_decision else "research-only"
+            print(f"{source.source_id}\t{source.source_type}\t{source.provider}\t{decision_status}")
+    else:
+        print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0
 
 

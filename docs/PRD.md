@@ -88,6 +88,9 @@ The PRD follows that decision:
   console pages now show the current strategy hypothesis, strategy rules, locked
   evidence gates, leaderboard state, paper-shadow attribution, and next
   autopilot research action before raw metadata.
+- PR11 adds Codex Governance Docs And Prompts: controller decision template,
+  worker handoff template, final reviewer prompt, Windows autopilot runbook, and
+  docs tests for required gates and role catalog alignment.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -533,6 +536,9 @@ V1 MVP should include:
   new entries, reduce risk, and max position
 - automation run log artifacts that record cycle steps, health checks,
   decisions, repair requests, and final run status
+- controller governance docs and prompt templates for controller decisions,
+  worker handoffs, final reviewer subagent requests, Windows execution gates,
+  and runtime/secret exclusion
 - health-check output
 - Codex repair request artifacts
 - minimal CLI

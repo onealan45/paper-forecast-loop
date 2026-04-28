@@ -26,6 +26,7 @@ from forecast_loop.execution_safety import evaluate_execution_safety_gate
 from forecast_loop.event_reliability import build_event_reliability
 from forecast_loop.experiment_registry import record_experiment_trial, register_strategy_card
 from forecast_loop.health import run_health_check
+from forecast_loop.locked_evaluation import evaluate_leaderboard_gate, lock_evaluation_protocol
 from forecast_loop.macro_events import import_macro_events, macro_calendar
 from forecast_loop.market_reaction import build_market_reactions
 from forecast_loop.maintenance import repair_storage
@@ -377,6 +378,38 @@ def main(argv: list[str] | None = None) -> int:
     experiment_trial_cmd.add_argument("--completed-at")
     experiment_trial_cmd.add_argument("--created-at")
 
+    lock_evaluation_cmd = subparsers.add_parser("lock-evaluation-protocol")
+    lock_evaluation_cmd.add_argument("--storage-dir", required=True)
+    lock_evaluation_cmd.add_argument("--strategy-card-id", required=True)
+    lock_evaluation_cmd.add_argument("--dataset-id", required=True)
+    lock_evaluation_cmd.add_argument("--symbol", required=True)
+    lock_evaluation_cmd.add_argument("--train-start", required=True)
+    lock_evaluation_cmd.add_argument("--train-end", required=True)
+    lock_evaluation_cmd.add_argument("--validation-start", required=True)
+    lock_evaluation_cmd.add_argument("--validation-end", required=True)
+    lock_evaluation_cmd.add_argument("--holdout-start", required=True)
+    lock_evaluation_cmd.add_argument("--holdout-end", required=True)
+    lock_evaluation_cmd.add_argument("--embargo-hours", type=int, default=24)
+    lock_evaluation_cmd.add_argument("--fee-bps", type=float, default=5.0)
+    lock_evaluation_cmd.add_argument("--slippage-bps", type=float, default=10.0)
+    lock_evaluation_cmd.add_argument("--max-turnover", type=float, default=5.0)
+    lock_evaluation_cmd.add_argument("--max-drawdown", type=float, default=0.10)
+    lock_evaluation_cmd.add_argument("--baseline-suite-version", default="m4b-v1")
+    lock_evaluation_cmd.add_argument("--locked-by", default="codex")
+    lock_evaluation_cmd.add_argument("--created-at")
+
+    leaderboard_gate_cmd = subparsers.add_parser("evaluate-leaderboard-gate")
+    leaderboard_gate_cmd.add_argument("--storage-dir", required=True)
+    leaderboard_gate_cmd.add_argument("--strategy-card-id", required=True)
+    leaderboard_gate_cmd.add_argument("--trial-id", required=True)
+    leaderboard_gate_cmd.add_argument("--split-manifest-id", required=True)
+    leaderboard_gate_cmd.add_argument("--cost-model-id", required=True)
+    leaderboard_gate_cmd.add_argument("--baseline-id", required=True)
+    leaderboard_gate_cmd.add_argument("--backtest-result-id", required=True)
+    leaderboard_gate_cmd.add_argument("--walk-forward-validation-id", required=True)
+    leaderboard_gate_cmd.add_argument("--event-edge-evaluation-id")
+    leaderboard_gate_cmd.add_argument("--created-at")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -459,6 +492,10 @@ def main(argv: list[str] | None = None) -> int:
             return _register_strategy_card(args)
         if args.command == "record-experiment-trial":
             return _record_experiment_trial(args)
+        if args.command == "lock-evaluation-protocol":
+            return _lock_evaluation_protocol(args)
+        if args.command == "evaluate-leaderboard-gate":
+            return _evaluate_leaderboard_gate(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -1439,6 +1476,66 @@ def _record_experiment_trial(args) -> int:
         completed_at=_parse_datetime(args.completed_at) if args.completed_at else None,
     )
     print(json.dumps({"experiment_trial": trial.to_dict()}, ensure_ascii=False))
+    return 0
+
+
+def _lock_evaluation_protocol(args) -> int:
+    created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
+    split, cost_model = lock_evaluation_protocol(
+        repository=JsonFileRepository(args.storage_dir),
+        created_at=created_at,
+        strategy_card_id=args.strategy_card_id,
+        dataset_id=args.dataset_id,
+        symbol=args.symbol.upper(),
+        train_start=_parse_datetime(args.train_start),
+        train_end=_parse_datetime(args.train_end),
+        validation_start=_parse_datetime(args.validation_start),
+        validation_end=_parse_datetime(args.validation_end),
+        holdout_start=_parse_datetime(args.holdout_start),
+        holdout_end=_parse_datetime(args.holdout_end),
+        embargo_hours=args.embargo_hours,
+        fee_bps=args.fee_bps,
+        slippage_bps=args.slippage_bps,
+        max_turnover=args.max_turnover,
+        max_drawdown=args.max_drawdown,
+        baseline_suite_version=args.baseline_suite_version,
+        locked_by=args.locked_by,
+    )
+    print(
+        json.dumps(
+            {
+                "split_manifest": split.to_dict(),
+                "cost_model_snapshot": cost_model.to_dict(),
+            },
+            ensure_ascii=False,
+        )
+    )
+    return 0
+
+
+def _evaluate_leaderboard_gate(args) -> int:
+    created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
+    result, entry = evaluate_leaderboard_gate(
+        repository=JsonFileRepository(args.storage_dir),
+        created_at=created_at,
+        strategy_card_id=args.strategy_card_id,
+        trial_id=args.trial_id,
+        split_manifest_id=args.split_manifest_id,
+        cost_model_id=args.cost_model_id,
+        baseline_id=args.baseline_id,
+        backtest_result_id=args.backtest_result_id,
+        walk_forward_validation_id=args.walk_forward_validation_id,
+        event_edge_evaluation_id=args.event_edge_evaluation_id,
+    )
+    print(
+        json.dumps(
+            {
+                "locked_evaluation_result": result.to_dict(),
+                "leaderboard_entry": entry.to_dict(),
+            },
+            ensure_ascii=False,
+        )
+    )
     return 0
 
 

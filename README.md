@@ -81,6 +81,9 @@ factory:
   blocked unless the latest event edge evaluation also passes.
 - PR6 adds versioned strategy cards, experiment budget snapshots, and an
   append-only experiment trial registry.
+- PR7 adds locked split manifests, cost model snapshots, locked evaluation
+  results, and leaderboard hard gates so `alpha_score` is impossible until
+  mandatory evidence gates pass.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, experiment registry, validation depth, leaderboard governance,
   paper-shadow learning, and self-evolving research skills.
@@ -146,6 +149,10 @@ This version intentionally includes:
     - `strategy_cards.jsonl`
     - `experiment_budgets.jsonl`
     - `experiment_trials.jsonl`
+    - `split_manifests.jsonl`
+    - `cost_model_snapshots.jsonl`
+    - `locked_evaluation_results.jsonl`
+    - `leaderboard_entries.jsonl`
 - CLI execution via:
   - `run-once`
   - `replay-range`
@@ -184,6 +191,8 @@ This version intentionally includes:
   - `walk-forward`
   - `register-strategy-card`
   - `record-experiment-trial`
+  - `lock-evaluation-protocol`
+  - `evaluate-leaderboard-gate`
 
 This version intentionally excludes:
 
@@ -590,6 +599,22 @@ PR6 adds the first Alpha Factory registry artifacts:
 This stage is a registry foundation. It does not rank strategies, unlock
 BUY/SELL, train models, or promote candidates. Those require later locked
 evaluation and leaderboard gates.
+
+### Locked Evaluation And Leaderboard Artifacts
+
+PR7 adds hard-gate artifacts for ranking strategy candidates:
+
+- `split_manifests.jsonl`: locked train / validation / holdout windows with
+  embargo metadata.
+- `cost_model_snapshots.jsonl`: fee, slippage, turnover, drawdown, and baseline
+  suite assumptions used by the gate.
+- `locked_evaluation_results.jsonl`: pass/fail hard-gate result for one
+  strategy trial.
+- `leaderboard_entries.jsonl`: rankable candidates and blocked candidates. A
+  blocked candidate has `rankable=false` and `alpha_score=null`.
+
+This stage does not implement CPCV/PBO/DSR/bootstrap statistics yet. It creates
+the fixed artifact contract that later statistical gates can extend.
 
 ### Repair Request Artifact
 
@@ -1053,6 +1078,22 @@ If the declared trial budget is exhausted, the command still writes an
 `ABORTED` trial with `failure_reason=trial_budget_exhausted`. The system should
 never silently drop failed or over-budget research attempts.
 
+Lock an evaluation protocol and cost model:
+
+```powershell
+python run_forecast_loop.py lock-evaluation-protocol --storage-dir .\paper_storage\manual-research --strategy-card-id strategy-card:example --dataset-id research-dataset:example --symbol BTC-USD --train-start 2026-01-01T00:00:00+00:00 --train-end 2026-02-01T00:00:00+00:00 --validation-start 2026-02-02T00:00:00+00:00 --validation-end 2026-03-01T00:00:00+00:00 --holdout-start 2026-03-02T00:00:00+00:00 --holdout-end 2026-04-01T00:00:00+00:00
+```
+
+Evaluate whether a strategy trial may enter the leaderboard:
+
+```powershell
+python run_forecast_loop.py evaluate-leaderboard-gate --storage-dir .\paper_storage\manual-research --strategy-card-id strategy-card:example --trial-id experiment-trial:example --split-manifest-id split-manifest:example --cost-model-id cost-model:example --baseline-id baseline:example --backtest-result-id backtest-result:example --walk-forward-validation-id walk-forward:example
+```
+
+`evaluate-leaderboard-gate` writes both `locked_evaluation_results.jsonl` and
+`leaderboard_entries.jsonl`. If any hard gate fails, the entry remains visible
+but not rankable.
+
 Generate a Markdown research report from existing artifacts:
 
 ```powershell
@@ -1138,5 +1179,5 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - research reports summarize existing artifacts only; they do not create new strategy gates
 - research quality gates now block BUY/SELL unless sample size, baseline edge,
   backtest, drawdown, and walk-forward evidence pass
-- strategy cards and experiment trials are now persisted, but leaderboard
-  ranking, locked holdout policy, and paper-shadow promotion remain deferred
+- PR7 leaderboard gates exist, but deeper CPCV/PBO/DSR/bootstrap statistics,
+  paper-shadow promotion, and strategy-visible UX remain deferred

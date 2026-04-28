@@ -17,6 +17,8 @@ from forecast_loop.models import (
     EquityCurvePoint,
     EventEdgeEvaluation,
     EventReliabilityCheck,
+    ExperimentBudget,
+    ExperimentTrial,
     EvaluationSummary,
     FeatureSnapshot,
     Forecast,
@@ -39,6 +41,7 @@ from forecast_loop.models import (
     SourceDocument,
     SourceIngestionRun,
     SourceRegistryEntry,
+    StrategyCard,
     StrategyDecision,
     WalkForwardValidation,
 )
@@ -158,6 +161,17 @@ def run_health_check(
             WalkForwardValidation.from_dict,
             findings,
         ),
+        "strategy_cards": _load_jsonl(storage_path / "strategy_cards.jsonl", StrategyCard.from_dict, findings),
+        "experiment_budgets": _load_jsonl(
+            storage_path / "experiment_budgets.jsonl",
+            ExperimentBudget.from_dict,
+            findings,
+        ),
+        "experiment_trials": _load_jsonl(
+            storage_path / "experiment_trials.jsonl",
+            ExperimentTrial.from_dict,
+            findings,
+        ),
     }
     forecasts: list[Forecast] = artifact_rows["forecasts"]
     scores: list[ForecastScore] = artifact_rows["scores"]
@@ -192,6 +206,9 @@ def run_health_check(
     backtest_runs: list[BacktestRun] = artifact_rows["backtest_runs"]
     backtest_results: list[BacktestResult] = artifact_rows["backtest_results"]
     walk_forward_validations: list[WalkForwardValidation] = artifact_rows["walk_forward_validations"]
+    strategy_cards: list[StrategyCard] = artifact_rows["strategy_cards"]
+    experiment_budgets: list[ExperimentBudget] = artifact_rows["experiment_budgets"]
+    experiment_trials: list[ExperimentTrial] = artifact_rows["experiment_trials"]
 
     _check_duplicate_ids(forecasts, "forecast_id", storage_path / "forecasts.jsonl", findings)
     _check_duplicate_ids(scores, "score_id", storage_path / "scores.jsonl", findings)
@@ -246,6 +263,9 @@ def run_health_check(
         storage_path / "walk_forward_validations.jsonl",
         findings,
     )
+    _check_duplicate_ids(strategy_cards, "card_id", storage_path / "strategy_cards.jsonl", findings)
+    _check_duplicate_ids(experiment_budgets, "budget_id", storage_path / "experiment_budgets.jsonl", findings)
+    _check_duplicate_ids(experiment_trials, "trial_id", storage_path / "experiment_trials.jsonl", findings)
 
     scoped_forecasts = [forecast for forecast in forecasts if forecast.symbol == symbol]
     latest_forecast = scoped_forecasts[-1] if scoped_forecasts else None
@@ -290,11 +310,15 @@ def run_health_check(
         canonical_events,
         event_reliability_checks,
         market_reaction_checks,
+        event_edge_evaluations,
         feature_snapshots,
         market_candles,
         backtest_runs,
         backtest_results,
         walk_forward_validations,
+        strategy_cards,
+        experiment_budgets,
+        experiment_trials,
         findings,
     )
     _check_m7_evidence_integrity(
@@ -574,11 +598,15 @@ def _check_links(
     canonical_events: list[CanonicalEvent],
     event_reliability_checks: list[EventReliabilityCheck],
     market_reaction_checks: list[MarketReactionCheck],
+    event_edge_evaluations: list[EventEdgeEvaluation],
     feature_snapshots: list[FeatureSnapshot],
     market_candles: list[MarketCandleRecord],
     backtest_runs: list[BacktestRun],
     backtest_results: list[BacktestResult],
     walk_forward_validations: list[WalkForwardValidation],
+    strategy_cards: list[StrategyCard],
+    experiment_budgets: list[ExperimentBudget],
+    experiment_trials: list[ExperimentTrial],
     findings: list[HealthFinding],
 ) -> None:
     forecast_ids = {forecast.forecast_id for forecast in forecasts}
@@ -591,6 +619,9 @@ def _check_links(
     candle_ids = {candle.candle_id for candle in market_candles}
     backtest_run_ids = {run.backtest_id for run in backtest_runs}
     backtest_result_ids = {result.result_id for result in backtest_results}
+    event_edge_evaluation_ids = {evaluation.evaluation_id for evaluation in event_edge_evaluations}
+    strategy_card_ids = {card.card_id for card in strategy_cards}
+    walk_forward_validation_ids = {validation.validation_id for validation in walk_forward_validations}
 
     for score in scores:
         if score.forecast_id not in forecast_ids:
@@ -822,6 +853,116 @@ def _check_links(
                 storage_path / "walk_forward_validations.jsonl",
                 validation.validation_id,
                 ", ".join(sorted(set(missing_results))),
+                findings,
+            )
+
+    for card in strategy_cards:
+        if card.parent_card_id and card.parent_card_id not in strategy_card_ids:
+            _add_link_finding(
+                "strategy_card_missing_parent",
+                storage_path / "strategy_cards.jsonl",
+                card.card_id,
+                card.parent_card_id,
+                findings,
+            )
+        missing_features = [
+            feature_snapshot_id
+            for feature_snapshot_id in card.feature_snapshot_ids
+            if feature_snapshot_id not in {snapshot.feature_snapshot_id for snapshot in feature_snapshots}
+        ]
+        missing_backtests = [result_id for result_id in card.backtest_result_ids if result_id not in backtest_result_ids]
+        missing_walk_forward = [
+            validation_id
+            for validation_id in card.walk_forward_validation_ids
+            if validation_id not in walk_forward_validation_ids
+        ]
+        missing_event_edges = [
+            evaluation_id
+            for evaluation_id in card.event_edge_evaluation_ids
+            if evaluation_id not in event_edge_evaluation_ids
+        ]
+        if missing_features:
+            _add_link_finding(
+                "strategy_card_missing_feature_snapshot",
+                storage_path / "strategy_cards.jsonl",
+                card.card_id,
+                ", ".join(missing_features),
+                findings,
+            )
+        if missing_backtests:
+            _add_link_finding(
+                "strategy_card_missing_backtest_result",
+                storage_path / "strategy_cards.jsonl",
+                card.card_id,
+                ", ".join(missing_backtests),
+                findings,
+            )
+        if missing_walk_forward:
+            _add_link_finding(
+                "strategy_card_missing_walk_forward_validation",
+                storage_path / "strategy_cards.jsonl",
+                card.card_id,
+                ", ".join(missing_walk_forward),
+                findings,
+            )
+        if missing_event_edges:
+            _add_link_finding(
+                "strategy_card_missing_event_edge_evaluation",
+                storage_path / "strategy_cards.jsonl",
+                card.card_id,
+                ", ".join(missing_event_edges),
+                findings,
+            )
+
+    for budget in experiment_budgets:
+        if budget.strategy_card_id not in strategy_card_ids:
+            _add_link_finding(
+                "experiment_budget_missing_strategy_card",
+                storage_path / "experiment_budgets.jsonl",
+                budget.budget_id,
+                budget.strategy_card_id,
+                findings,
+            )
+
+    for trial in experiment_trials:
+        if trial.strategy_card_id not in strategy_card_ids:
+            _add_link_finding(
+                "experiment_trial_missing_strategy_card",
+                storage_path / "experiment_trials.jsonl",
+                trial.trial_id,
+                trial.strategy_card_id,
+                findings,
+            )
+        if trial.dataset_id and trial.dataset_id not in {dataset.dataset_id for dataset in research_datasets}:
+            _add_link_finding(
+                "experiment_trial_missing_research_dataset",
+                storage_path / "experiment_trials.jsonl",
+                trial.trial_id,
+                trial.dataset_id,
+                findings,
+            )
+        if trial.backtest_result_id and trial.backtest_result_id not in backtest_result_ids:
+            _add_link_finding(
+                "experiment_trial_missing_backtest_result",
+                storage_path / "experiment_trials.jsonl",
+                trial.trial_id,
+                trial.backtest_result_id,
+                findings,
+            )
+        if trial.walk_forward_validation_id and trial.walk_forward_validation_id not in walk_forward_validation_ids:
+            _add_link_finding(
+                "experiment_trial_missing_walk_forward_validation",
+                storage_path / "experiment_trials.jsonl",
+                trial.trial_id,
+                trial.walk_forward_validation_id,
+                findings,
+            )
+        if trial.event_edge_evaluation_id and trial.event_edge_evaluation_id not in event_edge_evaluation_ids:
+            _add_link_finding(
+                "experiment_trial_missing_event_edge_evaluation",
+                storage_path / "experiment_trials.jsonl",
+                trial.trial_id,
+                trial.event_edge_evaluation_id,
                 findings,
             )
 

@@ -14,6 +14,8 @@ from forecast_loop.models import (
     CanonicalEvent,
     EventEdgeEvaluation,
     EventReliabilityCheck,
+    ExperimentBudget,
+    ExperimentTrial,
     ExecutionSafetyGate,
     EquityCurvePoint,
     EvaluationSummary,
@@ -37,6 +39,7 @@ from forecast_loop.models import (
     SourceDocument,
     SourceIngestionRun,
     SourceRegistryEntry,
+    StrategyCard,
     StrategyDecision,
     WalkForwardValidation,
 )
@@ -185,6 +188,18 @@ class ArtifactRepository(Protocol):
 
     def load_walk_forward_validations(self) -> list[WalkForwardValidation]: ...
 
+    def save_strategy_card(self, card: StrategyCard) -> None: ...
+
+    def load_strategy_cards(self) -> list[StrategyCard]: ...
+
+    def save_experiment_budget(self, budget: ExperimentBudget) -> None: ...
+
+    def load_experiment_budgets(self) -> list[ExperimentBudget]: ...
+
+    def save_experiment_trial(self, trial: ExperimentTrial) -> None: ...
+
+    def load_experiment_trials(self) -> list[ExperimentTrial]: ...
+
 
 class JsonFileRepository:
     def __init__(self, root: Path | str) -> None:
@@ -224,6 +239,9 @@ class JsonFileRepository:
         self.backtest_runs_path = self.root / "backtest_runs.jsonl"
         self.backtest_results_path = self.root / "backtest_results.jsonl"
         self.walk_forward_validations_path = self.root / "walk_forward_validations.jsonl"
+        self.strategy_cards_path = self.root / "strategy_cards.jsonl"
+        self.experiment_budgets_path = self.root / "experiment_budgets.jsonl"
+        self.experiment_trials_path = self.root / "experiment_trials.jsonl"
 
     def save_market_candle(self, candle: MarketCandleRecord) -> None:
         self._append_unique(
@@ -580,6 +598,36 @@ class JsonFileRepository:
 
     def load_walk_forward_validations(self) -> list[WalkForwardValidation]:
         return self._load_lines(self.walk_forward_validations_path, WalkForwardValidation.from_dict)
+
+    def save_strategy_card(self, card: StrategyCard) -> None:
+        self._append_unique(
+            self.strategy_cards_path,
+            card.to_dict(),
+            identity_key="card_id",
+        )
+
+    def load_strategy_cards(self) -> list[StrategyCard]:
+        return self._load_lines(self.strategy_cards_path, StrategyCard.from_dict)
+
+    def save_experiment_budget(self, budget: ExperimentBudget) -> None:
+        self._append_unique(
+            self.experiment_budgets_path,
+            budget.to_dict(),
+            identity_key="budget_id",
+        )
+
+    def load_experiment_budgets(self) -> list[ExperimentBudget]:
+        return self._load_lines(self.experiment_budgets_path, ExperimentBudget.from_dict)
+
+    def save_experiment_trial(self, trial: ExperimentTrial) -> None:
+        self._append_unique(
+            self.experiment_trials_path,
+            trial.to_dict(),
+            identity_key="trial_id",
+        )
+
+    def load_experiment_trials(self) -> list[ExperimentTrial]:
+        return self._load_lines(self.experiment_trials_path, ExperimentTrial.from_dict)
 
     def _append(self, path: Path, payload: dict) -> None:
         with path.open("a", encoding="utf-8") as handle:

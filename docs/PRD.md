@@ -66,11 +66,15 @@ The current master decision after M7A is recorded in
 [`docs/architecture/autonomous-alpha-factory-master-decision.md`](architecture/autonomous-alpha-factory-master-decision.md).
 The PRD follows that decision:
 
-- PR0 Reviewability And Formatting Gate comes before more strategy code.
+- PR0 Reviewability And Formatting Gate comes before more strategy code and is
+  complete.
 - M7A is only the evidence artifact foundation.
-- M7B-M7F must implement the Alpha Evidence Engine: source registry, source
-  document import, event reliability, market reaction / already-priced checks,
+- M7B-M7F implement the Alpha Evidence Engine: source registry, source document
+  import, event reliability, market reaction / already-priced checks,
   historical edge, and decision integration.
+- PR6 starts the Strategy Card and Experiment Registry layer: strategy cards,
+  trial budget snapshots, and append-only experiment trials including failed,
+  aborted, and invalid results.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard

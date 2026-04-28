@@ -24,6 +24,7 @@ from forecast_loop.evaluation import build_evaluation_summary
 from forecast_loop.event_edge import build_event_edge_evaluations
 from forecast_loop.execution_safety import evaluate_execution_safety_gate
 from forecast_loop.event_reliability import build_event_reliability
+from forecast_loop.experiment_registry import record_experiment_trial, register_strategy_card
 from forecast_loop.health import run_health_check
 from forecast_loop.macro_events import import_macro_events, macro_calendar
 from forecast_loop.market_reaction import build_market_reactions
@@ -329,6 +330,53 @@ def main(argv: list[str] | None = None) -> int:
     walk_forward_cmd.add_argument("--slippage-bps", type=float, default=10.0)
     walk_forward_cmd.add_argument("--moving-average-window", type=int, default=3)
 
+    strategy_card_cmd = subparsers.add_parser("register-strategy-card")
+    strategy_card_cmd.add_argument("--storage-dir", required=True)
+    strategy_card_cmd.add_argument("--name", required=True)
+    strategy_card_cmd.add_argument("--family", required=True)
+    strategy_card_cmd.add_argument("--version", default="v1")
+    strategy_card_cmd.add_argument("--status", choices=["DRAFT", "ACTIVE", "RETIRED", "QUARANTINED"], default="ACTIVE")
+    strategy_card_cmd.add_argument("--symbol", action="append", required=True)
+    strategy_card_cmd.add_argument("--hypothesis", required=True)
+    strategy_card_cmd.add_argument("--signal-description", required=True)
+    strategy_card_cmd.add_argument("--entry-rule", action="append", default=[])
+    strategy_card_cmd.add_argument("--exit-rule", action="append", default=[])
+    strategy_card_cmd.add_argument("--risk-rule", action="append", default=[])
+    strategy_card_cmd.add_argument("--parameter", action="append", default=[])
+    strategy_card_cmd.add_argument("--data-requirement", action="append", default=[])
+    strategy_card_cmd.add_argument("--feature-snapshot-id", action="append", default=[])
+    strategy_card_cmd.add_argument("--backtest-result-id", action="append", default=[])
+    strategy_card_cmd.add_argument("--walk-forward-validation-id", action="append", default=[])
+    strategy_card_cmd.add_argument("--event-edge-evaluation-id", action="append", default=[])
+    strategy_card_cmd.add_argument("--parent-card-id")
+    strategy_card_cmd.add_argument("--author", default="codex")
+    strategy_card_cmd.add_argument("--created-at")
+
+    experiment_trial_cmd = subparsers.add_parser("record-experiment-trial")
+    experiment_trial_cmd.add_argument("--storage-dir", required=True)
+    experiment_trial_cmd.add_argument("--strategy-card-id", required=True)
+    experiment_trial_cmd.add_argument("--trial-index", type=int, required=True)
+    experiment_trial_cmd.add_argument(
+        "--status",
+        choices=["PENDING", "RUNNING", "PASSED", "FAILED", "ABORTED", "INVALID"],
+        required=True,
+    )
+    experiment_trial_cmd.add_argument("--symbol", required=True)
+    experiment_trial_cmd.add_argument("--max-trials", type=int, required=True)
+    experiment_trial_cmd.add_argument("--seed", type=int)
+    experiment_trial_cmd.add_argument("--dataset-id")
+    experiment_trial_cmd.add_argument("--backtest-result-id")
+    experiment_trial_cmd.add_argument("--walk-forward-validation-id")
+    experiment_trial_cmd.add_argument("--event-edge-evaluation-id")
+    experiment_trial_cmd.add_argument("--prompt-hash")
+    experiment_trial_cmd.add_argument("--code-hash")
+    experiment_trial_cmd.add_argument("--parameter", action="append", default=[])
+    experiment_trial_cmd.add_argument("--metric", action="append", default=[])
+    experiment_trial_cmd.add_argument("--failure-reason")
+    experiment_trial_cmd.add_argument("--started-at")
+    experiment_trial_cmd.add_argument("--completed-at")
+    experiment_trial_cmd.add_argument("--created-at")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -407,6 +455,10 @@ def main(argv: list[str] | None = None) -> int:
             return _backtest(args)
         if args.command == "walk-forward":
             return _walk_forward(args)
+        if args.command == "register-strategy-card":
+            return _register_strategy_card(args)
+        if args.command == "record-experiment-trial":
+            return _record_experiment_trial(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -1334,6 +1386,62 @@ def _walk_forward(args) -> int:
     return 0
 
 
+def _register_strategy_card(args) -> int:
+    created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
+    repository = JsonFileRepository(args.storage_dir)
+    card = register_strategy_card(
+        repository=repository,
+        created_at=created_at,
+        strategy_name=args.name,
+        strategy_family=args.family,
+        version=args.version,
+        status=args.status,
+        symbols=[symbol.upper() for symbol in args.symbol],
+        hypothesis=args.hypothesis,
+        signal_description=args.signal_description,
+        entry_rules=args.entry_rule,
+        exit_rules=args.exit_rule,
+        risk_rules=args.risk_rule,
+        parameters=_parse_key_value_list(args.parameter),
+        data_requirements=args.data_requirement,
+        feature_snapshot_ids=args.feature_snapshot_id,
+        backtest_result_ids=args.backtest_result_id,
+        walk_forward_validation_ids=args.walk_forward_validation_id,
+        event_edge_evaluation_ids=args.event_edge_evaluation_id,
+        parent_card_id=args.parent_card_id,
+        author=args.author,
+    )
+    print(json.dumps({"strategy_card": card.to_dict()}, ensure_ascii=False))
+    return 0
+
+
+def _record_experiment_trial(args) -> int:
+    created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
+    trial = record_experiment_trial(
+        repository=JsonFileRepository(args.storage_dir),
+        created_at=created_at,
+        strategy_card_id=args.strategy_card_id,
+        trial_index=args.trial_index,
+        status=args.status,
+        symbol=args.symbol.upper(),
+        max_trials=args.max_trials,
+        seed=args.seed,
+        dataset_id=args.dataset_id,
+        backtest_result_id=args.backtest_result_id,
+        walk_forward_validation_id=args.walk_forward_validation_id,
+        event_edge_evaluation_id=args.event_edge_evaluation_id,
+        prompt_hash=args.prompt_hash,
+        code_hash=args.code_hash,
+        parameters=_parse_key_value_list(args.parameter),
+        metric_summary=_parse_key_value_list(args.metric),
+        failure_reason=args.failure_reason,
+        started_at=_parse_datetime(args.started_at) if args.started_at else None,
+        completed_at=_parse_datetime(args.completed_at) if args.completed_at else None,
+    )
+    print(json.dumps({"experiment_trial": trial.to_dict()}, ensure_ascii=False))
+    return 0
+
+
 def _write_last_run_meta(*, storage_dir: Path, now_utc: datetime, symbol: str, provider: str, result) -> None:
     storage_dir.mkdir(parents=True, exist_ok=True)
     meta_path = storage_dir / "last_run_meta.json"
@@ -1430,6 +1538,35 @@ def _parse_datetime(value: str) -> datetime:
             "for example 2026-04-21T12:00:00+00:00."
         )
     return parsed.astimezone(UTC)
+
+
+def _parse_key_value_list(items: list[str]) -> dict[str, object]:
+    parsed: dict[str, object] = {}
+    for item in items:
+        if "=" not in item:
+            raise ValueError(f"invalid KEY=VALUE item: {item}")
+        key, raw_value = item.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise ValueError(f"invalid KEY=VALUE item: {item}")
+        parsed[key] = _parse_scalar(raw_value.strip())
+    return parsed
+
+
+def _parse_scalar(value: str) -> object:
+    lowered = value.lower()
+    if lowered == "true":
+        return True
+    if lowered == "false":
+        return False
+    if lowered in {"none", "null"}:
+        return None
+    try:
+        if "." not in value:
+            return int(value)
+        return float(value)
+    except ValueError:
+        return value
 
 
 def _replay_storage_dir(

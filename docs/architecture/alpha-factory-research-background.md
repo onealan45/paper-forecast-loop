@@ -41,7 +41,7 @@ as the completed factory.
 | Health and repair | Detects artifact and runtime issues and can write repair requests. | Needs research-specific findings for provider distortion, experiment invalidation, and promotion quarantine. |
 | Storage | Has SQLite migration support and JSONL audit/export compatibility. | Needs stronger research snapshot metadata and larger dataset storage conventions. |
 | Data providers | Supports sample, CoinGecko, stored candles, and CSV stock fixtures. | Needs canonical primary/secondary provider comparison before serious promotion. |
-| Research evidence | Supports baselines, research datasets, backtests, reports, walk-forward, and research gates. | Needs strategy generation, self-evolving skills, locked split manifests, trial registry, CPCV-like paths, PBO, DSR, bootstrap, and parameter stability. |
+| Research evidence | Supports baselines, research datasets, backtests, reports, walk-forward, research gates, and the initial PR6 strategy-card / experiment-trial registry. | Needs strategy generation, self-evolving skills, locked split manifests, leaderboard gates, CPCV-like paths, PBO, DSR, bootstrap, and parameter stability. |
 | UI and operations | Shows read-only decisions, health, portfolio, risk, automation, and broker/sandbox state. | Needs concrete strategy visibility, candidate lifecycle, hypothesis changes, leaderboard, paper-shadow status, and quarantine visibility. |
 
 ## Core Direction
@@ -231,7 +231,8 @@ materially stronger in this order:
 | M7D | Market reaction | Already-priced / market reaction checks prevent stale or pre-priced events from creating directional evidence. |
 | M7E | Historical edge | Event families are evaluated for after-cost edge, sample sufficiency, adverse excursion, drawdown, and stability. |
 | M7F | Decision integration | Event-derived evidence can influence decisions only after source, reaction, edge, baseline, research, risk, and health gates pass. |
-| M8+ | Strategy factory, experiment registry, locked evaluation, paper-shadow learning, and strategy-visible UX | Strategies become versioned cards/skills, all trials are persisted, holdouts and trial budgets are locked, paper-shadow outcomes feed failure attribution, and UX exposes concrete strategy reasoning. |
+| PR6 | Strategy card and experiment registry | Strategies become versioned cards, trial budgets are recorded, and failed / aborted / invalid trials are persisted. |
+| M8+ | Locked evaluation, paper-shadow learning, and strategy-visible UX | Holdouts and leaderboard gates are locked, paper-shadow outcomes feed failure attribution, and UX exposes concrete strategy reasoning. |
 
 These stages should preserve the current execution boundary: no real orders and
 no real capital movement.

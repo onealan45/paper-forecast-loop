@@ -26,6 +26,29 @@ Install development dependencies:
 python -m pip install -e .[dev]
 ```
 
+## Reviewability And Formatting
+
+PR0 establishes a reviewability gate before additional Alpha Evidence Engine
+work. The current codebase has no pathological Python source line longer than
+1,000 characters, so this stage uses a guard test instead of broad behavior-free
+rewrites.
+
+Policy:
+
+- Keep source and test files readable in GitHub diffs.
+- Do not commit generated, minified, or one-line Python source unless it is
+  explicitly excluded by a documented generated-file exception.
+- Prefer small, behavior-preserving formatting diffs before adding strategy
+  logic.
+- Do not add runtime formatting dependencies. Dev-only formatters may be added
+  later if they are useful and do not change runtime dependencies.
+
+The guard is:
+
+```powershell
+python -m pytest tests\test_reviewability.py -q
+```
+
 Run the standard verification set:
 
 ```powershell

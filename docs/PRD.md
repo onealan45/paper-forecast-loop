@@ -81,6 +81,9 @@ The PRD follows that decision:
 - PR8 starts Paper-Shadow Outcome Learning: leaderboard entries can now receive
   simulated shadow-window outcomes with excess return, failure attribution, and
   promotion / retire / quarantine recommendations.
+- PR9 starts Research/Paper Autopilot Loop records: agendas and linked loop
+  runs make the agenda -> strategy -> evaluation -> decision -> outcome -> next
+  action chain inspectable.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard

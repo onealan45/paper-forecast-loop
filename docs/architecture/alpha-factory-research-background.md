@@ -41,7 +41,7 @@ as the completed factory.
 | Health and repair | Detects artifact and runtime issues and can write repair requests. | Needs research-specific findings for provider distortion, experiment invalidation, and promotion quarantine. |
 | Storage | Has SQLite migration support and JSONL audit/export compatibility. | Needs stronger research snapshot metadata and larger dataset storage conventions. |
 | Data providers | Supports sample, CoinGecko, stored candles, and CSV stock fixtures. | Needs canonical primary/secondary provider comparison before serious promotion. |
-| Research evidence | Supports baselines, research datasets, backtests, reports, walk-forward, research gates, PR6 strategy-card / experiment-trial registry, PR7 locked-evaluation / leaderboard hard-gate artifacts, and PR8 paper-shadow outcome learning. | Needs strategy generation, self-evolving skills, CPCV-like paths, PBO, DSR, bootstrap, and parameter stability. |
+| Research evidence | Supports baselines, research datasets, backtests, reports, walk-forward, research gates, PR6 strategy-card / experiment-trial registry, PR7 locked-evaluation / leaderboard hard-gate artifacts, PR8 paper-shadow outcome learning, and PR9 agenda/autopilot loop records. | Needs strategy generation, self-evolving skills, CPCV-like paths, PBO, DSR, bootstrap, and parameter stability. |
 | UI and operations | Shows read-only decisions, health, portfolio, risk, automation, and broker/sandbox state. | Needs concrete strategy visibility, candidate lifecycle, hypothesis changes, leaderboard, paper-shadow status, and quarantine visibility. |
 
 ## Core Direction
@@ -234,7 +234,8 @@ materially stronger in this order:
 | PR6 | Strategy card and experiment registry | Strategies become versioned cards, trial budgets are recorded, and failed / aborted / invalid trials are persisted. |
 | PR7 | Locked evaluation and leaderboard gates | Split manifests, cost models, locked evaluation results, and leaderboard entries exist; `alpha_score` is blocked until hard gates pass. |
 | PR8 | Paper-shadow outcome learning | Leaderboard candidates can record simulated shadow-window results, failure attribution, and promotion / retire / quarantine recommendations. |
-| M8+ | Autopilot loop and strategy-visible UX | Paper-shadow scheduling, strategy revision loops, deeper anti-overfit statistics, and UX expose concrete strategy reasoning. |
+| PR9 | Research / paper autopilot loop records | Research agendas and autopilot run artifacts link strategy, evaluation, decision, paper-shadow outcome, and next research action. |
+| M8+ | Strategy generation and strategy-visible UX | Paper-shadow scheduling, strategy revision workers, deeper anti-overfit statistics, and UX expose concrete strategy reasoning. |
 
 These stages should preserve the current execution boundary: no real orders and
 no real capital movement.

@@ -1,0 +1,692 @@
+from datetime import UTC, datetime, timedelta
+import json
+
+from forecast_loop.autopilot import create_research_agenda, record_research_autopilot_run
+from forecast_loop.cli import main
+from forecast_loop.health import run_health_check
+from forecast_loop.models import (
+    ExperimentTrial,
+    LeaderboardEntry,
+    LockedEvaluationResult,
+    PaperShadowOutcome,
+    ResearchAgenda,
+    ResearchAutopilotRun,
+    StrategyCard,
+    StrategyDecision,
+)
+from forecast_loop.sqlite_repository import SQLiteRepository, export_sqlite_to_jsonl, migrate_jsonl_to_sqlite
+from forecast_loop.storage import JsonFileRepository
+
+
+def _now() -> datetime:
+    return datetime(2026, 4, 28, 14, 0, tzinfo=UTC)
+
+
+def _strategy_card(now: datetime) -> StrategyCard:
+    return StrategyCard(
+        card_id="strategy-card:autopilot",
+        created_at=now,
+        strategy_name="BTC autopilot candidate",
+        strategy_family="trend_following",
+        version="v1",
+        status="ACTIVE",
+        symbols=["BTC-USD"],
+        hypothesis="Autopilot should link this candidate through shadow feedback.",
+        signal_description="Use locked leaderboard evidence.",
+        entry_rules=["Enter when hard gates pass."],
+        exit_rules=["Exit when shadow fails."],
+        risk_rules=["Quarantine on shadow failure."],
+        parameters={"fast_window": 3, "slow_window": 7},
+        data_requirements=["market_candles:BTC-USD:1h"],
+        feature_snapshot_ids=[],
+        backtest_result_ids=[],
+        walk_forward_validation_ids=[],
+        event_edge_evaluation_ids=[],
+        parent_card_id=None,
+        author="codex",
+        decision_basis="test",
+    )
+
+
+def _trial(now: datetime, card: StrategyCard) -> ExperimentTrial:
+    return ExperimentTrial(
+        trial_id="experiment-trial:autopilot",
+        created_at=now,
+        strategy_card_id=card.card_id,
+        trial_index=1,
+        status="PASSED",
+        symbol="BTC-USD",
+        seed=42,
+        dataset_id="research-dataset:autopilot",
+        backtest_result_id="backtest-result:autopilot",
+        walk_forward_validation_id="walk-forward:autopilot",
+        event_edge_evaluation_id=None,
+        prompt_hash="prompt-hash",
+        code_hash="code-hash",
+        parameters={"fast_window": 3, "slow_window": 7},
+        metric_summary={"excess_return": 0.04},
+        failure_reason=None,
+        started_at=now,
+        completed_at=now,
+        decision_basis="test",
+    )
+
+
+def _evaluation(now: datetime, card: StrategyCard, trial: ExperimentTrial, *, rankable: bool = True) -> LockedEvaluationResult:
+    return LockedEvaluationResult(
+        evaluation_id="locked-evaluation:autopilot",
+        created_at=now,
+        strategy_card_id=card.card_id,
+        trial_id=trial.trial_id,
+        split_manifest_id="split-manifest:autopilot",
+        cost_model_id="cost-model:autopilot",
+        baseline_id="baseline:autopilot",
+        backtest_result_id="backtest-result:autopilot",
+        walk_forward_validation_id="walk-forward:autopilot",
+        event_edge_evaluation_id=None,
+        passed=rankable,
+        rankable=rankable,
+        alpha_score=0.21 if rankable else None,
+        blocked_reasons=[] if rankable else ["baseline_edge_not_positive"],
+        gate_metrics={"model_edge": 0.11, "holdout_excess_return": 0.05},
+        decision_basis="test",
+    )
+
+
+def _leaderboard_entry(
+    now: datetime,
+    card: StrategyCard,
+    trial: ExperimentTrial,
+    evaluation: LockedEvaluationResult,
+    *,
+    rankable: bool = True,
+) -> LeaderboardEntry:
+    return LeaderboardEntry(
+        entry_id="leaderboard-entry:autopilot",
+        created_at=now,
+        strategy_card_id=card.card_id,
+        evaluation_id=evaluation.evaluation_id,
+        trial_id=trial.trial_id,
+        symbol="BTC-USD",
+        rankable=rankable,
+        alpha_score=0.21 if rankable else None,
+        promotion_stage="CANDIDATE" if rankable else "BLOCKED",
+        blocked_reasons=[] if rankable else ["baseline_edge_not_positive"],
+        leaderboard_rules_version="pr7-v1",
+        decision_basis="test",
+    )
+
+
+def _decision(now: datetime) -> StrategyDecision:
+    return StrategyDecision(
+        decision_id="decision:autopilot",
+        created_at=now,
+        symbol="BTC-USD",
+        horizon_hours=24,
+        action="BUY",
+        confidence=0.62,
+        evidence_grade="B",
+        risk_level="MEDIUM",
+        tradeable=True,
+        blocked_reason=None,
+        recommended_position_pct=0.10,
+        current_position_pct=0.0,
+        max_position_pct=0.15,
+        invalidation_conditions=["Shadow outcome fails."],
+        reason_summary="Candidate passed locked gates.",
+        forecast_ids=[],
+        score_ids=[],
+        review_ids=[],
+        baseline_ids=[],
+        decision_basis="test",
+    )
+
+
+def _shadow_outcome(
+    now: datetime,
+    entry: LeaderboardEntry,
+    *,
+    action: str = "PROMOTION_READY",
+) -> PaperShadowOutcome:
+    return PaperShadowOutcome(
+        outcome_id=f"paper-shadow-outcome:{action.lower()}",
+        created_at=now,
+        leaderboard_entry_id=entry.entry_id,
+        evaluation_id=entry.evaluation_id,
+        strategy_card_id=entry.strategy_card_id,
+        trial_id=entry.trial_id,
+        symbol=entry.symbol,
+        window_start=now,
+        window_end=now + timedelta(hours=24),
+        observed_return=0.05 if action == "PROMOTION_READY" else -0.02,
+        benchmark_return=0.01,
+        excess_return_after_costs=0.04 if action == "PROMOTION_READY" else -0.03,
+        max_adverse_excursion=0.02,
+        turnover=1.0,
+        outcome_grade="PASS" if action == "PROMOTION_READY" else "FAIL",
+        failure_attributions=[] if action == "PROMOTION_READY" else ["negative_excess_return"],
+        recommended_promotion_stage="PAPER_SHADOW_PASSED" if action == "PROMOTION_READY" else "PAPER_SHADOW_FAILED",
+        recommended_strategy_action=action,
+        blocked_reasons=[],
+        notes=[],
+        decision_basis="test",
+    )
+
+
+def _seed_repository(tmp_path, *, rankable: bool = True, shadow_action: str = "PROMOTION_READY"):
+    now = _now()
+    repository = JsonFileRepository(tmp_path)
+    card = _strategy_card(now)
+    trial = _trial(now, card)
+    evaluation = _evaluation(now, card, trial, rankable=rankable)
+    entry = _leaderboard_entry(now, card, trial, evaluation, rankable=rankable)
+    decision = _decision(now)
+    outcome = _shadow_outcome(now, entry, action=shadow_action)
+    repository.save_strategy_card(card)
+    repository.save_experiment_trial(trial)
+    repository.save_locked_evaluation_result(evaluation)
+    repository.save_leaderboard_entry(entry)
+    repository.save_strategy_decision(decision)
+    repository.save_paper_shadow_outcome(outcome)
+    return repository, card, trial, evaluation, entry, decision, outcome
+
+
+def test_json_repository_round_trips_research_autopilot_artifacts(tmp_path):
+    repository, card, _trial, _evaluation, _entry, _decision, _outcome = _seed_repository(tmp_path)
+    agenda = ResearchAgenda(
+        agenda_id="research-agenda:roundtrip",
+        created_at=_now(),
+        symbol="BTC-USD",
+        title="Autopilot trend candidate",
+        hypothesis="Trend continuation should survive shadow validation.",
+        priority="HIGH",
+        status="OPEN",
+        target_strategy_family="trend_following",
+        strategy_card_ids=[card.card_id],
+        expected_artifacts=["strategy_card", "locked_evaluation", "paper_shadow_outcome"],
+        acceptance_criteria=["All hard gates pass."],
+        blocked_actions=["real_order_submission"],
+        decision_basis="test",
+    )
+    run = ResearchAutopilotRun(
+        run_id="research-autopilot-run:roundtrip",
+        created_at=_now(),
+        symbol="BTC-USD",
+        agenda_id=agenda.agenda_id,
+        strategy_card_id=card.card_id,
+        experiment_trial_id="experiment-trial:autopilot",
+        locked_evaluation_id="locked-evaluation:autopilot",
+        leaderboard_entry_id="leaderboard-entry:autopilot",
+        strategy_decision_id="decision:autopilot",
+        paper_shadow_outcome_id="paper-shadow-outcome:promotion_ready",
+        steps=[{"name": "agenda", "status": "completed", "artifact_id": agenda.agenda_id}],
+        loop_status="READY_FOR_OPERATOR_REVIEW",
+        next_research_action="OPERATOR_REVIEW_FOR_PROMOTION",
+        blocked_reasons=[],
+        decision_basis="test",
+    )
+
+    repository.save_research_agenda(agenda)
+    repository.save_research_autopilot_run(run)
+    repository.save_research_agenda(agenda)
+    repository.save_research_autopilot_run(run)
+
+    assert repository.load_research_agendas() == [agenda]
+    assert repository.load_research_autopilot_runs() == [run]
+
+
+def test_research_autopilot_promotion_ready_outcome(tmp_path):
+    repository, card, trial, evaluation, entry, decision, outcome = _seed_repository(tmp_path)
+    agenda = create_research_agenda(
+        repository=repository,
+        created_at=_now(),
+        symbol="BTC-USD",
+        title="Autopilot trend candidate",
+        hypothesis="Trend continuation should survive shadow validation.",
+        strategy_family="trend_following",
+        strategy_card_ids=[card.card_id],
+    )
+
+    run = record_research_autopilot_run(
+        repository=repository,
+        created_at=_now(),
+        agenda_id=agenda.agenda_id,
+        strategy_card_id=card.card_id,
+        experiment_trial_id=trial.trial_id,
+        locked_evaluation_id=evaluation.evaluation_id,
+        leaderboard_entry_id=entry.entry_id,
+        strategy_decision_id=decision.decision_id,
+        paper_shadow_outcome_id=outcome.outcome_id,
+    )
+
+    assert run.loop_status == "READY_FOR_OPERATOR_REVIEW"
+    assert run.next_research_action == "OPERATOR_REVIEW_FOR_PROMOTION"
+    assert run.blocked_reasons == []
+    assert [step["name"] for step in run.steps] == [
+        "agenda",
+        "strategy_card",
+        "experiment_trial",
+        "locked_evaluation",
+        "leaderboard",
+        "paper_decision",
+        "paper_shadow_outcome",
+        "next_research_action",
+    ]
+
+
+def test_research_autopilot_blocks_unrankable_chain(tmp_path):
+    repository, card, trial, evaluation, entry, decision, outcome = _seed_repository(tmp_path, rankable=False)
+    agenda = create_research_agenda(
+        repository=repository,
+        created_at=_now(),
+        symbol="BTC-USD",
+        title="Blocked candidate",
+        hypothesis="Blocked candidate must not proceed.",
+        strategy_family="trend_following",
+        strategy_card_ids=[card.card_id],
+    )
+
+    run = record_research_autopilot_run(
+        repository=repository,
+        created_at=_now(),
+        agenda_id=agenda.agenda_id,
+        strategy_card_id=card.card_id,
+        experiment_trial_id=trial.trial_id,
+        locked_evaluation_id=evaluation.evaluation_id,
+        leaderboard_entry_id=entry.entry_id,
+        strategy_decision_id=decision.decision_id,
+        paper_shadow_outcome_id=outcome.outcome_id,
+    )
+
+    assert run.loop_status == "BLOCKED"
+    assert run.next_research_action == "REPAIR_EVIDENCE_CHAIN"
+    assert "locked_evaluation_not_rankable" in run.blocked_reasons
+    assert "leaderboard_entry_not_rankable" in run.blocked_reasons
+
+
+def test_research_autopilot_blocks_mismatched_evidence_chain(tmp_path):
+    repository, card, trial, evaluation, entry, decision, outcome = _seed_repository(tmp_path)
+    other_card = _strategy_card(_now())
+    other_card.card_id = "strategy-card:other"
+    other_trial = _trial(_now(), other_card)
+    other_trial.trial_id = "experiment-trial:other"
+    other_trial.strategy_card_id = other_card.card_id
+    other_evaluation = _evaluation(_now(), other_card, other_trial)
+    other_evaluation.evaluation_id = "locked-evaluation:other"
+    other_evaluation.strategy_card_id = other_card.card_id
+    other_evaluation.trial_id = other_trial.trial_id
+    other_entry = _leaderboard_entry(_now(), other_card, other_trial, other_evaluation)
+    other_entry.entry_id = "leaderboard-entry:other"
+    other_entry.strategy_card_id = other_card.card_id
+    other_entry.trial_id = other_trial.trial_id
+    other_entry.evaluation_id = other_evaluation.evaluation_id
+    repository.save_strategy_card(other_card)
+    repository.save_experiment_trial(other_trial)
+    repository.save_locked_evaluation_result(other_evaluation)
+    repository.save_leaderboard_entry(other_entry)
+    agenda = create_research_agenda(
+        repository=repository,
+        created_at=_now(),
+        symbol="BTC-USD",
+        title="Mixed chain candidate",
+        hypothesis="Mixed evidence must not pass.",
+        strategy_family="trend_following",
+        strategy_card_ids=[card.card_id],
+    )
+
+    run = record_research_autopilot_run(
+        repository=repository,
+        created_at=_now(),
+        agenda_id=agenda.agenda_id,
+        strategy_card_id=card.card_id,
+        experiment_trial_id=trial.trial_id,
+        locked_evaluation_id=other_evaluation.evaluation_id,
+        leaderboard_entry_id=other_entry.entry_id,
+        strategy_decision_id=decision.decision_id,
+        paper_shadow_outcome_id=outcome.outcome_id,
+    )
+
+    assert run.loop_status == "BLOCKED"
+    assert run.next_research_action == "REPAIR_EVIDENCE_CHAIN"
+    assert "locked_evaluation_strategy_card_mismatch" in run.blocked_reasons
+    assert "locked_evaluation_trial_mismatch" in run.blocked_reasons
+    assert "leaderboard_entry_strategy_card_mismatch" in run.blocked_reasons
+    assert "leaderboard_entry_trial_mismatch" in run.blocked_reasons
+    assert "paper_shadow_outcome_leaderboard_mismatch" in run.blocked_reasons
+
+
+def test_research_autopilot_requires_paper_decision_for_ready_state(tmp_path):
+    repository, card, trial, evaluation, entry, _decision, outcome = _seed_repository(tmp_path)
+    agenda = create_research_agenda(
+        repository=repository,
+        created_at=_now(),
+        symbol="BTC-USD",
+        title="Missing decision candidate",
+        hypothesis="Promotion needs paper decision evidence.",
+        strategy_family="trend_following",
+        strategy_card_ids=[card.card_id],
+    )
+
+    run = record_research_autopilot_run(
+        repository=repository,
+        created_at=_now(),
+        agenda_id=agenda.agenda_id,
+        strategy_card_id=card.card_id,
+        experiment_trial_id=trial.trial_id,
+        locked_evaluation_id=evaluation.evaluation_id,
+        leaderboard_entry_id=entry.entry_id,
+        strategy_decision_id=None,
+        paper_shadow_outcome_id=outcome.outcome_id,
+    )
+
+    assert run.loop_status == "BLOCKED"
+    assert run.next_research_action == "REPAIR_EVIDENCE_CHAIN"
+    assert "strategy_decision_missing" in run.blocked_reasons
+
+
+def test_research_autopilot_blocks_bad_paper_decision_state(tmp_path):
+    repository, card, trial, evaluation, entry, decision, outcome = _seed_repository(tmp_path)
+    decision.symbol = "ETH-USD"
+    decision.action = "STOP_NEW_ENTRIES"
+    decision.tradeable = False
+    decision.blocked_reason = "health_check_repair_required"
+    (tmp_path / "strategy_decisions.jsonl").write_text(
+        json.dumps(decision.to_dict()) + "\n",
+        encoding="utf-8",
+    )
+    agenda = create_research_agenda(
+        repository=repository,
+        created_at=_now(),
+        symbol="BTC-USD",
+        title="Blocked decision candidate",
+        hypothesis="Blocked or wrong-symbol decisions must not promote.",
+        strategy_family="trend_following",
+        strategy_card_ids=[card.card_id],
+    )
+
+    run = record_research_autopilot_run(
+        repository=repository,
+        created_at=_now(),
+        agenda_id=agenda.agenda_id,
+        strategy_card_id=card.card_id,
+        experiment_trial_id=trial.trial_id,
+        locked_evaluation_id=evaluation.evaluation_id,
+        leaderboard_entry_id=entry.entry_id,
+        strategy_decision_id=decision.decision_id,
+        paper_shadow_outcome_id=outcome.outcome_id,
+    )
+
+    assert run.loop_status == "BLOCKED"
+    assert run.next_research_action == "REPAIR_EVIDENCE_CHAIN"
+    assert "strategy_decision_symbol_mismatch" in run.blocked_reasons
+    assert "strategy_decision_not_tradeable" in run.blocked_reasons
+    assert "strategy_decision_fail_closed_action" in run.blocked_reasons
+    assert "strategy_decision_blocked" in run.blocked_reasons
+
+
+def test_research_autopilot_retire_outcome_requires_revision(tmp_path):
+    repository, card, trial, evaluation, entry, decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    agenda = create_research_agenda(
+        repository=repository,
+        created_at=_now(),
+        symbol="BTC-USD",
+        title="Retire candidate",
+        hypothesis="Retired candidates should create revision work.",
+        strategy_family="trend_following",
+        strategy_card_ids=[card.card_id],
+    )
+
+    run = record_research_autopilot_run(
+        repository=repository,
+        created_at=_now(),
+        agenda_id=agenda.agenda_id,
+        strategy_card_id=card.card_id,
+        experiment_trial_id=trial.trial_id,
+        locked_evaluation_id=evaluation.evaluation_id,
+        leaderboard_entry_id=entry.entry_id,
+        strategy_decision_id=decision.decision_id,
+        paper_shadow_outcome_id=outcome.outcome_id,
+    )
+
+    assert run.loop_status == "REVISION_REQUIRED"
+    assert run.next_research_action == "CREATE_REVISION_AGENDA"
+    assert "negative_excess_return" in run.blocked_reasons
+
+
+def test_cli_creates_research_agenda_and_autopilot_run(tmp_path, capsys):
+    _repository, card, trial, evaluation, entry, decision, outcome = _seed_repository(tmp_path)
+
+    assert main(
+        [
+            "create-research-agenda",
+            "--storage-dir",
+            str(tmp_path),
+            "--symbol",
+            "BTC-USD",
+            "--title",
+            "Autopilot trend candidate",
+            "--hypothesis",
+            "Trend continuation should survive shadow validation.",
+            "--strategy-family",
+            "trend_following",
+            "--strategy-card-id",
+            card.card_id,
+            "--created-at",
+            "2026-04-28T14:00:00+00:00",
+        ]
+    ) == 0
+    agenda_payload = json.loads(capsys.readouterr().out)
+    agenda_id = agenda_payload["research_agenda"]["agenda_id"]
+
+    assert main(
+        [
+            "record-research-autopilot-run",
+            "--storage-dir",
+            str(tmp_path),
+            "--agenda-id",
+            agenda_id,
+            "--strategy-card-id",
+            card.card_id,
+            "--experiment-trial-id",
+            trial.trial_id,
+            "--locked-evaluation-id",
+            evaluation.evaluation_id,
+            "--leaderboard-entry-id",
+            entry.entry_id,
+            "--strategy-decision-id",
+            decision.decision_id,
+            "--paper-shadow-outcome-id",
+            outcome.outcome_id,
+            "--created-at",
+            "2026-04-28T14:00:00+00:00",
+        ]
+    ) == 0
+    run_payload = json.loads(capsys.readouterr().out)
+
+    assert run_payload["research_autopilot_run"]["loop_status"] == "READY_FOR_OPERATOR_REVIEW"
+
+
+def test_health_check_flags_research_autopilot_link_errors(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    agenda = ResearchAgenda(
+        agenda_id="research-agenda:broken",
+        created_at=_now(),
+        symbol="BTC-USD",
+        title="Broken agenda",
+        hypothesis="Broken links should be visible.",
+        priority="HIGH",
+        status="OPEN",
+        target_strategy_family="trend_following",
+        strategy_card_ids=["strategy-card:missing"],
+        expected_artifacts=["strategy_card"],
+        acceptance_criteria=["Links exist."],
+        blocked_actions=["real_order_submission"],
+        decision_basis="test",
+    )
+    run = ResearchAutopilotRun(
+        run_id="research-autopilot-run:broken",
+        created_at=_now(),
+        symbol="BTC-USD",
+        agenda_id=agenda.agenda_id,
+        strategy_card_id="strategy-card:missing",
+        experiment_trial_id="experiment-trial:missing",
+        locked_evaluation_id="locked-evaluation:missing",
+        leaderboard_entry_id="leaderboard-entry:missing",
+        strategy_decision_id="decision:missing",
+        paper_shadow_outcome_id="paper-shadow-outcome:missing",
+        steps=[],
+        loop_status="BLOCKED",
+        next_research_action="REPAIR_EVIDENCE_CHAIN",
+        blocked_reasons=["test"],
+        decision_basis="test",
+    )
+    repository.save_research_agenda(agenda)
+    repository.save_research_autopilot_run(run)
+
+    health = run_health_check(storage_dir=tmp_path, symbol="BTC-USD", now=_now(), create_repair_request=False)
+    codes = {finding.code for finding in health.findings}
+
+    assert "research_agenda_missing_strategy_card" in codes
+    assert "research_autopilot_run_missing_strategy_card" in codes
+    assert "research_autopilot_run_missing_experiment_trial" in codes
+    assert "research_autopilot_run_missing_locked_evaluation" in codes
+    assert "research_autopilot_run_missing_leaderboard_entry" in codes
+    assert "research_autopilot_run_missing_strategy_decision" in codes
+    assert "research_autopilot_run_missing_paper_shadow_outcome" in codes
+
+
+def test_health_check_flags_research_autopilot_mismatched_chain(tmp_path):
+    repository, card, trial, evaluation, entry, decision, outcome = _seed_repository(tmp_path)
+    other_card = _strategy_card(_now())
+    other_card.card_id = "strategy-card:other"
+    other_trial = _trial(_now(), other_card)
+    other_trial.trial_id = "experiment-trial:other"
+    other_trial.strategy_card_id = other_card.card_id
+    other_evaluation = _evaluation(_now(), other_card, other_trial)
+    other_evaluation.evaluation_id = "locked-evaluation:other"
+    other_evaluation.strategy_card_id = other_card.card_id
+    other_evaluation.trial_id = other_trial.trial_id
+    repository.save_strategy_card(other_card)
+    repository.save_experiment_trial(other_trial)
+    repository.save_locked_evaluation_result(other_evaluation)
+    agenda = create_research_agenda(
+        repository=repository,
+        created_at=_now(),
+        symbol="BTC-USD",
+        title="Mixed chain health",
+        hypothesis="Health must catch mixed chain.",
+        strategy_family="trend_following",
+        strategy_card_ids=[card.card_id],
+    )
+    run = ResearchAutopilotRun(
+        run_id="research-autopilot-run:mismatch",
+        created_at=_now(),
+        symbol="BTC-USD",
+        agenda_id=agenda.agenda_id,
+        strategy_card_id=card.card_id,
+        experiment_trial_id=trial.trial_id,
+        locked_evaluation_id=other_evaluation.evaluation_id,
+        leaderboard_entry_id=entry.entry_id,
+        strategy_decision_id=decision.decision_id,
+        paper_shadow_outcome_id=outcome.outcome_id,
+        steps=[],
+        loop_status="READY_FOR_OPERATOR_REVIEW",
+        next_research_action="OPERATOR_REVIEW_FOR_PROMOTION",
+        blocked_reasons=[],
+        decision_basis="test",
+    )
+    repository.save_research_autopilot_run(run)
+
+    health = run_health_check(storage_dir=tmp_path, symbol="BTC-USD", now=_now(), create_repair_request=False)
+    codes = {finding.code for finding in health.findings}
+
+    assert "research_autopilot_run_locked_evaluation_strategy_card_mismatch" in codes
+    assert "research_autopilot_run_locked_evaluation_trial_mismatch" in codes
+    assert "research_autopilot_run_leaderboard_evaluation_mismatch" in codes
+
+
+def test_health_check_flags_research_autopilot_bad_decision_state(tmp_path):
+    repository, card, trial, evaluation, entry, decision, outcome = _seed_repository(tmp_path)
+    decision.symbol = "ETH-USD"
+    decision.action = "STOP_NEW_ENTRIES"
+    decision.tradeable = False
+    decision.blocked_reason = "health_check_repair_required"
+    (tmp_path / "strategy_decisions.jsonl").write_text(
+        json.dumps(decision.to_dict()) + "\n",
+        encoding="utf-8",
+    )
+    agenda = create_research_agenda(
+        repository=repository,
+        created_at=_now(),
+        symbol="BTC-USD",
+        title="Bad decision health",
+        hypothesis="Health should catch bad decisions.",
+        strategy_family="trend_following",
+        strategy_card_ids=[card.card_id],
+    )
+    run = ResearchAutopilotRun(
+        run_id="research-autopilot-run:bad-decision",
+        created_at=_now(),
+        symbol="BTC-USD",
+        agenda_id=agenda.agenda_id,
+        strategy_card_id=card.card_id,
+        experiment_trial_id=trial.trial_id,
+        locked_evaluation_id=evaluation.evaluation_id,
+        leaderboard_entry_id=entry.entry_id,
+        strategy_decision_id=decision.decision_id,
+        paper_shadow_outcome_id=outcome.outcome_id,
+        steps=[],
+        loop_status="READY_FOR_OPERATOR_REVIEW",
+        next_research_action="OPERATOR_REVIEW_FOR_PROMOTION",
+        blocked_reasons=[],
+        decision_basis="test",
+    )
+    repository.save_research_autopilot_run(run)
+
+    health = run_health_check(storage_dir=tmp_path, symbol="BTC-USD", now=_now(), create_repair_request=False)
+    codes = {finding.code for finding in health.findings}
+
+    assert "research_autopilot_run_strategy_decision_symbol_mismatch" in codes
+    assert "research_autopilot_run_strategy_decision_not_tradeable" in codes
+    assert "research_autopilot_run_strategy_decision_fail_closed" in codes
+    assert "research_autopilot_run_strategy_decision_blocked" in codes
+
+
+def test_sqlite_repository_preserves_research_autopilot_artifacts(tmp_path):
+    repository, card, trial, evaluation, entry, decision, outcome = _seed_repository(tmp_path)
+    agenda = create_research_agenda(
+        repository=repository,
+        created_at=_now(),
+        symbol="BTC-USD",
+        title="Autopilot trend candidate",
+        hypothesis="Trend continuation should survive shadow validation.",
+        strategy_family="trend_following",
+        strategy_card_ids=[card.card_id],
+    )
+    run = record_research_autopilot_run(
+        repository=repository,
+        created_at=_now(),
+        agenda_id=agenda.agenda_id,
+        strategy_card_id=card.card_id,
+        experiment_trial_id=trial.trial_id,
+        locked_evaluation_id=evaluation.evaluation_id,
+        leaderboard_entry_id=entry.entry_id,
+        strategy_decision_id=decision.decision_id,
+        paper_shadow_outcome_id=outcome.outcome_id,
+    )
+    sqlite_repo = SQLiteRepository(tmp_path)
+
+    migrate_jsonl_to_sqlite(storage_dir=tmp_path, db_path=sqlite_repo.db_path)
+
+    assert sqlite_repo.load_research_agendas() == [agenda]
+    assert sqlite_repo.load_research_autopilot_runs() == [run]
+
+    export_dir = tmp_path / "exported"
+    export_sqlite_to_jsonl(storage_dir=tmp_path, output_dir=export_dir, db_path=sqlite_repo.db_path)
+    exported = JsonFileRepository(export_dir)
+
+    assert exported.load_research_agendas() == [agenda]
+    assert exported.load_research_autopilot_runs() == [run]

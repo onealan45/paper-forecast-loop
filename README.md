@@ -87,9 +87,12 @@ factory:
 - PR8 adds paper-shadow outcome artifacts so leaderboard candidates can be
   marked promotion-ready, revised, retired, or quarantined after simulated
   shadow results.
+- PR9 adds research agenda and autopilot run artifacts so the chain from
+  agenda to strategy, evaluation, decision, shadow outcome, and next research
+  action is visible as one loop record.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, experiment registry, validation depth, leaderboard governance,
-  deeper paper-shadow learning, and self-evolving research skills.
+  deeper autopilot learning, and self-evolving research skills.
 - Vibe-Trading is a useful reference for skills, swarm workflows, MCP tools,
   agent memory, backtest breadth, data loaders, and UX surfaces.
 - CoinGecko remains useful for prototype and cross-check work, but serious
@@ -157,6 +160,8 @@ This version intentionally includes:
     - `locked_evaluation_results.jsonl`
     - `leaderboard_entries.jsonl`
     - `paper_shadow_outcomes.jsonl`
+    - `research_agendas.jsonl`
+    - `research_autopilot_runs.jsonl`
 - CLI execution via:
   - `run-once`
   - `replay-range`
@@ -198,6 +203,8 @@ This version intentionally includes:
   - `lock-evaluation-protocol`
   - `evaluate-leaderboard-gate`
   - `record-paper-shadow-outcome`
+  - `create-research-agenda`
+  - `record-research-autopilot-run`
 
 This version intentionally excludes:
 
@@ -633,6 +640,20 @@ return, max adverse excursion, turnover, failure attribution labels, an outcome
 grade, and a recommendation such as `PROMOTION_READY`, `RETIRE`, or
 `QUARANTINE`. This does not automatically mutate strategy cards or submit
 orders; it gives later research/autopilot stages auditable feedback.
+
+### Research Autopilot Loop Artifacts
+
+PR9 adds the first loop-level research artifacts:
+
+- `research_agendas.jsonl`: agenda, hypothesis, target strategy family,
+  expected artifacts, acceptance criteria, and blocked actions.
+- `research_autopilot_runs.jsonl`: one linked loop record from agenda to
+  strategy card, experiment trial, locked evaluation, leaderboard entry,
+  strategy decision, paper-shadow outcome, and next research action.
+
+This is an audit loop, not a scheduler. It does not generate strategies by
+itself, mutate strategy cards, or place orders. It makes the learning cycle
+inspectable so later stages can add real strategy revision workers.
 
 ### Repair Request Artifact
 
@@ -1123,6 +1144,22 @@ after-cost excess return can become `PROMOTION_READY`; negative or high-risk
 outcomes recommend `RETIRE`, `REVISE`, or `QUARANTINE` without changing strategy
 state automatically.
 
+Create a research agenda:
+
+```powershell
+python run_forecast_loop.py create-research-agenda --storage-dir .\paper_storage\manual-research --symbol BTC-USD --title "Trend candidate" --hypothesis "Trend continuation should survive shadow validation." --strategy-family trend_following --strategy-card-id strategy-card:example
+```
+
+Record a research autopilot loop from existing artifacts:
+
+```powershell
+python run_forecast_loop.py record-research-autopilot-run --storage-dir .\paper_storage\manual-research --agenda-id research-agenda:example --strategy-card-id strategy-card:example --experiment-trial-id experiment-trial:example --locked-evaluation-id locked-evaluation:example --leaderboard-entry-id leaderboard-entry:example --strategy-decision-id decision:example --paper-shadow-outcome-id paper-shadow-outcome:example
+```
+
+`record-research-autopilot-run` writes `research_autopilot_runs.jsonl`. Its
+`next_research_action` is derived from locked evaluation, leaderboard, decision,
+and paper-shadow outcome state.
+
 Generate a Markdown research report from existing artifacts:
 
 ```powershell
@@ -1208,6 +1245,6 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - research reports summarize existing artifacts only; they do not create new strategy gates
 - research quality gates now block BUY/SELL unless sample size, baseline edge,
   backtest, drawdown, and walk-forward evidence pass
-- PR8 paper-shadow outcomes exist, but full paper-shadow scheduling, automatic
-  strategy mutation, deeper CPCV/PBO/DSR/bootstrap statistics, and
-  strategy-visible UX remain deferred
+- PR9 research autopilot run records exist, but full scheduling, automatic
+  strategy mutation, autonomous strategy generation, deeper
+  CPCV/PBO/DSR/bootstrap statistics, and strategy-visible UX remain deferred

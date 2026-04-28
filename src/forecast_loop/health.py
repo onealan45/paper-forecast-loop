@@ -39,6 +39,8 @@ from forecast_loop.models import (
     Proposal,
     ProviderRun,
     RepairRequest,
+    ResearchAgenda,
+    ResearchAutopilotRun,
     ResearchDataset,
     RiskSnapshot,
     Review,
@@ -198,6 +200,12 @@ def run_health_check(
             PaperShadowOutcome.from_dict,
             findings,
         ),
+        "research_agendas": _load_jsonl(storage_path / "research_agendas.jsonl", ResearchAgenda.from_dict, findings),
+        "research_autopilot_runs": _load_jsonl(
+            storage_path / "research_autopilot_runs.jsonl",
+            ResearchAutopilotRun.from_dict,
+            findings,
+        ),
     }
     forecasts: list[Forecast] = artifact_rows["forecasts"]
     scores: list[ForecastScore] = artifact_rows["scores"]
@@ -240,6 +248,8 @@ def run_health_check(
     locked_evaluation_results: list[LockedEvaluationResult] = artifact_rows["locked_evaluation_results"]
     leaderboard_entries: list[LeaderboardEntry] = artifact_rows["leaderboard_entries"]
     paper_shadow_outcomes: list[PaperShadowOutcome] = artifact_rows["paper_shadow_outcomes"]
+    research_agendas: list[ResearchAgenda] = artifact_rows["research_agendas"]
+    research_autopilot_runs: list[ResearchAutopilotRun] = artifact_rows["research_autopilot_runs"]
 
     _check_duplicate_ids(forecasts, "forecast_id", storage_path / "forecasts.jsonl", findings)
     _check_duplicate_ids(scores, "score_id", storage_path / "scores.jsonl", findings)
@@ -317,6 +327,13 @@ def run_health_check(
         storage_path / "paper_shadow_outcomes.jsonl",
         findings,
     )
+    _check_duplicate_ids(research_agendas, "agenda_id", storage_path / "research_agendas.jsonl", findings)
+    _check_duplicate_ids(
+        research_autopilot_runs,
+        "run_id",
+        storage_path / "research_autopilot_runs.jsonl",
+        findings,
+    )
 
     scoped_forecasts = [forecast for forecast in forecasts if forecast.symbol == symbol]
     latest_forecast = scoped_forecasts[-1] if scoped_forecasts else None
@@ -375,6 +392,8 @@ def run_health_check(
         locked_evaluation_results,
         leaderboard_entries,
         paper_shadow_outcomes,
+        research_agendas,
+        research_autopilot_runs,
         findings,
     )
     _check_m7_evidence_integrity(
@@ -668,6 +687,8 @@ def _check_links(
     locked_evaluation_results: list[LockedEvaluationResult],
     leaderboard_entries: list[LeaderboardEntry],
     paper_shadow_outcomes: list[PaperShadowOutcome],
+    research_agendas: list[ResearchAgenda],
+    research_autopilot_runs: list[ResearchAutopilotRun],
     findings: list[HealthFinding],
 ) -> None:
     forecast_ids = {forecast.forecast_id for forecast in forecasts}
@@ -688,6 +709,11 @@ def _check_links(
     cost_model_ids = {snapshot.cost_model_id for snapshot in cost_model_snapshots}
     locked_evaluation_ids = {result.evaluation_id for result in locked_evaluation_results}
     locked_evaluation_by_id = {result.evaluation_id: result for result in locked_evaluation_results}
+    decision_ids = {decision.decision_id for decision in decisions}
+    decision_by_id = {decision.decision_id: decision for decision in decisions}
+    paper_shadow_outcome_ids = {outcome.outcome_id for outcome in paper_shadow_outcomes}
+    research_agenda_ids = {agenda.agenda_id for agenda in research_agendas}
+    research_agenda_by_id = {agenda.agenda_id: agenda for agenda in research_agendas}
 
     for score in scores:
         if score.forecast_id not in forecast_ids:
@@ -1228,6 +1254,210 @@ def _check_links(
                 outcome.trial_id,
                 findings,
             )
+
+    for agenda in research_agendas:
+        missing_cards = [card_id for card_id in agenda.strategy_card_ids if card_id not in strategy_card_ids]
+        if missing_cards:
+            _add_link_finding(
+                "research_agenda_missing_strategy_card",
+                storage_path / "research_agendas.jsonl",
+                agenda.agenda_id,
+                ", ".join(missing_cards),
+                findings,
+            )
+
+    leaderboard_entry_ids = set(leaderboard_by_id)
+    trial_by_id = {trial.trial_id: trial for trial in experiment_trials}
+    for run in research_autopilot_runs:
+        if run.agenda_id not in research_agenda_ids:
+            _add_link_finding(
+                "research_autopilot_run_missing_agenda",
+                storage_path / "research_autopilot_runs.jsonl",
+                run.run_id,
+                run.agenda_id,
+                findings,
+            )
+        else:
+            agenda = research_agenda_by_id[run.agenda_id]
+            if run.strategy_card_id not in agenda.strategy_card_ids:
+                _add_link_finding(
+                    "research_autopilot_run_agenda_strategy_card_mismatch",
+                    storage_path / "research_autopilot_runs.jsonl",
+                    run.run_id,
+                    run.strategy_card_id,
+                    findings,
+                )
+        if run.strategy_card_id not in strategy_card_ids:
+            _add_link_finding(
+                "research_autopilot_run_missing_strategy_card",
+                storage_path / "research_autopilot_runs.jsonl",
+                run.run_id,
+                run.strategy_card_id,
+                findings,
+            )
+        if run.experiment_trial_id not in trial_ids:
+            _add_link_finding(
+                "research_autopilot_run_missing_experiment_trial",
+                storage_path / "research_autopilot_runs.jsonl",
+                run.run_id,
+                run.experiment_trial_id,
+                findings,
+            )
+        else:
+            trial = trial_by_id[run.experiment_trial_id]
+            if trial.strategy_card_id != run.strategy_card_id:
+                _add_link_finding(
+                    "research_autopilot_run_trial_strategy_card_mismatch",
+                    storage_path / "research_autopilot_runs.jsonl",
+                    run.run_id,
+                    trial.strategy_card_id,
+                    findings,
+                )
+        if run.locked_evaluation_id not in locked_evaluation_ids:
+            _add_link_finding(
+                "research_autopilot_run_missing_locked_evaluation",
+                storage_path / "research_autopilot_runs.jsonl",
+                run.run_id,
+                run.locked_evaluation_id,
+                findings,
+            )
+        else:
+            evaluation = locked_evaluation_by_id[run.locked_evaluation_id]
+            if evaluation.strategy_card_id != run.strategy_card_id:
+                _add_link_finding(
+                    "research_autopilot_run_locked_evaluation_strategy_card_mismatch",
+                    storage_path / "research_autopilot_runs.jsonl",
+                    run.run_id,
+                    evaluation.strategy_card_id,
+                    findings,
+                )
+            if evaluation.trial_id != run.experiment_trial_id:
+                _add_link_finding(
+                    "research_autopilot_run_locked_evaluation_trial_mismatch",
+                    storage_path / "research_autopilot_runs.jsonl",
+                    run.run_id,
+                    evaluation.trial_id,
+                    findings,
+                )
+        if run.leaderboard_entry_id not in leaderboard_entry_ids:
+            _add_link_finding(
+                "research_autopilot_run_missing_leaderboard_entry",
+                storage_path / "research_autopilot_runs.jsonl",
+                run.run_id,
+                run.leaderboard_entry_id,
+                findings,
+            )
+        else:
+            entry = leaderboard_by_id[run.leaderboard_entry_id]
+            if entry.strategy_card_id != run.strategy_card_id:
+                _add_link_finding(
+                    "research_autopilot_run_leaderboard_strategy_card_mismatch",
+                    storage_path / "research_autopilot_runs.jsonl",
+                    run.run_id,
+                    entry.strategy_card_id,
+                    findings,
+                )
+            if entry.trial_id != run.experiment_trial_id:
+                _add_link_finding(
+                    "research_autopilot_run_leaderboard_trial_mismatch",
+                    storage_path / "research_autopilot_runs.jsonl",
+                    run.run_id,
+                    entry.trial_id,
+                    findings,
+                )
+            if entry.evaluation_id != run.locked_evaluation_id:
+                _add_link_finding(
+                    "research_autopilot_run_leaderboard_evaluation_mismatch",
+                    storage_path / "research_autopilot_runs.jsonl",
+                    run.run_id,
+                    entry.evaluation_id,
+                    findings,
+                )
+        if run.strategy_decision_id and run.strategy_decision_id not in decision_ids:
+            _add_link_finding(
+                "research_autopilot_run_missing_strategy_decision",
+                storage_path / "research_autopilot_runs.jsonl",
+                run.run_id,
+                run.strategy_decision_id,
+                findings,
+            )
+        elif run.strategy_decision_id:
+            decision = decision_by_id[run.strategy_decision_id]
+            entry = leaderboard_by_id.get(run.leaderboard_entry_id)
+            if entry is not None and decision.symbol != entry.symbol:
+                _add_link_finding(
+                    "research_autopilot_run_strategy_decision_symbol_mismatch",
+                    storage_path / "research_autopilot_runs.jsonl",
+                    run.run_id,
+                    decision.symbol,
+                    findings,
+                )
+            if not decision.tradeable:
+                _add_link_finding(
+                    "research_autopilot_run_strategy_decision_not_tradeable",
+                    storage_path / "research_autopilot_runs.jsonl",
+                    run.run_id,
+                    decision.decision_id,
+                    findings,
+                )
+            if decision.action in {"STOP_NEW_ENTRIES", "REDUCE_RISK"}:
+                _add_link_finding(
+                    "research_autopilot_run_strategy_decision_fail_closed",
+                    storage_path / "research_autopilot_runs.jsonl",
+                    run.run_id,
+                    decision.action,
+                    findings,
+                )
+            if decision.blocked_reason:
+                _add_link_finding(
+                    "research_autopilot_run_strategy_decision_blocked",
+                    storage_path / "research_autopilot_runs.jsonl",
+                    run.run_id,
+                    decision.blocked_reason,
+                    findings,
+                )
+        if run.paper_shadow_outcome_id and run.paper_shadow_outcome_id not in paper_shadow_outcome_ids:
+            _add_link_finding(
+                "research_autopilot_run_missing_paper_shadow_outcome",
+                storage_path / "research_autopilot_runs.jsonl",
+                run.run_id,
+                run.paper_shadow_outcome_id,
+                findings,
+            )
+        elif run.paper_shadow_outcome_id:
+            outcome = next(outcome for outcome in paper_shadow_outcomes if outcome.outcome_id == run.paper_shadow_outcome_id)
+            if outcome.leaderboard_entry_id != run.leaderboard_entry_id:
+                _add_link_finding(
+                    "research_autopilot_run_shadow_leaderboard_mismatch",
+                    storage_path / "research_autopilot_runs.jsonl",
+                    run.run_id,
+                    outcome.leaderboard_entry_id,
+                    findings,
+                )
+            if outcome.evaluation_id != run.locked_evaluation_id:
+                _add_link_finding(
+                    "research_autopilot_run_shadow_evaluation_mismatch",
+                    storage_path / "research_autopilot_runs.jsonl",
+                    run.run_id,
+                    outcome.evaluation_id,
+                    findings,
+                )
+            if outcome.strategy_card_id != run.strategy_card_id:
+                _add_link_finding(
+                    "research_autopilot_run_shadow_strategy_card_mismatch",
+                    storage_path / "research_autopilot_runs.jsonl",
+                    run.run_id,
+                    outcome.strategy_card_id,
+                    findings,
+                )
+            if outcome.trial_id != run.experiment_trial_id:
+                _add_link_finding(
+                    "research_autopilot_run_shadow_trial_mismatch",
+                    storage_path / "research_autopilot_runs.jsonl",
+                    run.run_id,
+                    outcome.trial_id,
+                    findings,
+                )
 
 
 def _add_link_finding(code: str, path: Path, source_id: str, missing_id: str, findings: list[HealthFinding]) -> None:

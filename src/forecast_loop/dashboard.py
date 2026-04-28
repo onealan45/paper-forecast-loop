@@ -15,18 +15,26 @@ from forecast_loop.models import (
     BrokerReconciliation,
     ExecutionSafetyGate,
     EvaluationSummary,
+    ExperimentTrial,
     Forecast,
     ForecastScore,
     HealthFinding,
+    LeaderboardEntry,
+    LockedEvaluationResult,
     PaperFill,
     PaperOrder,
     PaperPortfolioSnapshot,
+    PaperShadowOutcome,
     Proposal,
     ProviderRun,
+    ResearchAgenda,
+    ResearchAutopilotRun,
     RiskSnapshot,
     Review,
+    StrategyCard,
     StrategyDecision,
 )
+from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.storage import JsonFileRepository
 
 
@@ -44,6 +52,13 @@ class DashboardSnapshot:
     latest_baseline_evaluation: BaselineEvaluation | None
     latest_portfolio_snapshot: PaperPortfolioSnapshot | None
     latest_risk_snapshot: RiskSnapshot | None
+    latest_strategy_card: StrategyCard | None
+    latest_experiment_trial: ExperimentTrial | None
+    latest_locked_evaluation: LockedEvaluationResult | None
+    latest_leaderboard_entry: LeaderboardEntry | None
+    latest_paper_shadow_outcome: PaperShadowOutcome | None
+    latest_research_agenda: ResearchAgenda | None
+    latest_research_autopilot_run: ResearchAutopilotRun | None
     paper_orders: list[PaperOrder]
     broker_orders: list[BrokerOrder]
     paper_fills: list[PaperFill]
@@ -97,6 +112,24 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
     provider_runs = repository.load_provider_runs()
     replay_summaries = repository.load_evaluation_summaries()
     latest_forecast = forecasts[-1] if forecasts else None
+    dashboard_symbol = latest_forecast.symbol if latest_forecast else (strategy_decisions[-1].symbol if strategy_decisions else "BTC-USD")
+    strategy_cards = [item for item in repository.load_strategy_cards() if dashboard_symbol in item.symbols]
+    experiment_trials = [item for item in repository.load_experiment_trials() if item.symbol == dashboard_symbol]
+    all_locked_evaluations = repository.load_locked_evaluation_results()
+    leaderboard_entries = [item for item in repository.load_leaderboard_entries() if item.symbol == dashboard_symbol]
+    paper_shadow_outcomes = [item for item in repository.load_paper_shadow_outcomes() if item.symbol == dashboard_symbol]
+    research_agendas = [item for item in repository.load_research_agendas() if item.symbol == dashboard_symbol]
+    research_autopilot_runs = [item for item in repository.load_research_autopilot_runs() if item.symbol == dashboard_symbol]
+    research_chain = resolve_latest_strategy_research_chain(
+        symbol=dashboard_symbol,
+        strategy_cards=strategy_cards,
+        experiment_trials=experiment_trials,
+        locked_evaluations=all_locked_evaluations,
+        leaderboard_entries=leaderboard_entries,
+        paper_shadow_outcomes=paper_shadow_outcomes,
+        research_agendas=research_agendas,
+        research_autopilot_runs=research_autopilot_runs,
+    )
     latest_review = reviews[-1] if reviews else None
     latest_proposal = _latest_proposal_for_review(proposals, latest_review)
     latest_replay_summary = replay_summaries[-1] if replay_summaries else None
@@ -127,6 +160,13 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         latest_baseline_evaluation=baseline_evaluations[-1] if baseline_evaluations else None,
         latest_portfolio_snapshot=portfolio_snapshots[-1] if portfolio_snapshots else None,
         latest_risk_snapshot=risk_snapshots[-1] if risk_snapshots else None,
+        latest_strategy_card=research_chain.strategy_card,
+        latest_experiment_trial=research_chain.experiment_trial,
+        latest_locked_evaluation=research_chain.locked_evaluation,
+        latest_leaderboard_entry=research_chain.leaderboard_entry,
+        latest_paper_shadow_outcome=research_chain.paper_shadow_outcome,
+        latest_research_agenda=research_chain.research_agenda,
+        latest_research_autopilot_run=research_chain.research_autopilot_run,
         paper_orders=paper_orders,
         broker_orders=broker_orders,
         paper_fills=paper_fills,
@@ -529,6 +569,7 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
       <nav aria-label="儀表板區段">
         <ul class="nav-list">
           <li><a href="#strategy">明日決策</a></li>
+          <li><a href="#strategy-research">策略研究</a></li>
           <li><a href="#summary">操作摘要</a></li>
           <li><a href="#portfolio">投資組合與風險</a></li>
           <li><a href="#broker">Broker / Sandbox</a></li>
@@ -544,6 +585,9 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
     <main id="main-content">
       <section class="panel hero primary-card" id="strategy">
         {render_strategy_panel(snapshot)}
+      </section>
+      <section class="panel hero primary-card" id="strategy-research">
+        {render_strategy_research_panel(snapshot)}
       </section>
       <section class="panel hero" id="summary">
         {render_operator_summary(snapshot)}
@@ -714,6 +758,118 @@ def render_strategy_panel(snapshot: DashboardSnapshot) -> str:
           <dt>失效條件</dt><dd>{escape("；".join(decision.invalidation_conditions))}</dd>
         </dl>
         <pre>{escape(json.dumps(decision.to_dict(), ensure_ascii=False, indent=2))}</pre>
+      </details>
+    """
+
+
+def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
+    card = snapshot.latest_strategy_card
+    trial = snapshot.latest_experiment_trial
+    evaluation = snapshot.latest_locked_evaluation
+    leaderboard = snapshot.latest_leaderboard_entry
+    outcome = snapshot.latest_paper_shadow_outcome
+    agenda = snapshot.latest_research_agenda
+    autopilot = snapshot.latest_research_autopilot_run
+    if (
+        card is None
+        and evaluation is None
+        and leaderboard is None
+        and outcome is None
+        and agenda is None
+        and autopilot is None
+    ):
+        return """
+      <div class="kicker">策略研究焦點</div>
+      <h2>策略研究焦點</h2>
+      <p class="lead">目前尚無 strategy card、leaderboard、paper-shadow 或 research autopilot artifact。</p>
+      <p class="empty">研究頁會在相關 artifact 出現後顯示具體策略假設與證據鏈。</p>
+    """
+
+    return f"""
+      <div class="kicker">策略研究焦點</div>
+      <h2>策略研究焦點</h2>
+      <p class="lead">{escape(card.hypothesis if card else "目前沒有策略假設 artifact。")}</p>
+      <div class="summary-tags">
+        <span class="tag">Strategy {_dashboard_artifact_id(card, "card_id")}</span>
+        <span class="tag">Leaderboard {_dashboard_artifact_id(leaderboard, "entry_id")}</span>
+        <span class="tag">下一步 {escape(autopilot.next_research_action if autopilot else "n/a")}</span>
+      </div>
+      <div class="evidence-grid">
+        <div class="evidence-block">
+          <h3>目前策略假設</h3>
+          <p class="decision-emphasis">{escape(card.strategy_name if card else "尚無策略卡")}</p>
+          <dl>
+            <dt>Family / Version</dt><dd>{escape(card.strategy_family if card else "n/a")} / {escape(card.version if card else "n/a")}</dd>
+            <dt>Status</dt><dd>{escape(card.status if card else "n/a")}</dd>
+            <dt>Signal</dt><dd>{escape(card.signal_description if card else "n/a")}</dd>
+            <dt>參數</dt><dd>{_dashboard_dict_inline(card.parameters if card else {})}</dd>
+          </dl>
+        </div>
+        <div class="evidence-block">
+          <h3>下一步研究動作</h3>
+          <p class="decision-emphasis">{escape(autopilot.next_research_action if autopilot else "n/a")}</p>
+          <dl>
+            <dt>Autopilot Run</dt><dd>{_dashboard_artifact_id(autopilot, "run_id")}</dd>
+            <dt>Loop Status</dt><dd>{escape(autopilot.loop_status if autopilot else "n/a")}</dd>
+            <dt>Blocked</dt><dd>{_dashboard_list_inline(autopilot.blocked_reasons if autopilot else [])}</dd>
+          </dl>
+        </div>
+      </div>
+      <div class="evidence-grid">
+        <div class="evidence-block">
+          <h3>Evidence Gates</h3>
+          <dl>
+            <dt>Evaluation</dt><dd>{_dashboard_artifact_id(evaluation, "evaluation_id")}</dd>
+            <dt>Passed / Rankable</dt><dd>{_display_boolean(evaluation.passed) if evaluation else "否"} / {_display_boolean(evaluation.rankable) if evaluation else "否"}</dd>
+            <dt>alpha_score</dt><dd>{_format_optional_number(evaluation.alpha_score if evaluation else None)}</dd>
+            <dt>Blocked</dt><dd>{_dashboard_list_inline(evaluation.blocked_reasons if evaluation else [])}</dd>
+            <dt>Gate Metrics</dt><dd>{_dashboard_dict_inline(evaluation.gate_metrics if evaluation else {})}</dd>
+          </dl>
+        </div>
+        <div class="evidence-block">
+          <h3>Leaderboard</h3>
+          <dl>
+            <dt>Entry</dt><dd>{_dashboard_artifact_id(leaderboard, "entry_id")}</dd>
+            <dt>Rankable</dt><dd>{_display_boolean(leaderboard.rankable) if leaderboard else "否"}</dd>
+            <dt>alpha_score</dt><dd>{_format_optional_number(leaderboard.alpha_score if leaderboard else None)}</dd>
+            <dt>Promotion</dt><dd>{escape(leaderboard.promotion_stage if leaderboard else "n/a")}</dd>
+            <dt>Rules</dt><dd>{escape(leaderboard.leaderboard_rules_version if leaderboard else "n/a")}</dd>
+          </dl>
+        </div>
+      </div>
+      <div class="evidence-grid">
+        <div class="evidence-block">
+          <h3>Paper-shadow 歸因</h3>
+          <dl>
+            <dt>Outcome</dt><dd>{_dashboard_artifact_id(outcome, "outcome_id")}</dd>
+            <dt>Grade</dt><dd>{escape(outcome.outcome_grade if outcome else "n/a")}</dd>
+            <dt>Excess after costs</dt><dd>{_format_optional_ratio(outcome.excess_return_after_costs if outcome else None)}</dd>
+            <dt>Recommended</dt><dd>{escape(outcome.recommended_strategy_action if outcome else "n/a")}</dd>
+            <dt>Failure attribution</dt><dd>{_dashboard_list_inline(outcome.failure_attributions if outcome else [])}</dd>
+          </dl>
+        </div>
+        <div class="evidence-block">
+          <h3>策略規則</h3>
+          <dl>
+            <dt>進場規則</dt><dd>{_dashboard_list_inline(card.entry_rules if card else [])}</dd>
+            <dt>出場規則</dt><dd>{_dashboard_list_inline(card.exit_rules if card else [])}</dd>
+            <dt>風控規則</dt><dd>{_dashboard_list_inline(card.risk_rules if card else [])}</dd>
+            <dt>資料需求</dt><dd>{_dashboard_list_inline(card.data_requirements if card else [])}</dd>
+          </dl>
+        </div>
+      </div>
+      <details>
+        <summary>展開 Research Agenda / Trial / Autopilot Steps</summary>
+        <div class="drawer-stack">
+          <dl>
+            <dt>Agenda</dt><dd>{_dashboard_artifact_id(agenda, "agenda_id")} / {escape(agenda.title if agenda else "n/a")}</dd>
+            <dt>Agenda Hypothesis</dt><dd>{escape(agenda.hypothesis if agenda else "n/a")}</dd>
+            <dt>Acceptance</dt><dd>{_dashboard_list_inline(agenda.acceptance_criteria if agenda else [])}</dd>
+            <dt>Trial</dt><dd>{_dashboard_artifact_id(trial, "trial_id")} / {escape(trial.status if trial else "n/a")}</dd>
+            <dt>Trial Metrics</dt><dd>{_dashboard_dict_inline(trial.metric_summary if trial else {})}</dd>
+            <dt>Autopilot Steps</dt><dd>{_dashboard_steps_inline(autopilot)}</dd>
+          </dl>
+        </div>
       </details>
     """
 
@@ -1530,6 +1686,53 @@ def _format_optional_ratio(value: float | None) -> str:
     if value is None:
         return "無"
     return f"{value:.2%}"
+
+
+def _format_optional_number(value: float | None) -> str:
+    if value is None:
+        return "無"
+    return f"{value:.4f}"
+
+
+def _dashboard_artifact_id(item: object | None, field: str) -> str:
+    if item is None:
+        return "<span class=\"empty\">無</span>"
+    return f"<code>{escape(str(getattr(item, field)))}</code>"
+
+
+def _dashboard_list_inline(items: list[str]) -> str:
+    if not items:
+        return '<span class="empty">none</span>'
+    return "；".join(f"<code>{escape(item)}</code>" for item in items)
+
+
+def _dashboard_dict_inline(values: dict[str, object]) -> str:
+    if not values:
+        return '<span class="empty">none</span>'
+    return "；".join(
+        f"<code>{escape(str(key))}</code>={escape(_dashboard_value(value))}"
+        for key, value in sorted(values.items(), key=lambda item: str(item[0]))
+    )
+
+
+def _dashboard_steps_inline(run: ResearchAutopilotRun | None) -> str:
+    if run is None or not run.steps:
+        return '<span class="empty">none</span>'
+    return "；".join(
+        f"{escape(step.get('name') or '')}:{escape(step.get('status') or '')} "
+        f"<code>{escape(step.get('artifact_id') or 'none')}</code>"
+        for step in run.steps
+    )
+
+
+def _dashboard_value(value: object) -> str:
+    if isinstance(value, float):
+        return _format_optional_number(value)
+    if isinstance(value, list):
+        return ", ".join(str(item) for item in value)
+    if isinstance(value, dict):
+        return ", ".join(f"{key}={item}" for key, item in sorted(value.items(), key=lambda item: str(item[0])))
+    return str(value)
 
 
 def _display_decision_surface(review: Review, proposal: Proposal | None) -> str:

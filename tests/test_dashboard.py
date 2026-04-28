@@ -11,15 +11,22 @@ from forecast_loop.models import (
     BrokerOrder,
     BrokerReconciliation,
     ExecutionSafetyGate,
+    ExperimentTrial,
     Forecast,
     ForecastScore,
+    LeaderboardEntry,
+    LockedEvaluationResult,
     PaperFill,
     PaperOrder,
     PaperPortfolioSnapshot,
     PaperPosition,
+    PaperShadowOutcome,
     Proposal,
+    ResearchAgenda,
+    ResearchAutopilotRun,
     Review,
     RiskSnapshot,
+    StrategyCard,
     StrategyDecision,
 )
 from forecast_loop.storage import JsonFileRepository
@@ -50,6 +57,273 @@ def _write_automation(codex_home: Path, automation_id: str, *, status: str, upda
         ),
         encoding="utf-8",
     )
+
+
+def _seed_dashboard_strategy_research(repository: JsonFileRepository, now: datetime) -> None:
+    card = StrategyCard(
+        card_id="strategy-card:dashboard-visible",
+        created_at=now,
+        strategy_name="Dashboard BTC breakout candidate",
+        strategy_family="breakout_reversal",
+        version="v2",
+        status="ACTIVE",
+        symbols=["BTC-USD"],
+        hypothesis="Dashboard should show concrete strategy logic before raw metadata.",
+        signal_description="Breakout with volume confirmation.",
+        entry_rules=["突破前高且成交量放大"],
+        exit_rules=["跌回突破區間"],
+        risk_rules=["paper-shadow fail -> revise"],
+        parameters={"lookback_hours": 24, "volume_multiplier": 1.5},
+        data_requirements=["market_candles:BTC-USD:1h"],
+        feature_snapshot_ids=[],
+        backtest_result_ids=["backtest-result:dashboard-visible"],
+        walk_forward_validation_ids=["walk-forward:dashboard-visible"],
+        event_edge_evaluation_ids=[],
+        parent_card_id=None,
+        author="codex",
+        decision_basis="test",
+    )
+    trial = ExperimentTrial(
+        trial_id="experiment-trial:dashboard-visible",
+        created_at=now,
+        strategy_card_id=card.card_id,
+        trial_index=2,
+        status="PASSED",
+        symbol="BTC-USD",
+        seed=7,
+        dataset_id="research-dataset:dashboard-visible",
+        backtest_result_id="backtest-result:dashboard-visible",
+        walk_forward_validation_id="walk-forward:dashboard-visible",
+        event_edge_evaluation_id=None,
+        prompt_hash="prompt-dashboard",
+        code_hash="code-dashboard",
+        parameters={"lookback_hours": 24, "volume_multiplier": 1.5},
+        metric_summary={"alpha_score": 0.21},
+        failure_reason=None,
+        started_at=now,
+        completed_at=now,
+        decision_basis="test",
+    )
+    evaluation = LockedEvaluationResult(
+        evaluation_id="locked-evaluation:dashboard-visible",
+        created_at=now,
+        strategy_card_id=card.card_id,
+        trial_id=trial.trial_id,
+        split_manifest_id="split-manifest:dashboard-visible",
+        cost_model_id="cost-model:dashboard-visible",
+        baseline_id="baseline:dashboard-visible",
+        backtest_result_id="backtest-result:dashboard-visible",
+        walk_forward_validation_id="walk-forward:dashboard-visible",
+        event_edge_evaluation_id=None,
+        passed=True,
+        rankable=True,
+        alpha_score=0.21,
+        blocked_reasons=[],
+        gate_metrics={"alpha_score": 0.21, "holdout_excess_return": 0.04},
+        decision_basis="test",
+    )
+    leaderboard = LeaderboardEntry(
+        entry_id="leaderboard-entry:dashboard-visible",
+        created_at=now,
+        strategy_card_id=card.card_id,
+        evaluation_id=evaluation.evaluation_id,
+        trial_id=trial.trial_id,
+        symbol="BTC-USD",
+        rankable=True,
+        alpha_score=0.21,
+        promotion_stage="CANDIDATE",
+        blocked_reasons=[],
+        leaderboard_rules_version="pr7-v1",
+        decision_basis="test",
+    )
+    outcome = PaperShadowOutcome(
+        outcome_id="paper-shadow-outcome:dashboard-visible",
+        created_at=now,
+        leaderboard_entry_id=leaderboard.entry_id,
+        evaluation_id=evaluation.evaluation_id,
+        strategy_card_id=card.card_id,
+        trial_id=trial.trial_id,
+        symbol="BTC-USD",
+        window_start=now - timedelta(hours=24),
+        window_end=now,
+        observed_return=-0.01,
+        benchmark_return=0.01,
+        excess_return_after_costs=-0.025,
+        max_adverse_excursion=0.04,
+        turnover=1.2,
+        outcome_grade="FAIL",
+        failure_attributions=["negative_excess_return"],
+        recommended_promotion_stage="PAPER_SHADOW_FAILED",
+        recommended_strategy_action="REVISE_STRATEGY",
+        blocked_reasons=["paper_shadow_failed"],
+        notes=[],
+        decision_basis="test",
+    )
+    agenda = ResearchAgenda(
+        agenda_id="research-agenda:dashboard-visible",
+        created_at=now,
+        symbol="BTC-USD",
+        title="Dashboard strategy visibility",
+        hypothesis="Strategy UX should expose the current research hypothesis.",
+        priority="HIGH",
+        status="OPEN",
+        target_strategy_family="breakout_reversal",
+        strategy_card_ids=[card.card_id],
+        expected_artifacts=["strategy_card", "leaderboard", "paper_shadow_outcome"],
+        acceptance_criteria=["Dashboard shows concrete strategy context."],
+        blocked_actions=["promote_to_live"],
+        decision_basis="test",
+    )
+    autopilot = ResearchAutopilotRun(
+        run_id="research-autopilot-run:dashboard-visible",
+        created_at=now,
+        symbol="BTC-USD",
+        agenda_id=agenda.agenda_id,
+        strategy_card_id=card.card_id,
+        experiment_trial_id=trial.trial_id,
+        locked_evaluation_id=evaluation.evaluation_id,
+        leaderboard_entry_id=leaderboard.entry_id,
+        strategy_decision_id=None,
+        paper_shadow_outcome_id=outcome.outcome_id,
+        steps=[{"name": "shadow", "status": "failed", "artifact_id": outcome.outcome_id}],
+        loop_status="REVISION_REQUIRED",
+        next_research_action="REVISE_STRATEGY",
+        blocked_reasons=["paper_shadow_failed"],
+        decision_basis="test",
+    )
+    repository.save_strategy_card(card)
+    repository.save_experiment_trial(trial)
+    repository.save_locked_evaluation_result(evaluation)
+    repository.save_leaderboard_entry(leaderboard)
+    repository.save_paper_shadow_outcome(outcome)
+    repository.save_research_agenda(agenda)
+    repository.save_research_autopilot_run(autopilot)
+
+
+def _seed_dashboard_distractor_strategy_research_without_run(
+    repository: JsonFileRepository,
+    now: datetime,
+) -> None:
+    card = StrategyCard(
+        card_id="strategy-card:dashboard-distractor",
+        created_at=now,
+        strategy_name="Dashboard distractor strategy",
+        strategy_family="mean_reversion",
+        version="v9",
+        status="ACTIVE",
+        symbols=["BTC-USD"],
+        hypothesis="Dashboard distractor must not be mixed into the visible autopilot chain.",
+        signal_description="Distractor signal.",
+        entry_rules=["distractor_entry_rule"],
+        exit_rules=["distractor_exit_rule"],
+        risk_rules=["distractor_risk_rule"],
+        parameters={"distractor": True},
+        data_requirements=["distractor_source"],
+        feature_snapshot_ids=[],
+        backtest_result_ids=[],
+        walk_forward_validation_ids=[],
+        event_edge_evaluation_ids=[],
+        parent_card_id=None,
+        author="codex",
+        decision_basis="test",
+    )
+    trial = ExperimentTrial(
+        trial_id="experiment-trial:dashboard-distractor",
+        created_at=now,
+        strategy_card_id=card.card_id,
+        trial_index=99,
+        status="PASSED",
+        symbol="BTC-USD",
+        seed=999,
+        dataset_id="research-dataset:dashboard-distractor",
+        backtest_result_id="backtest-result:dashboard-distractor",
+        walk_forward_validation_id="walk-forward:dashboard-distractor",
+        event_edge_evaluation_id=None,
+        prompt_hash="prompt-dashboard-distractor",
+        code_hash="code-dashboard-distractor",
+        parameters={"distractor": True},
+        metric_summary={"alpha_score": 0.99},
+        failure_reason=None,
+        started_at=now,
+        completed_at=now,
+        decision_basis="test",
+    )
+    evaluation = LockedEvaluationResult(
+        evaluation_id="locked-evaluation:dashboard-distractor",
+        created_at=now,
+        strategy_card_id=card.card_id,
+        trial_id=trial.trial_id,
+        split_manifest_id="split-manifest:dashboard-distractor",
+        cost_model_id="cost-model:dashboard-distractor",
+        baseline_id="baseline:dashboard-distractor",
+        backtest_result_id="backtest-result:dashboard-distractor",
+        walk_forward_validation_id="walk-forward:dashboard-distractor",
+        event_edge_evaluation_id=None,
+        passed=True,
+        rankable=True,
+        alpha_score=0.99,
+        blocked_reasons=[],
+        gate_metrics={"alpha_score": 0.99, "distractor_metric": 1},
+        decision_basis="test",
+    )
+    leaderboard = LeaderboardEntry(
+        entry_id="leaderboard-entry:dashboard-distractor",
+        created_at=now,
+        strategy_card_id=card.card_id,
+        evaluation_id=evaluation.evaluation_id,
+        trial_id=trial.trial_id,
+        symbol="BTC-USD",
+        rankable=True,
+        alpha_score=0.99,
+        promotion_stage="CANDIDATE",
+        blocked_reasons=[],
+        leaderboard_rules_version="pr7-v1",
+        decision_basis="test",
+    )
+    outcome = PaperShadowOutcome(
+        outcome_id="paper-shadow-outcome:dashboard-distractor",
+        created_at=now,
+        leaderboard_entry_id=leaderboard.entry_id,
+        evaluation_id=evaluation.evaluation_id,
+        strategy_card_id=card.card_id,
+        trial_id=trial.trial_id,
+        symbol="BTC-USD",
+        window_start=now - timedelta(hours=24),
+        window_end=now,
+        observed_return=0.09,
+        benchmark_return=0.01,
+        excess_return_after_costs=0.07,
+        max_adverse_excursion=0.01,
+        turnover=0.4,
+        outcome_grade="PASS",
+        failure_attributions=["distractor_shadow"],
+        recommended_promotion_stage="PROMOTION_READY",
+        recommended_strategy_action="PROMOTION_READY",
+        blocked_reasons=[],
+        notes=[],
+        decision_basis="test",
+    )
+    agenda = ResearchAgenda(
+        agenda_id="research-agenda:dashboard-distractor",
+        created_at=now,
+        symbol="BTC-USD",
+        title="Dashboard distractor agenda",
+        hypothesis="Dashboard distractor agenda must not be mixed into visible run.",
+        priority="LOW",
+        status="OPEN",
+        target_strategy_family="mean_reversion",
+        strategy_card_ids=[card.card_id],
+        expected_artifacts=["strategy_card"],
+        acceptance_criteria=["distractor should stay hidden"],
+        blocked_actions=["promote_to_live"],
+        decision_basis="test",
+    )
+    repository.save_strategy_card(card)
+    repository.save_experiment_trial(trial)
+    repository.save_locked_evaluation_result(evaluation)
+    repository.save_leaderboard_entry(leaderboard)
+    repository.save_paper_shadow_outcome(outcome)
+    repository.save_research_agenda(agenda)
 
 
 def test_render_dashboard_handles_empty_storage(tmp_path):
@@ -526,6 +800,90 @@ def test_dashboard_prioritizes_strategy_decision_and_health_status(tmp_path):
     assert "預測品質 vs 基準線" in html
     assert "forecast 偏多且模型證據打贏 baseline。" in html
     assert "需要修復" not in html.split('id="strategy"', 1)[1].split("</section>", 1)[0]
+
+
+def test_dashboard_surfaces_strategy_research_context_before_raw_metadata(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    _seed_dashboard_strategy_research(repository, now)
+
+    html = render_dashboard_html(build_dashboard_snapshot(tmp_path))
+
+    assert 'id="strategy-research"' in html
+    assert html.index('id="strategy-research"') < html.index('id="raw"')
+    assert "策略研究焦點" in html
+    assert "Dashboard BTC breakout candidate" in html
+    assert "Dashboard should show concrete strategy logic before raw metadata." in html
+    assert "進場規則" in html
+    assert "突破前高且成交量放大" in html
+    assert "Evidence Gates" in html
+    assert "locked-evaluation:dashboard-visible" in html
+    assert "alpha_score" in html
+    assert "0.2100" in html
+    assert "Leaderboard" in html
+    assert "leaderboard-entry:dashboard-visible" in html
+    assert "Paper-shadow 歸因" in html
+    assert "negative_excess_return" in html
+    assert "下一步研究動作" in html
+    assert "REVISE_STRATEGY" in html
+    assert "research-autopilot-run:dashboard-visible" in html
+
+
+def test_dashboard_uses_autopilot_linked_chain_instead_of_latest_symbol_artifacts(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    _seed_dashboard_strategy_research(repository, now)
+    _seed_dashboard_distractor_strategy_research_without_run(repository, now + timedelta(minutes=5))
+
+    html = render_dashboard_html(build_dashboard_snapshot(tmp_path))
+
+    assert "research-autopilot-run:dashboard-visible" in html
+    assert "strategy-card:dashboard-visible" in html
+    assert "leaderboard-entry:dashboard-visible" in html
+    assert "locked-evaluation:dashboard-visible" in html
+    assert "paper-shadow-outcome:dashboard-visible" in html
+    assert "Dashboard BTC breakout candidate" in html
+    assert "negative_excess_return" in html
+    assert "Dashboard distractor strategy" not in html
+    assert "leaderboard-entry:dashboard-distractor" not in html
+    assert "locked-evaluation:dashboard-distractor" not in html
+    assert "distractor_shadow" not in html
+
+
+def test_dashboard_strategy_research_panel_shows_agenda_only_state(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    agenda = ResearchAgenda(
+        agenda_id="research-agenda:agenda-only",
+        created_at=now,
+        symbol="BTC-USD",
+        title="Agenda-only BTC research",
+        hypothesis="研究 agenda 應該在策略卡出現前就可見。",
+        priority="HIGH",
+        status="OPEN",
+        target_strategy_family="breakout_reversal",
+        strategy_card_ids=[],
+        expected_artifacts=["strategy_card"],
+        acceptance_criteria=["create the first strategy card"],
+        blocked_actions=["promote_to_live"],
+        decision_basis="test",
+    )
+    repository.save_research_agenda(agenda)
+
+    html = render_dashboard_html(build_dashboard_snapshot(tmp_path))
+
+    assert 'id="strategy-research"' in html
+    assert "Research Agenda" in html
+    assert "research-agenda:agenda-only" in html
+    assert "Agenda-only BTC research" in html
+    assert "研究 agenda 應該在策略卡出現前就可見。" in html
+    assert "目前尚無 strategy card" not in html
 
 
 def test_dashboard_renders_portfolio_nav_pnl_and_risk(tmp_path):

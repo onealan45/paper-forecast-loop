@@ -1,4 +1,5 @@
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 import json
 import socket
 
@@ -7,12 +8,19 @@ import pytest
 from forecast_loop.cli import main
 from forecast_loop.models import (
     AutomationRun,
+    ExperimentTrial,
+    LeaderboardEntry,
+    LockedEvaluationResult,
     NotificationArtifact,
     PaperControlEvent,
     PaperPortfolioSnapshot,
     PaperPosition,
+    PaperShadowOutcome,
     RepairRequest,
+    ResearchAgenda,
+    ResearchAutopilotRun,
     RiskSnapshot,
+    StrategyCard,
     StrategyDecision,
 )
 from forecast_loop.operator_console import (
@@ -200,6 +208,243 @@ def _notification(now: datetime) -> NotificationArtifact:
     )
 
 
+def _visible_strategy_card(now: datetime) -> StrategyCard:
+    return StrategyCard(
+        card_id="strategy-card:visible",
+        created_at=now,
+        strategy_name="BTC strategy visibility candidate",
+        strategy_family="breakout_reversal",
+        version="v2",
+        status="ACTIVE",
+        symbols=["BTC-USD"],
+        hypothesis="Breakout continuation should beat the baseline after costs.",
+        signal_description="Detect price breakout with expanding volume and recent momentum confirmation.",
+        entry_rules=["突破前高且成交量放大", "recent_momentum_score > 0"],
+        exit_rules=["跌回突破區間", "paper-shadow shows negative excess return"],
+        risk_rules=["single-trial max position 10%", "quarantine after two failed shadows"],
+        parameters={"lookback_hours": 24, "volume_multiplier": 1.5},
+        data_requirements=["market_candles:BTC-USD:1h", "volume:BTC-USD"],
+        feature_snapshot_ids=["feature-snapshot:visible"],
+        backtest_result_ids=["backtest-result:visible"],
+        walk_forward_validation_ids=["walk-forward:visible"],
+        event_edge_evaluation_ids=[],
+        parent_card_id=None,
+        author="codex",
+        decision_basis="test",
+    )
+
+
+def _visible_trial(now: datetime, card: StrategyCard) -> ExperimentTrial:
+    return ExperimentTrial(
+        trial_id="experiment-trial:visible",
+        created_at=now,
+        strategy_card_id=card.card_id,
+        trial_index=3,
+        status="PASSED",
+        symbol="BTC-USD",
+        seed=99,
+        dataset_id="research-dataset:visible",
+        backtest_result_id="backtest-result:visible",
+        walk_forward_validation_id="walk-forward:visible",
+        event_edge_evaluation_id=None,
+        prompt_hash="prompt-visible",
+        code_hash="code-visible",
+        parameters={"lookback_hours": 24, "volume_multiplier": 1.5},
+        metric_summary={"excess_return_after_costs": 0.04, "win_rate": 0.56},
+        failure_reason=None,
+        started_at=now,
+        completed_at=now,
+        decision_basis="test",
+    )
+
+
+def _visible_evaluation(now: datetime, card: StrategyCard, trial: ExperimentTrial) -> LockedEvaluationResult:
+    return LockedEvaluationResult(
+        evaluation_id="locked-evaluation:visible",
+        created_at=now,
+        strategy_card_id=card.card_id,
+        trial_id=trial.trial_id,
+        split_manifest_id="split-manifest:visible",
+        cost_model_id="cost-model:visible",
+        baseline_id="baseline:visible",
+        backtest_result_id="backtest-result:visible",
+        walk_forward_validation_id="walk-forward:visible",
+        event_edge_evaluation_id=None,
+        passed=True,
+        rankable=True,
+        alpha_score=0.21,
+        blocked_reasons=[],
+        gate_metrics={"alpha_score": 0.21, "holdout_excess_return": 0.04, "max_drawdown": 0.08},
+        decision_basis="test",
+    )
+
+
+def _visible_leaderboard(
+    now: datetime,
+    card: StrategyCard,
+    trial: ExperimentTrial,
+    evaluation: LockedEvaluationResult,
+) -> LeaderboardEntry:
+    return LeaderboardEntry(
+        entry_id="leaderboard-entry:visible",
+        created_at=now,
+        strategy_card_id=card.card_id,
+        evaluation_id=evaluation.evaluation_id,
+        trial_id=trial.trial_id,
+        symbol="BTC-USD",
+        rankable=True,
+        alpha_score=0.21,
+        promotion_stage="CANDIDATE",
+        blocked_reasons=[],
+        leaderboard_rules_version="pr7-v1",
+        decision_basis="test",
+    )
+
+
+def _visible_shadow_outcome(
+    now: datetime,
+    entry: LeaderboardEntry,
+) -> PaperShadowOutcome:
+    return PaperShadowOutcome(
+        outcome_id="paper-shadow-outcome:visible",
+        created_at=now,
+        leaderboard_entry_id=entry.entry_id,
+        evaluation_id=entry.evaluation_id,
+        strategy_card_id=entry.strategy_card_id,
+        trial_id=entry.trial_id,
+        symbol=entry.symbol,
+        window_start=now - timedelta(hours=24),
+        window_end=now,
+        observed_return=-0.01,
+        benchmark_return=0.01,
+        excess_return_after_costs=-0.025,
+        max_adverse_excursion=0.04,
+        turnover=1.2,
+        outcome_grade="FAIL",
+        failure_attributions=["negative_excess_return", "breakout_reversed"],
+        recommended_promotion_stage="PAPER_SHADOW_FAILED",
+        recommended_strategy_action="REVISE_STRATEGY",
+        blocked_reasons=["paper_shadow_failed"],
+        notes=["Volume confirmation was not persistent."],
+        decision_basis="test",
+    )
+
+
+def _visible_agenda(now: datetime, card: StrategyCard) -> ResearchAgenda:
+    return ResearchAgenda(
+        agenda_id="research-agenda:visible",
+        created_at=now,
+        symbol="BTC-USD",
+        title="修正 BTC breakout continuation",
+        hypothesis="Breakout continuation needs stronger confirmation after failed shadow.",
+        priority="HIGH",
+        status="OPEN",
+        target_strategy_family="breakout_reversal",
+        strategy_card_ids=[card.card_id],
+        expected_artifacts=["strategy_card", "locked_evaluation", "paper_shadow_outcome"],
+        acceptance_criteria=["New revision improves after-cost edge", "Shadow failure attribution is addressed"],
+        blocked_actions=["promote_to_live", "increase_position_size"],
+        decision_basis="test",
+    )
+
+
+def _visible_autopilot_run(
+    now: datetime,
+    agenda: ResearchAgenda,
+    card: StrategyCard,
+    trial: ExperimentTrial,
+    evaluation: LockedEvaluationResult,
+    entry: LeaderboardEntry,
+) -> ResearchAutopilotRun:
+    return ResearchAutopilotRun(
+        run_id="research-autopilot-run:visible",
+        created_at=now,
+        symbol="BTC-USD",
+        agenda_id=agenda.agenda_id,
+        strategy_card_id=card.card_id,
+        experiment_trial_id=trial.trial_id,
+        locked_evaluation_id=evaluation.evaluation_id,
+        leaderboard_entry_id=entry.entry_id,
+        strategy_decision_id="decision:test",
+        paper_shadow_outcome_id="paper-shadow-outcome:visible",
+        steps=[
+            {"name": "agenda", "status": "created", "artifact_id": agenda.agenda_id},
+            {"name": "strategy", "status": "tested", "artifact_id": card.card_id},
+            {"name": "shadow", "status": "failed", "artifact_id": "paper-shadow-outcome:visible"},
+        ],
+        loop_status="REVISION_REQUIRED",
+        next_research_action="REVISE_STRATEGY",
+        blocked_reasons=["paper_shadow_failed"],
+        decision_basis="test",
+    )
+
+
+def _seed_visible_strategy_research(repository: JsonFileRepository, now: datetime) -> None:
+    card = _visible_strategy_card(now)
+    trial = _visible_trial(now, card)
+    evaluation = _visible_evaluation(now, card, trial)
+    entry = _visible_leaderboard(now, card, trial, evaluation)
+    outcome = _visible_shadow_outcome(now, entry)
+    agenda = _visible_agenda(now, card)
+    run = _visible_autopilot_run(now, agenda, card, trial, evaluation, entry)
+    repository.save_strategy_card(card)
+    repository.save_experiment_trial(trial)
+    repository.save_locked_evaluation_result(evaluation)
+    repository.save_leaderboard_entry(entry)
+    repository.save_paper_shadow_outcome(outcome)
+    repository.save_research_agenda(agenda)
+    repository.save_research_autopilot_run(run)
+
+
+def _seed_distractor_strategy_research_without_run(repository: JsonFileRepository, now: datetime) -> None:
+    card = replace(
+        _visible_strategy_card(now),
+        card_id="strategy-card:distractor",
+        created_at=now,
+        strategy_name="Distractor BTC strategy",
+        hypothesis="Distractor strategy must not be mixed into the visible autopilot chain.",
+    )
+    trial = replace(
+        _visible_trial(now, card),
+        trial_id="experiment-trial:distractor",
+        created_at=now,
+    )
+    evaluation = replace(
+        _visible_evaluation(now, card, trial),
+        evaluation_id="locked-evaluation:distractor",
+        created_at=now,
+        alpha_score=0.99,
+        gate_metrics={"alpha_score": 0.99, "distractor_metric": 1},
+    )
+    entry = replace(
+        _visible_leaderboard(now, card, trial, evaluation),
+        entry_id="leaderboard-entry:distractor",
+        created_at=now,
+        alpha_score=0.99,
+    )
+    outcome = replace(
+        _visible_shadow_outcome(now, entry),
+        outcome_id="paper-shadow-outcome:distractor",
+        created_at=now,
+        failure_attributions=["distractor_shadow"],
+        recommended_strategy_action="QUARANTINE_STRATEGY",
+    )
+    agenda = replace(
+        _visible_agenda(now, card),
+        agenda_id="research-agenda:distractor",
+        created_at=now,
+        title="Distractor research agenda",
+        hypothesis="Distractor agenda must not be mixed into the visible autopilot chain.",
+        strategy_card_ids=[card.card_id],
+    )
+    repository.save_strategy_card(card)
+    repository.save_experiment_trial(trial)
+    repository.save_locked_evaluation_result(evaluation)
+    repository.save_leaderboard_entry(entry)
+    repository.save_paper_shadow_outcome(outcome)
+    repository.save_research_agenda(agenda)
+
+
 def test_operator_console_renders_required_pages_read_only(tmp_path):
     now = datetime(2026, 4, 25, 1, 30, tzinfo=UTC)
     repository = JsonFileRepository(tmp_path)
@@ -350,6 +595,72 @@ def test_decision_timeline_orders_newest_first_and_shows_review_ids(tmp_path):
     assert html.index("買進 / BTC-USD") < html.index("持有 / BTC-USD")
     assert "Review: <code>review:blocked</code>" in html
     assert "research_backtest_missing" in html
+
+
+def test_research_page_surfaces_strategy_hypothesis_gates_shadow_and_autopilot(tmp_path):
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    repository.save_strategy_decision(_decision(now))
+    _seed_visible_strategy_research(repository, now)
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    html = render_operator_console_page(snapshot, page="research")
+
+    assert "目前策略假設" in html
+    assert "BTC strategy visibility candidate" in html
+    assert "Breakout continuation should beat the baseline after costs." in html
+    assert "進場規則" in html
+    assert "突破前高且成交量放大" in html
+    assert "Evidence Gates" in html
+    assert "locked-evaluation:visible" in html
+    assert "alpha_score" in html
+    assert "0.2100" in html
+    assert "Leaderboard" in html
+    assert "leaderboard-entry:visible" in html
+    assert "Paper-shadow 歸因" in html
+    assert "negative_excess_return" in html
+    assert "下一步研究動作" in html
+    assert "REVISE_STRATEGY" in html
+    assert "research-autopilot-run:visible" in html
+    assert "<form" not in html.lower()
+
+
+def test_research_page_uses_autopilot_linked_chain_instead_of_latest_symbol_artifacts(tmp_path):
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_visible_strategy_research(repository, now)
+    _seed_distractor_strategy_research_without_run(repository, now + timedelta(minutes=5))
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    html = render_operator_console_page(snapshot, page="research")
+
+    assert "research-autopilot-run:visible" in html
+    assert "strategy-card:visible" in html
+    assert "leaderboard-entry:visible" in html
+    assert "locked-evaluation:visible" in html
+    assert "paper-shadow-outcome:visible" in html
+    assert "BTC strategy visibility candidate" in html
+    assert "negative_excess_return" in html
+    assert "Distractor BTC strategy" not in html
+    assert "leaderboard-entry:distractor" not in html
+    assert "locked-evaluation:distractor" not in html
+    assert "distractor_shadow" not in html
+
+
+def test_overview_prioritizes_strategy_research_focus_before_artifact_counts(tmp_path):
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    repository.save_strategy_decision(_decision(now))
+    _seed_visible_strategy_research(repository, now)
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    overview = render_operator_console_page(snapshot, page="overview")
+
+    assert "策略研究焦點" in overview
+    assert overview.index("策略研究焦點") < overview.index("Artifact Counts")
+    assert "strategy-card:visible" in overview
+    assert "leaderboard-entry:visible" in overview
+    assert "REVISE_STRATEGY" in overview
 
 
 def test_operator_console_cli_renders_one_page(tmp_path, capsys):

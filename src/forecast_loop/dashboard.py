@@ -59,6 +59,9 @@ class DashboardSnapshot:
     latest_paper_shadow_outcome: PaperShadowOutcome | None
     latest_research_agenda: ResearchAgenda | None
     latest_research_autopilot_run: ResearchAutopilotRun | None
+    latest_strategy_revision_card: StrategyCard | None
+    latest_strategy_revision_agenda: ResearchAgenda | None
+    latest_strategy_revision_source_outcome: PaperShadowOutcome | None
     paper_orders: list[PaperOrder]
     broker_orders: list[BrokerOrder]
     paper_fills: list[PaperFill]
@@ -167,6 +170,15 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         latest_paper_shadow_outcome=research_chain.paper_shadow_outcome,
         latest_research_agenda=research_chain.research_agenda,
         latest_research_autopilot_run=research_chain.research_autopilot_run,
+        latest_strategy_revision_card=(
+            research_chain.revision_candidate.strategy_card if research_chain.revision_candidate else None
+        ),
+        latest_strategy_revision_agenda=(
+            research_chain.revision_candidate.research_agenda if research_chain.revision_candidate else None
+        ),
+        latest_strategy_revision_source_outcome=(
+            research_chain.revision_candidate.source_outcome if research_chain.revision_candidate else None
+        ),
         paper_orders=paper_orders,
         broker_orders=broker_orders,
         paper_fills=paper_fills,
@@ -770,6 +782,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
     outcome = snapshot.latest_paper_shadow_outcome
     agenda = snapshot.latest_research_agenda
     autopilot = snapshot.latest_research_autopilot_run
+    revision_block = _render_strategy_revision_candidate(snapshot)
     if (
         card is None
         and evaluation is None
@@ -777,6 +790,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
         and outcome is None
         and agenda is None
         and autopilot is None
+        and snapshot.latest_strategy_revision_card is None
     ):
         return """
       <div class="kicker">策略研究焦點</div>
@@ -794,6 +808,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
         <span class="tag">Leaderboard {_dashboard_artifact_id(leaderboard, "entry_id")}</span>
         <span class="tag">下一步 {escape(autopilot.next_research_action if autopilot else "n/a")}</span>
       </div>
+      {revision_block}
       <div class="evidence-grid">
         <div class="evidence-block">
           <h3>目前策略假設</h3>
@@ -871,6 +886,45 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
           </dl>
         </div>
       </details>
+    """
+
+
+def _render_strategy_revision_candidate(snapshot: DashboardSnapshot) -> str:
+    revision = snapshot.latest_strategy_revision_card
+    if revision is None:
+        return """
+      <div class="evidence-block">
+        <h3>策略修正候選</h3>
+        <p class="micro-copy">目前沒有 DRAFT 策略修正候選。若 paper-shadow 失敗，可用 <code>propose-strategy-revision</code> 建立下一個 retest hypothesis。</p>
+      </div>
+    """
+
+    agenda = snapshot.latest_strategy_revision_agenda
+    source = snapshot.latest_strategy_revision_source_outcome
+    attributions = revision.parameters.get("revision_failure_attributions", [])
+    attribution_list = [str(item) for item in attributions] if isinstance(attributions, list) else [str(attributions)]
+    return f"""
+      <div class="evidence-grid">
+        <div class="evidence-block">
+          <h3>策略修正候選</h3>
+          <p class="decision-emphasis">{escape(revision.strategy_name)}</p>
+          <dl>
+            <dt>Revision</dt><dd>{_dashboard_artifact_id(revision, "card_id")} / {escape(revision.status)}</dd>
+            <dt>父策略</dt><dd>{escape(revision.parent_card_id or "n/a")}</dd>
+            <dt>來源失敗</dt><dd>{_dashboard_artifact_id(source, "outcome_id")}</dd>
+            <dt>Failure attribution</dt><dd>{_dashboard_list_inline(attribution_list)}</dd>
+          </dl>
+        </div>
+        <div class="evidence-block">
+          <h3>修正重點 / 重新測試 agenda</h3>
+          <dl>
+            <dt>修正假設</dt><dd>{escape(revision.hypothesis)}</dd>
+            <dt>修正規則</dt><dd>{_dashboard_list_inline(revision.entry_rules + revision.exit_rules + revision.risk_rules)}</dd>
+            <dt>Retest Agenda</dt><dd>{_dashboard_artifact_id(agenda, "agenda_id")} / {escape(agenda.title if agenda else "n/a")}</dd>
+            <dt>Acceptance</dt><dd>{_dashboard_list_inline(agenda.acceptance_criteria if agenda else [])}</dd>
+          </dl>
+        </div>
+      </div>
     """
 
 

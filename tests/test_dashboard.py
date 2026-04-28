@@ -200,6 +200,56 @@ def _seed_dashboard_strategy_research(repository: JsonFileRepository, now: datet
     repository.save_research_autopilot_run(autopilot)
 
 
+def _seed_dashboard_revision_candidate(repository: JsonFileRepository, now: datetime) -> None:
+    revision = StrategyCard(
+        card_id="strategy-card:dashboard-revision",
+        created_at=now,
+        strategy_name="Dashboard BTC breakout candidate revision",
+        strategy_family="breakout_reversal",
+        version="v2.rev1",
+        status="DRAFT",
+        symbols=["BTC-USD"],
+        hypothesis="Revision should repair negative_excess_return from the failed paper-shadow window.",
+        signal_description="Revision adds baseline-edge confirmation before the breakout entry.",
+        entry_rules=[
+            "突破前高且成交量放大",
+            "Require positive after-cost edge versus the active baseline suite before simulated entry.",
+        ],
+        exit_rules=["跌回突破區間"],
+        risk_rules=["Block promotion until the revised card beats no-trade and persistence baselines."],
+        parameters={
+            "revision_source_outcome_id": "paper-shadow-outcome:dashboard-visible",
+            "revision_failure_attributions": ["negative_excess_return"],
+            "minimum_after_cost_edge": 0.01,
+        },
+        data_requirements=["market_candles:BTC-USD:1h"],
+        feature_snapshot_ids=[],
+        backtest_result_ids=[],
+        walk_forward_validation_ids=[],
+        event_edge_evaluation_ids=[],
+        parent_card_id="strategy-card:dashboard-visible",
+        author="codex-strategy-evolution",
+        decision_basis="paper_shadow_strategy_revision_candidate",
+    )
+    agenda = ResearchAgenda(
+        agenda_id="research-agenda:dashboard-revision",
+        created_at=now,
+        symbol="BTC-USD",
+        title="Revision test for Dashboard BTC breakout candidate",
+        hypothesis="Retest the DRAFT revision against the negative_excess_return attribution.",
+        priority="HIGH",
+        status="OPEN",
+        target_strategy_family="breakout_reversal",
+        strategy_card_ids=[revision.card_id],
+        expected_artifacts=["strategy_card", "locked_evaluation", "paper_shadow_outcome"],
+        acceptance_criteria=["revision card stays DRAFT until new locked evaluation passes"],
+        blocked_actions=["automatic_promotion_without_retest"],
+        decision_basis="paper_shadow_strategy_revision_agenda",
+    )
+    repository.save_strategy_card(revision)
+    repository.save_research_agenda(agenda)
+
+
 def _seed_dashboard_distractor_strategy_research_without_run(
     repository: JsonFileRepository,
     now: datetime,
@@ -852,6 +902,63 @@ def test_dashboard_uses_autopilot_linked_chain_instead_of_latest_symbol_artifact
     assert "leaderboard-entry:dashboard-distractor" not in html
     assert "locked-evaluation:dashboard-distractor" not in html
     assert "distractor_shadow" not in html
+
+
+def test_dashboard_shows_strategy_revision_candidate_even_when_autopilot_chain_points_to_parent(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    _seed_dashboard_strategy_research(repository, now)
+    _seed_dashboard_revision_candidate(repository, now + timedelta(minutes=10))
+
+    html = render_dashboard_html(build_dashboard_snapshot(tmp_path))
+
+    assert "research-autopilot-run:dashboard-visible" in html
+    assert "Dashboard BTC breakout candidate" in html
+    assert "策略修正候選" in html
+    assert "strategy-card:dashboard-revision" in html
+    assert "strategy-card:dashboard-visible" in html
+    assert "paper-shadow-outcome:dashboard-visible" in html
+    assert "research-agenda:dashboard-revision" in html
+    assert "DRAFT" in html
+    assert "Require positive after-cost edge" in html
+    assert "negative_excess_return" in html
+
+
+def test_dashboard_does_not_label_unrelated_agenda_as_revision_retest(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    _seed_dashboard_strategy_research(repository, now)
+    _seed_dashboard_revision_candidate(repository, now + timedelta(minutes=10))
+    unrelated_agenda = ResearchAgenda(
+        agenda_id="research-agenda:dashboard-unrelated",
+        created_at=now + timedelta(minutes=20),
+        symbol="BTC-USD",
+        title="Unrelated planning note",
+        hypothesis="This agenda should not be rendered as the revision retest agenda.",
+        priority="LOW",
+        status="OPEN",
+        target_strategy_family="breakout_reversal",
+        strategy_card_ids=["strategy-card:dashboard-revision"],
+        expected_artifacts=["notes"],
+        acceptance_criteria=["not a revision retest"],
+        blocked_actions=[],
+        decision_basis="test",
+    )
+    (tmp_path / "research_agendas.jsonl").write_text(
+        json.dumps(unrelated_agenda.to_dict()) + "\n",
+        encoding="utf-8",
+    )
+
+    html = render_dashboard_html(build_dashboard_snapshot(tmp_path))
+
+    assert "策略修正候選" in html
+    assert "strategy-card:dashboard-revision" in html
+    assert "research-agenda:dashboard-unrelated" not in html
+    assert "Unrelated planning note" not in html
 
 
 def test_dashboard_strategy_research_panel_shows_agenda_only_state(tmp_path):

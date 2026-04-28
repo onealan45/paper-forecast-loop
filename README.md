@@ -100,6 +100,9 @@ factory:
 - PR12 adds the first self-evolving strategy primitive: failed paper-shadow
   outcomes can produce DRAFT child strategy-card revision candidates plus a
   linked retest agenda.
+- PR13 makes those DRAFT revision candidates visible in the dashboard and
+  operator console so strategy self-correction is inspectable without reading
+  JSONL.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -678,6 +681,16 @@ PR12 adds the first bounded self-evolving strategy primitive:
 
 This is not a full autonomous strategy trainer. It turns evidence from failed
 simulated shadow windows into a specific next hypothesis for locked evaluation.
+
+PR13 makes the revision candidate visible:
+
+- the static dashboard shows a `策略修正候選` block inside strategy research;
+- the operator console research page shows the DRAFT revision card, source
+  paper-shadow failure, parent strategy, rule mutations, and retest agenda;
+- the operator console overview preview includes the current revision candidate
+  so the first page shows what the AI is trying to fix next.
+
+This still does not automatically run the retest or promote the revised card.
 
 ### Strategy-Visible UX
 
@@ -1320,6 +1333,7 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - research quality gates now block BUY/SELL unless sample size, baseline edge,
   backtest, drawdown, and walk-forward evidence pass
 - PR9/PR10/PR11 research autopilot, strategy-visible UX, and Codex governance
-  docs exist, and PR12 can produce evidence-linked DRAFT revision candidates,
+  docs exist, PR12 can produce evidence-linked DRAFT revision candidates, and
+  PR13 makes those candidates visible in the dashboard and operator console,
   but full scheduling, autonomous strategy generation, automatic promotion, and
   deeper CPCV/PBO/DSR/bootstrap statistics remain deferred

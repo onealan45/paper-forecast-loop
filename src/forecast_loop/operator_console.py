@@ -59,6 +59,9 @@ class OperatorConsoleSnapshot:
     latest_paper_shadow_outcome: PaperShadowOutcome | None
     latest_research_agenda: ResearchAgenda | None
     latest_research_autopilot_run: ResearchAutopilotRun | None
+    latest_strategy_revision_card: StrategyCard | None
+    latest_strategy_revision_agenda: ResearchAgenda | None
+    latest_strategy_revision_source_outcome: PaperShadowOutcome | None
     repair_requests: list[RepairRequest]
     control_events: list[PaperControlEvent]
     control_state: PaperControlState
@@ -146,6 +149,15 @@ def build_operator_console_snapshot(
         latest_paper_shadow_outcome=research_chain.paper_shadow_outcome,
         latest_research_agenda=research_chain.research_agenda,
         latest_research_autopilot_run=research_chain.research_autopilot_run,
+        latest_strategy_revision_card=(
+            research_chain.revision_candidate.strategy_card if research_chain.revision_candidate else None
+        ),
+        latest_strategy_revision_agenda=(
+            research_chain.revision_candidate.research_agenda if research_chain.revision_candidate else None
+        ),
+        latest_strategy_revision_source_outcome=(
+            research_chain.revision_candidate.source_outcome if research_chain.revision_candidate else None
+        ),
         repair_requests=repair_requests,
         control_events=control_events,
         control_state=control_state,
@@ -673,6 +685,7 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
     <p>Blocked：</p>
     {_plain_list(autopilot.blocked_reasons if autopilot else [])}
   </article>
+  {_revision_candidate_panel(snapshot, wide=False)}
   <article class="panel">
     <h3>Leaderboard</h3>
     <p>ID：{_artifact_id(leaderboard, "entry_id")}</p>
@@ -1043,17 +1056,54 @@ def _autopilot_steps(run: ResearchAutopilotRun | None) -> str:
     return f'<ul class="conditions">{rows}</ul>'
 
 
+def _revision_candidate_panel(snapshot: OperatorConsoleSnapshot, *, wide: bool) -> str:
+    revision = snapshot.latest_strategy_revision_card
+    if revision is None:
+        return ""
+    agenda = snapshot.latest_strategy_revision_agenda
+    source = snapshot.latest_strategy_revision_source_outcome
+    attributions = revision.parameters.get("revision_failure_attributions", [])
+    attribution_list = [str(item) for item in attributions] if isinstance(attributions, list) else [str(attributions)]
+    panel_class = "panel wide" if wide else "panel"
+    return f"""
+  <article class="{panel_class}">
+    <h3>策略修正候選</h3>
+    <p class="metric">{escape(revision.strategy_name)}</p>
+    <p>{escape(revision.hypothesis)}</p>
+    <div class="badge-row">
+      <span class="status">Status {escape(revision.status)}</span>
+      <span class="status">Version {escape(revision.version)}</span>
+      <span class="status">Source {_artifact_id(source, "outcome_id")}</span>
+    </div>
+    <p>Revision：{_artifact_id(revision, "card_id")}</p>
+    <p>父策略：<code>{escape(revision.parent_card_id or "n/a")}</code></p>
+    <p>Retest agenda：{_artifact_id(agenda, "agenda_id")}</p>
+    <p>Failure attribution：</p>
+    {_plain_list(attribution_list)}
+    <h4>修正規則</h4>
+    {_plain_list(revision.entry_rules + revision.exit_rules + revision.risk_rules)}
+    <h4>Acceptance</h4>
+    {_plain_list(agenda.acceptance_criteria if agenda else [])}
+  </article>
+"""
+
+
 def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
     card = snapshot.latest_strategy_card
     leaderboard = snapshot.latest_leaderboard_entry
     outcome = snapshot.latest_paper_shadow_outcome
     autopilot = snapshot.latest_research_autopilot_run
+    revision = snapshot.latest_strategy_revision_card
+    revision_agenda = snapshot.latest_strategy_revision_agenda
+    revision_source = snapshot.latest_strategy_revision_source_outcome
     return f"""
 <p>策略卡：{_artifact_id(card, "card_id")} / {escape(card.strategy_name if card else "n/a")}</p>
 <p>假設：{escape(card.hypothesis if card else "目前沒有 strategy_cards artifact。")}</p>
 <p>Leaderboard：{_artifact_id(leaderboard, "entry_id")} / alpha_score={_format_number(leaderboard.alpha_score if leaderboard else None)}</p>
 <p>Paper-shadow：{escape(outcome.recommended_strategy_action if outcome else "n/a")} / {escape(outcome.outcome_grade if outcome else "n/a")}</p>
 <p>下一步：{escape(autopilot.next_research_action if autopilot else "n/a")} / Run {_artifact_id(autopilot, "run_id")}</p>
+<p>策略修正候選：{_artifact_id(revision, "card_id")} / 來源 {_artifact_id(revision_source, "outcome_id")} / Agenda {_artifact_id(revision_agenda, "agenda_id")}</p>
+{_plain_list(revision.entry_rules + revision.exit_rules + revision.risk_rules if revision else [], empty="目前沒有 DRAFT 修正候選")}
 """
 
 

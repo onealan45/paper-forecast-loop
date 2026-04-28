@@ -396,6 +396,56 @@ def _seed_visible_strategy_research(repository: JsonFileRepository, now: datetim
     repository.save_research_autopilot_run(run)
 
 
+def _seed_visible_revision_candidate(repository: JsonFileRepository, now: datetime) -> None:
+    revision = StrategyCard(
+        card_id="strategy-card:visible-revision",
+        created_at=now,
+        strategy_name="BTC strategy visibility candidate revision",
+        strategy_family="breakout_reversal",
+        version="v2.rev1",
+        status="DRAFT",
+        symbols=["BTC-USD"],
+        hypothesis="Revision should address negative_excess_return from the failed paper-shadow outcome.",
+        signal_description="Revision adds stronger baseline-edge confirmation before breakout entry.",
+        entry_rules=[
+            "突破前高且成交量放大",
+            "Require positive after-cost edge versus the active baseline suite before simulated entry.",
+        ],
+        exit_rules=["跌回突破區間"],
+        risk_rules=["Block promotion until the revised card beats no-trade and persistence baselines."],
+        parameters={
+            "revision_source_outcome_id": "paper-shadow-outcome:visible",
+            "revision_failure_attributions": ["negative_excess_return"],
+            "minimum_after_cost_edge": 0.01,
+        },
+        data_requirements=["market_candles:BTC-USD:1h"],
+        feature_snapshot_ids=[],
+        backtest_result_ids=[],
+        walk_forward_validation_ids=[],
+        event_edge_evaluation_ids=[],
+        parent_card_id="strategy-card:visible",
+        author="codex-strategy-evolution",
+        decision_basis="paper_shadow_strategy_revision_candidate",
+    )
+    agenda = ResearchAgenda(
+        agenda_id="research-agenda:visible-revision",
+        created_at=now,
+        symbol="BTC-USD",
+        title="Revision test for BTC strategy visibility candidate",
+        hypothesis="Retest the DRAFT revision against paper-shadow failure attribution.",
+        priority="HIGH",
+        status="OPEN",
+        target_strategy_family="breakout_reversal",
+        strategy_card_ids=[revision.card_id],
+        expected_artifacts=["strategy_card", "locked_evaluation", "paper_shadow_outcome"],
+        acceptance_criteria=["revision card stays DRAFT until new locked evaluation passes"],
+        blocked_actions=["automatic_promotion_without_retest"],
+        decision_basis="paper_shadow_strategy_revision_agenda",
+    )
+    repository.save_strategy_card(revision)
+    repository.save_research_agenda(agenda)
+
+
 def _seed_distractor_strategy_research_without_run(repository: JsonFileRepository, now: datetime) -> None:
     card = replace(
         _visible_strategy_card(now),
@@ -645,6 +695,27 @@ def test_research_page_uses_autopilot_linked_chain_instead_of_latest_symbol_arti
     assert "leaderboard-entry:distractor" not in html
     assert "locked-evaluation:distractor" not in html
     assert "distractor_shadow" not in html
+
+
+def test_operator_console_shows_strategy_revision_candidate(tmp_path):
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_visible_strategy_research(repository, now)
+    _seed_visible_revision_candidate(repository, now + timedelta(minutes=10))
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    research_html = render_operator_console_page(snapshot, page="research")
+    overview_html = render_operator_console_page(snapshot, page="overview")
+
+    for html in (research_html, overview_html):
+        assert "策略修正候選" in html
+        assert "strategy-card:visible-revision" in html
+        assert "paper-shadow-outcome:visible" in html
+        assert "research-agenda:visible-revision" in html
+        assert "Require positive after-cost edge" in html
+    assert research_html.count("策略修正候選") == 1
+    assert "strategy-card:visible" in research_html
+    assert "research-autopilot-run:visible" in research_html
 
 
 def test_overview_prioritizes_strategy_research_focus_before_artifact_counts(tmp_path):

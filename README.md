@@ -72,6 +72,8 @@ factory:
 - M7B adds the fixture-only source registry and source document import layer.
 - M7C converts imported source documents into canonical events and event
   reliability checks.
+- M7D adds market reaction / already-priced checks over canonical event
+  snapshots and stored candles.
 - PR0 must make the codebase reviewable before more strategy intelligence is
   stacked on top.
 - M7B-M7F should turn source documents, canonical events, source reliability,
@@ -169,6 +171,7 @@ This version intentionally includes:
   - `import-source-documents`
   - `source-registry`
   - `build-events`
+  - `build-market-reactions`
   - `build-research-dataset`
   - `research-report`
   - `backtest`

@@ -46,6 +46,12 @@ sources or research methods.
 
 ## Research Background
 
+The current master execution decision after M7A is recorded in
+[`docs/architecture/autonomous-alpha-factory-master-decision.md`](docs/architecture/autonomous-alpha-factory-master-decision.md).
+That document is the repo's working contract for the next phase: first complete
+PR0 Reviewability And Formatting Gate, then build the M7B-M7F Alpha Evidence
+Engine before expanding broker/testnet or UI polish work.
+
 The post-M1-M6 research direction is documented in
 [`docs/architecture/alpha-factory-research-background.md`](docs/architecture/alpha-factory-research-background.md).
 The target is a research-capable, prediction-focused, multi-strategy Alpha
@@ -62,9 +68,15 @@ factory:
 
 - M1-M6 provide the paper-only decision, health, research, portfolio, UI, and
   sandbox-safety spine.
-- M7+ should improve strategy generation, data-source breadth, canonical market
-  data, experiment registry, validation depth, leaderboard governance, and
-  self-evolving research skills.
+- M7A is an artifact foundation, not a completed intelligence engine.
+- PR0 must make the codebase reviewable before more strategy intelligence is
+  stacked on top.
+- M7B-M7F should turn source documents, canonical events, source reliability,
+  already-priced checks, historical edge, and decision integration into real
+  engines.
+- Later M7+ should improve strategy generation, data-source breadth, canonical
+  market data, experiment registry, validation depth, leaderboard governance,
+  paper-shadow learning, and self-evolving research skills.
 - Vibe-Trading is a useful reference for skills, swarm workflows, MCP tools,
   agent memory, backtest breadth, data loaders, and UX surfaces.
 - CoinGecko remains useful for prototype and cross-check work, but serious

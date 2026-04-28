@@ -42,7 +42,7 @@ as the completed factory.
 | Storage | Has SQLite migration support and JSONL audit/export compatibility. | Needs stronger research snapshot metadata and larger dataset storage conventions. |
 | Data providers | Supports sample, CoinGecko, stored candles, and CSV stock fixtures. | Needs canonical primary/secondary provider comparison before serious promotion. |
 | Research evidence | Supports baselines, research datasets, backtests, reports, walk-forward, research gates, PR6 strategy-card / experiment-trial registry, PR7 locked-evaluation / leaderboard hard-gate artifacts, PR8 paper-shadow outcome learning, and PR9 agenda/autopilot loop records. | Needs strategy generation, self-evolving skills, CPCV-like paths, PBO, DSR, bootstrap, and parameter stability. |
-| UI and operations | Shows read-only decisions, health, portfolio, risk, automation, and broker/sandbox state. | Needs concrete strategy visibility, candidate lifecycle, hypothesis changes, leaderboard, paper-shadow status, and quarantine visibility. |
+| UI and operations | Shows read-only decisions, health, portfolio, risk, automation, broker/sandbox state, concrete strategy context, leaderboard state, paper-shadow attribution, and next research action. | Needs richer candidate lifecycle, hypothesis-change history, comparison charts, and quarantine/demotion trend views. |
 
 ## Core Direction
 

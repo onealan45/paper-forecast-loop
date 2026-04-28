@@ -94,6 +94,9 @@ factory:
   operator console now surface the current strategy hypothesis, rules, locked
   evidence gates, leaderboard state, paper-shadow attribution, and next
   autopilot research action before raw metadata.
+- PR11 adds Codex governance docs and prompts: controller decisions, worker
+  handoffs, final reviewer prompts, Windows autopilot runbook, and docs tests
+  for required gates and role catalog alignment.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -921,6 +924,23 @@ locked evidence gates, leaderboard state, paper-shadow attribution, and
 autopilot next research action without requiring the operator to read JSONL
 records first.
 
+## Codex Governance Docs And Prompts
+
+PR11 records the controller workflow as repository documentation instead of a
+fake runtime service:
+
+- architecture: `docs/architecture/PR11-codex-governance-docs-prompts.md`
+- controller governance: `docs/controller/controller-governance.md`
+- Windows runbook: `docs/runbooks/windows-autopilot-controller.md`
+- prompt templates:
+  - `docs/prompts/controller-decision-template.md`
+  - `docs/prompts/worker-handoff-template.md`
+  - `docs/prompts/final-reviewer-prompt.md`
+
+These docs define controller decision fields, worker routing, reviewer subagent
+requirements, machine gates, runtime/secret exclusion, and the Edge browser
+assumption for UX checks.
+
 ## Failure and Degrade Behavior
 
 The loop degrades conservatively:
@@ -1271,6 +1291,7 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - research reports summarize existing artifacts only; they do not create new strategy gates
 - research quality gates now block BUY/SELL unless sample size, baseline edge,
   backtest, drawdown, and walk-forward evidence pass
-- PR9/PR10 research autopilot and strategy-visible UX records exist, but full
-  scheduling, automatic strategy mutation, autonomous strategy generation, and
-  deeper CPCV/PBO/DSR/bootstrap statistics remain deferred
+- PR9/PR10/PR11 research autopilot, strategy-visible UX, and Codex governance
+  docs exist, but full scheduling, automatic strategy mutation, autonomous
+  strategy generation, and deeper CPCV/PBO/DSR/bootstrap statistics remain
+  deferred

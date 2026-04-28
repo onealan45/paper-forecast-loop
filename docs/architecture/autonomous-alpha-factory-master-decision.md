@@ -63,6 +63,10 @@ PR0 必須做到：
 | PR10 | Strategy-Visible UX | UX 優先顯示 strategy hypothesis、evidence gates、backtest、leaderboard、failure attribution。 |
 | PR11 | Codex Governance Docs And Prompts | 補 controller artifacts、worker prompts、acceptance docs、Windows autopilot runbook。 |
 
+PR0-PR11 are now implemented in this repo. Future work should continue from the
+same master decision: improve research and prediction capability without
+creating a fake ChatGPT Pro Controller runtime service.
+
 ## ChatGPT Pro Controller Model
 
 不要在 repo 裡假裝有一個線上的 ChatGPT Pro Controller runtime service。

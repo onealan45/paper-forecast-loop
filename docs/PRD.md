@@ -84,6 +84,10 @@ The PRD follows that decision:
 - PR9 starts Research/Paper Autopilot Loop records: agendas and linked loop
   runs make the agenda -> strategy -> evaluation -> decision -> outcome -> next
   action chain inspectable.
+- PR10 surfaces that research loop in the read-only UX: dashboard and operator
+  console pages now show the current strategy hypothesis, strategy rules, locked
+  evidence gates, leaderboard state, paper-shadow attribution, and next
+  autopilot research action before raw metadata.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -514,6 +518,9 @@ V1 MVP should include:
   evidence before BUY/SELL
 - local-only read-only operator console skeleton with overview, decisions,
   portfolio, research, health, and control-placeholder pages
+- strategy-visible dashboard and operator console surfaces exposing the current
+  strategy hypothesis, strategy rules, locked evidence gates, leaderboard
+  state, paper-shadow attribution, and autopilot next research action
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,
@@ -561,8 +568,8 @@ correctness defects:
 
 - strategy and regime classification remain too simple for the user's current
   research goals
-- the current read-only UX includes static HTML plus a local operator console;
-  it does not yet make concrete strategy logic prominent enough
+- the current read-only UX now exposes concrete strategy context, but visual
+  depth, comparison charts, and richer strategy revision history remain basic
 - automation run logs are audit artifacts only; scheduler orchestration remains
   outside the repo
 - automation is local and simulation-first, with manual evidence checks before
@@ -589,7 +596,7 @@ correctness defects:
 
 The repository is suitable for continued hourly research only when
 tests pass, active storage repair status is fresh, dashboard freshness is
-visible, strategy decision/health status are visible, and
+visible, strategy decision/health status and strategy research context are visible, and
 `last_run_meta.json.new_forecast.forecast_id` matches the newest forecast tail
 for the same symbol when that metadata file belongs to the symbol being
 audited.

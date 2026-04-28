@@ -90,9 +90,13 @@ factory:
 - PR9 adds research agenda and autopilot run artifacts so the chain from
   agenda to strategy, evaluation, decision, shadow outcome, and next research
   action is visible as one loop record.
+- PR10 makes strategy research visible in the read-only UX: the dashboard and
+  operator console now surface the current strategy hypothesis, rules, locked
+  evidence gates, leaderboard state, paper-shadow attribution, and next
+  autopilot research action before raw metadata.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
-  market data, experiment registry, validation depth, leaderboard governance,
-  deeper autopilot learning, and self-evolving research skills.
+  market data, validation depth, leaderboard governance, deeper autopilot
+  learning, and self-evolving research skills.
 - Vibe-Trading is a useful reference for skills, swarm workflows, MCP tools,
   agent memory, backtest breadth, data loaders, and UX surfaces.
 - CoinGecko remains useful for prototype and cross-check work, but serious
@@ -655,6 +659,22 @@ This is an audit loop, not a scheduler. It does not generate strategies by
 itself, mutate strategy cards, or place orders. It makes the learning cycle
 inspectable so later stages can add real strategy revision workers.
 
+### Strategy-Visible UX
+
+PR10 promotes concrete strategy context from raw artifacts into the inspection
+surfaces:
+
+- the static dashboard has a `strategy-research` section near the top, before
+  raw metadata-heavy panels
+- the operator console overview shows a strategy research focus card before
+  artifact counts
+- the operator console research page shows the current strategy hypothesis,
+  strategy rules, experiment trial, locked evidence gates, leaderboard status,
+  paper-shadow outcome attribution, research agenda, and autopilot next action
+
+This is still read-only. It does not mutate strategies, execute orders, or hide
+the underlying artifacts; it makes the current research logic easier to inspect.
+
 ### Repair Request Artifact
 
 Each repair request records:
@@ -894,6 +914,12 @@ This remains an inspection surface only.
 M5G adds notification artifacts and shows the newest local notifications on the
 operator console overview. These notifications are local artifacts only; they do
 not send Telegram, push, email, broker, exchange, or external webhook traffic.
+
+PR10 expands the read-only inspection UX for strategy research. The dashboard
+and operator console now show the concrete strategy hypothesis, strategy rules,
+locked evidence gates, leaderboard state, paper-shadow attribution, and
+autopilot next research action without requiring the operator to read JSONL
+records first.
 
 ## Failure and Degrade Behavior
 
@@ -1245,6 +1271,6 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - research reports summarize existing artifacts only; they do not create new strategy gates
 - research quality gates now block BUY/SELL unless sample size, baseline edge,
   backtest, drawdown, and walk-forward evidence pass
-- PR9 research autopilot run records exist, but full scheduling, automatic
-  strategy mutation, autonomous strategy generation, deeper
-  CPCV/PBO/DSR/bootstrap statistics, and strategy-visible UX remain deferred
+- PR9/PR10 research autopilot and strategy-visible UX records exist, but full
+  scheduling, automatic strategy mutation, autonomous strategy generation, and
+  deeper CPCV/PBO/DSR/bootstrap statistics remain deferred

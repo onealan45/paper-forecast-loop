@@ -14,16 +14,24 @@ from forecast_loop.models import (
     AutomationRun,
     BacktestResult,
     BaselineEvaluation,
+    ExperimentTrial,
     HealthCheckResult,
     HealthFinding,
+    LeaderboardEntry,
+    LockedEvaluationResult,
     NotificationArtifact,
     PaperControlEvent,
     PaperPortfolioSnapshot,
+    PaperShadowOutcome,
+    ResearchAgenda,
+    ResearchAutopilotRun,
     RepairRequest,
     RiskSnapshot,
+    StrategyCard,
     StrategyDecision,
     WalkForwardValidation,
 )
+from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.storage import JsonFileRepository
 
 
@@ -44,6 +52,13 @@ class OperatorConsoleSnapshot:
     latest_baseline: BaselineEvaluation | None
     latest_backtest: BacktestResult | None
     latest_walk_forward: WalkForwardValidation | None
+    latest_strategy_card: StrategyCard | None
+    latest_experiment_trial: ExperimentTrial | None
+    latest_locked_evaluation: LockedEvaluationResult | None
+    latest_leaderboard_entry: LeaderboardEntry | None
+    latest_paper_shadow_outcome: PaperShadowOutcome | None
+    latest_research_agenda: ResearchAgenda | None
+    latest_research_autopilot_run: ResearchAutopilotRun | None
     repair_requests: list[RepairRequest]
     control_events: list[PaperControlEvent]
     control_state: PaperControlState
@@ -82,6 +97,30 @@ def build_operator_console_snapshot(
     baselines = [item for item in _safe_load(repository.load_baseline_evaluations) if item.symbol == symbol]
     backtests = [item for item in _safe_load(repository.load_backtest_results) if item.symbol == symbol]
     walk_forwards = [item for item in _safe_load(repository.load_walk_forward_validations) if item.symbol == symbol]
+    strategy_cards = [item for item in _safe_load(repository.load_strategy_cards) if symbol in item.symbols]
+    strategy_card_ids = {item.card_id for item in strategy_cards}
+    experiment_trials = [item for item in _safe_load(repository.load_experiment_trials) if item.symbol == symbol]
+    trial_ids = {item.trial_id for item in experiment_trials}
+    all_locked_evaluations = _safe_load(repository.load_locked_evaluation_results)
+    locked_evaluations = [
+        item
+        for item in all_locked_evaluations
+        if item.strategy_card_id in strategy_card_ids or item.trial_id in trial_ids
+    ]
+    leaderboard_entries = [item for item in _safe_load(repository.load_leaderboard_entries) if item.symbol == symbol]
+    paper_shadow_outcomes = [item for item in _safe_load(repository.load_paper_shadow_outcomes) if item.symbol == symbol]
+    research_agendas = [item for item in _safe_load(repository.load_research_agendas) if item.symbol == symbol]
+    research_autopilot_runs = [item for item in _safe_load(repository.load_research_autopilot_runs) if item.symbol == symbol]
+    research_chain = resolve_latest_strategy_research_chain(
+        symbol=symbol,
+        strategy_cards=strategy_cards,
+        experiment_trials=experiment_trials,
+        locked_evaluations=all_locked_evaluations,
+        leaderboard_entries=leaderboard_entries,
+        paper_shadow_outcomes=paper_shadow_outcomes,
+        research_agendas=research_agendas,
+        research_autopilot_runs=research_autopilot_runs,
+    )
     repair_requests = _safe_load(repository.load_repair_requests)
     control_events = _safe_load(repository.load_control_events)
     control_state = current_control_state(control_events, symbol=symbol)
@@ -100,6 +139,13 @@ def build_operator_console_snapshot(
         latest_baseline=_latest(baselines),
         latest_backtest=_latest(backtests),
         latest_walk_forward=_latest(walk_forwards),
+        latest_strategy_card=research_chain.strategy_card,
+        latest_experiment_trial=research_chain.experiment_trial,
+        latest_locked_evaluation=research_chain.locked_evaluation,
+        latest_leaderboard_entry=research_chain.leaderboard_entry,
+        latest_paper_shadow_outcome=research_chain.paper_shadow_outcome,
+        latest_research_agenda=research_chain.research_agenda,
+        latest_research_autopilot_run=research_chain.research_autopilot_run,
         repair_requests=repair_requests,
         control_events=control_events,
         control_state=control_state,
@@ -119,6 +165,13 @@ def build_operator_console_snapshot(
             "notifications": len(notifications),
             "backtests": len(backtests),
             "walk_forward_validations": len(walk_forwards),
+            "strategy_cards": len(strategy_cards),
+            "experiment_trials": len(experiment_trials),
+            "locked_evaluations": len(locked_evaluations),
+            "leaderboard_entries": len(leaderboard_entries),
+            "paper_shadow_outcomes": len(paper_shadow_outcomes),
+            "research_agendas": len(research_agendas),
+            "research_autopilot_runs": len(research_autopilot_runs),
         },
     )
 
@@ -470,6 +523,10 @@ def _render_overview(snapshot: OperatorConsoleSnapshot) -> str:
     <div class="metric">{_format_money(snapshot.latest_portfolio.nav if snapshot.latest_portfolio else None)}</div>
     <p class="muted">曝險：{_format_pct(snapshot.latest_portfolio.gross_exposure_pct if snapshot.latest_portfolio else None)}</p>
   </article>
+  <article class="panel wide">
+    <h3>策略研究焦點</h3>
+    {_strategy_research_preview(snapshot)}
+  </article>
   <article class="panel">
     <h3>Artifact Counts</h3>
     {_render_counts(snapshot.counts)}
@@ -585,8 +642,55 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
     baseline = snapshot.latest_baseline
     backtest = snapshot.latest_backtest
     walk_forward = snapshot.latest_walk_forward
+    card = snapshot.latest_strategy_card
+    trial = snapshot.latest_experiment_trial
+    evaluation = snapshot.latest_locked_evaluation
+    leaderboard = snapshot.latest_leaderboard_entry
+    outcome = snapshot.latest_paper_shadow_outcome
+    agenda = snapshot.latest_research_agenda
+    autopilot = snapshot.latest_research_autopilot_run
     return f"""
 <section class="grid">
+  <article class="panel wide">
+    <h3>目前策略假設</h3>
+    <p class="metric">{escape(card.strategy_name if card else "尚無策略卡")}</p>
+    <p>{escape(card.hypothesis if card else "目前沒有 strategy_cards artifact。")}</p>
+    <div class="badge-row">
+      <span class="status">Family {escape(card.strategy_family if card else "n/a")}</span>
+      <span class="status">Version {escape(card.version if card else "n/a")}</span>
+      <span class="status">Status {escape(card.status if card else "n/a")}</span>
+    </div>
+    <p>ID：{_artifact_id(card, "card_id")}</p>
+    <p>Signal：{escape(card.signal_description if card else "n/a")}</p>
+    <h4>參數</h4>
+    {_dict_rows(card.parameters if card else {})}
+  </article>
+  <article class="panel">
+    <h3>下一步研究動作</h3>
+    <div class="metric">{escape(autopilot.next_research_action if autopilot else "n/a")}</div>
+    <p>Run：{_artifact_id(autopilot, "run_id")}</p>
+    <p>Status：{escape(autopilot.loop_status if autopilot else "n/a")}</p>
+    <p>Blocked：</p>
+    {_plain_list(autopilot.blocked_reasons if autopilot else [])}
+  </article>
+  <article class="panel">
+    <h3>Leaderboard</h3>
+    <p>ID：{_artifact_id(leaderboard, "entry_id")}</p>
+    <p>Rankable：{"是" if leaderboard and leaderboard.rankable else "否"}</p>
+    <p>alpha_score：{_format_number(leaderboard.alpha_score if leaderboard else None)}</p>
+    <p>Promotion：{escape(leaderboard.promotion_stage if leaderboard else "n/a")}</p>
+    <p>Blocked：</p>
+    {_plain_list(leaderboard.blocked_reasons if leaderboard else [])}
+  </article>
+  <article class="panel wide">
+    <h3>Evidence Gates</h3>
+    <p>ID：{_artifact_id(evaluation, "evaluation_id")}</p>
+    <p>Passed：{"是" if evaluation and evaluation.passed else "否"} / Rankable：{"是" if evaluation and evaluation.rankable else "否"} / alpha_score：{_format_number(evaluation.alpha_score if evaluation else None)}</p>
+    <p>Blocked：</p>
+    {_plain_list(evaluation.blocked_reasons if evaluation else [])}
+    <h4>Gate Metrics</h4>
+    {_dict_rows(evaluation.gate_metrics if evaluation else {})}
+  </article>
   <article class="panel">
     <h3>Baseline</h3>
     <p>ID：{_artifact_id(baseline, "baseline_id")}</p>
@@ -606,6 +710,48 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
     <p>Windows：{walk_forward.window_count if walk_forward else "n/a"}</p>
     <p>Excess：{_format_pct(walk_forward.average_excess_return if walk_forward else None)}</p>
     <p>Overfit flags：{escape(", ".join(walk_forward.overfit_risk_flags) if walk_forward and walk_forward.overfit_risk_flags else "none")}</p>
+  </article>
+  <article class="panel">
+    <h3>Paper-shadow 歸因</h3>
+    <p>ID：{_artifact_id(outcome, "outcome_id")}</p>
+    <p>Grade：{escape(outcome.outcome_grade if outcome else "n/a")}</p>
+    <p>Excess after costs：{_format_pct(outcome.excess_return_after_costs if outcome else None)}</p>
+    <p>Recommended：{escape(outcome.recommended_strategy_action if outcome else "n/a")}</p>
+    <p>Failure attribution：</p>
+    {_plain_list(outcome.failure_attributions if outcome else [])}
+  </article>
+  <article class="panel wide">
+    <h3>策略規則</h3>
+    <h4>進場規則</h4>
+    {_plain_list(card.entry_rules if card else [])}
+    <h4>出場規則</h4>
+    {_plain_list(card.exit_rules if card else [])}
+    <h4>風控規則</h4>
+    {_plain_list(card.risk_rules if card else [])}
+    <h4>資料需求</h4>
+    {_plain_list(card.data_requirements if card else [])}
+  </article>
+  <article class="panel">
+    <h3>Experiment Trial</h3>
+    <p>ID：{_artifact_id(trial, "trial_id")}</p>
+    <p>Status：{escape(trial.status if trial else "n/a")}</p>
+    <p>Dataset：<code>{escape(trial.dataset_id if trial and trial.dataset_id else "n/a")}</code></p>
+    <h4>Metric Summary</h4>
+    {_dict_rows(trial.metric_summary if trial else {})}
+  </article>
+  <article class="panel wide">
+    <h3>Research Agenda</h3>
+    <p>ID：{_artifact_id(agenda, "agenda_id")}</p>
+    <p>Title：{escape(agenda.title if agenda else "n/a")}</p>
+    <p>Hypothesis：{escape(agenda.hypothesis if agenda else "n/a")}</p>
+    <p>Acceptance：</p>
+    {_plain_list(agenda.acceptance_criteria if agenda else [])}
+    <p>Blocked actions：</p>
+    {_plain_list(agenda.blocked_actions if agenda else [])}
+  </article>
+  <article class="panel wide">
+    <h3>Autopilot Steps</h3>
+    {_autopilot_steps(autopilot)}
   </article>
 </section>
 """
@@ -851,6 +997,64 @@ def _conditions(conditions: list[str]) -> str:
     if not conditions:
         return '<p class="muted">未記錄失效條件。</p>'
     return "<ul class=\"conditions\">" + "".join(f"<li>{escape(condition)}</li>" for condition in conditions) + "</ul>"
+
+
+def _plain_list(items: list[str], *, empty: str = "none") -> str:
+    if not items:
+        return f'<p class="muted">{escape(empty)}</p>'
+    return "<ul class=\"conditions\">" + "".join(f"<li>{escape(item)}</li>" for item in items) + "</ul>"
+
+
+def _dict_rows(values: dict[str, object]) -> str:
+    if not values:
+        return '<p class="muted">none</p>'
+    rows = "".join(
+        "<tr>"
+        f"<td><code>{escape(str(key))}</code></td>"
+        f"<td>{escape(_format_artifact_value(value))}</td>"
+        "</tr>"
+        for key, value in sorted(values.items(), key=lambda item: str(item[0]))
+    )
+    return f"<table><tbody>{rows}</tbody></table>"
+
+
+def _format_artifact_value(value: object) -> str:
+    if isinstance(value, float):
+        return _format_number(value)
+    if isinstance(value, list):
+        return ", ".join(str(item) for item in value)
+    if isinstance(value, dict):
+        return ", ".join(f"{key}={item}" for key, item in sorted(value.items(), key=lambda item: str(item[0])))
+    return str(value)
+
+
+def _autopilot_steps(run: ResearchAutopilotRun | None) -> str:
+    if run is None:
+        return '<p class="muted">目前沒有 research autopilot run。</p>'
+    if not run.steps:
+        return '<p class="muted">沒有 autopilot step 記錄。</p>'
+    rows = "".join(
+        "<li>"
+        f"{escape(step.get('name') or '')}: {escape(step.get('status') or '')} "
+        f"<code>{escape(step.get('artifact_id') or 'none')}</code>"
+        "</li>"
+        for step in run.steps
+    )
+    return f'<ul class="conditions">{rows}</ul>'
+
+
+def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
+    card = snapshot.latest_strategy_card
+    leaderboard = snapshot.latest_leaderboard_entry
+    outcome = snapshot.latest_paper_shadow_outcome
+    autopilot = snapshot.latest_research_autopilot_run
+    return f"""
+<p>策略卡：{_artifact_id(card, "card_id")} / {escape(card.strategy_name if card else "n/a")}</p>
+<p>假設：{escape(card.hypothesis if card else "目前沒有 strategy_cards artifact。")}</p>
+<p>Leaderboard：{_artifact_id(leaderboard, "entry_id")} / alpha_score={_format_number(leaderboard.alpha_score if leaderboard else None)}</p>
+<p>Paper-shadow：{escape(outcome.recommended_strategy_action if outcome else "n/a")} / {escape(outcome.outcome_grade if outcome else "n/a")}</p>
+<p>下一步：{escape(autopilot.next_research_action if autopilot else "n/a")} / Run {_artifact_id(autopilot, "run_id")}</p>
+"""
 
 
 def _render_counts(counts: dict[str, int]) -> str:

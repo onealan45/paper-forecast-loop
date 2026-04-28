@@ -48,9 +48,10 @@ sources or research methods.
 
 The current master execution decision after M7A is recorded in
 [`docs/architecture/autonomous-alpha-factory-master-decision.md`](docs/architecture/autonomous-alpha-factory-master-decision.md).
-That document is the repo's working contract for the next phase: first complete
-PR0 Reviewability And Formatting Gate, then build the M7B-M7F Alpha Evidence
-Engine before expanding broker/testnet or UI polish work.
+That document is the repo's working contract for the next phase. PR0 and
+M7B-M7F establish the reviewability and Alpha Evidence Engine spine. PR6 adds
+the first Strategy Card and Experiment Registry layer so failed, aborted, and
+invalid research trials are retained instead of hidden.
 
 The post-M1-M6 research direction is documented in
 [`docs/architecture/alpha-factory-research-background.md`](docs/architecture/alpha-factory-research-background.md).
@@ -78,11 +79,8 @@ factory:
   samples.
 - M7F integrates event-edge evidence into the research gate, so BUY/SELL remains
   blocked unless the latest event edge evaluation also passes.
-- PR0 must make the codebase reviewable before more strategy intelligence is
-  stacked on top.
-- M7B-M7F should turn source documents, canonical events, source reliability,
-  already-priced checks, historical edge, and decision integration into real
-  engines.
+- PR6 adds versioned strategy cards, experiment budget snapshots, and an
+  append-only experiment trial registry.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, experiment registry, validation depth, leaderboard governance,
   paper-shadow learning, and self-evolving research skills.
@@ -145,6 +143,9 @@ This version intentionally includes:
     - `backtest_runs.jsonl`
     - `backtest_results.jsonl`
     - `walk_forward_validations.jsonl`
+    - `strategy_cards.jsonl`
+    - `experiment_budgets.jsonl`
+    - `experiment_trials.jsonl`
 - CLI execution via:
   - `run-once`
   - `replay-range`
@@ -181,6 +182,8 @@ This version intentionally includes:
   - `research-report`
   - `backtest`
   - `walk-forward`
+  - `register-strategy-card`
+  - `record-experiment-trial`
 
 This version intentionally excludes:
 
@@ -570,6 +573,23 @@ Each notification records severity, title, message, action, source artifact ids,
 linked decision/health/repair/risk ids, and `delivery_channel=local_artifact`.
 No Telegram token, webhook, broker, exchange, or external notification service
 is configured in M5G.
+
+### Strategy Card And Experiment Registry Artifacts
+
+PR6 adds the first Alpha Factory registry artifacts:
+
+- `strategy_cards.jsonl`: versioned strategy hypothesis cards with strategy
+  family, symbol universe, signal description, entry/exit/risk rules,
+  parameters, data requirements, and linked research evidence.
+- `experiment_budgets.jsonl`: per-strategy-card trial budget snapshots. Budget
+  exhaustion is explicit and auditable.
+- `experiment_trials.jsonl`: append-only trial records. `PASSED`, `FAILED`,
+  `ABORTED`, and `INVALID` outcomes are all persisted so failed research is not
+  hidden from later evaluation.
+
+This stage is a registry foundation. It does not rank strategies, unlock
+BUY/SELL, train models, or promote candidates. Those require later locked
+evaluation and leaderboard gates.
 
 ### Repair Request Artifact
 
@@ -1017,6 +1037,22 @@ boundaries, runs paper-only validation and test backtests, writes
 `walk_forward_validations.jsonl`, and reports aggregate validation return, test
 return, benchmark return, excess return, test win rate, and overfit-risk flags.
 
+Register a strategy card:
+
+```powershell
+python run_forecast_loop.py register-strategy-card --storage-dir .\paper_storage\manual-research --name "MA trend BTC" --family trend_following --version v1 --symbol BTC-USD --hypothesis "BTC trend continuation after moving-average confirmation." --signal-description "Fast moving average above slow moving average." --entry-rule "Enter long when fast_ma > slow_ma." --exit-rule "Exit when fast_ma <= slow_ma." --risk-rule "Max position 10% during research simulation." --parameter fast_window=3 --parameter slow_window=7 --data-requirement market_candles:BTC-USD:1h
+```
+
+Record an experiment trial, including failed outcomes:
+
+```powershell
+python run_forecast_loop.py record-experiment-trial --storage-dir .\paper_storage\manual-research --strategy-card-id strategy-card:example --trial-index 1 --status FAILED --symbol BTC-USD --max-trials 20 --failure-reason negative_after_cost_edge --metric excess_return=-0.02
+```
+
+If the declared trial budget is exhausted, the command still writes an
+`ABORTED` trial with `failure_reason=trial_budget_exhausted`. The system should
+never silently drop failed or over-budget research attempts.
+
 Generate a Markdown research report from existing artifacts:
 
 ```powershell
@@ -1102,3 +1138,5 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - research reports summarize existing artifacts only; they do not create new strategy gates
 - research quality gates now block BUY/SELL unless sample size, baseline edge,
   backtest, drawdown, and walk-forward evidence pass
+- strategy cards and experiment trials are now persisted, but leaderboard
+  ranking, locked holdout policy, and paper-shadow promotion remain deferred

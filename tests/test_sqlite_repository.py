@@ -13,6 +13,8 @@ from forecast_loop.models import (
     BrokerOrderStatus,
     ExecutionSafetyGate,
     EquityCurvePoint,
+    ExperimentBudget,
+    ExperimentTrial,
     EvaluationSummary,
     Forecast,
     ForecastScore,
@@ -33,6 +35,7 @@ from forecast_loop.models import (
     ResearchDatasetRow,
     Review,
     RiskSnapshot,
+    StrategyCard,
     StrategyDecision,
     WalkForwardValidation,
     WalkForwardWindow,
@@ -393,6 +396,75 @@ def _walk_forward_validation(now: datetime, result: BacktestResult) -> WalkForwa
     )
 
 
+def _strategy_card(now: datetime) -> StrategyCard:
+    return StrategyCard(
+        card_id="strategy-card:sqlite",
+        created_at=now,
+        strategy_name="MA trend BTC",
+        strategy_family="trend_following",
+        version="v1",
+        status="ACTIVE",
+        symbols=["BTC-USD"],
+        hypothesis="BTC trend continuation after moving-average confirmation.",
+        signal_description="Fast moving average above slow moving average.",
+        entry_rules=["Enter long when fast_ma > slow_ma."],
+        exit_rules=["Exit when fast_ma <= slow_ma."],
+        risk_rules=["Max position 10% during research simulation."],
+        parameters={"fast_window": 3, "slow_window": 7},
+        data_requirements=["market_candles:BTC-USD:1h"],
+        feature_snapshot_ids=[],
+        backtest_result_ids=["backtest-result:sqlite"],
+        walk_forward_validation_ids=["walk-forward:sqlite"],
+        event_edge_evaluation_ids=[],
+        parent_card_id=None,
+        author="codex",
+        decision_basis="test",
+    )
+
+
+def _experiment_budget(now: datetime, card: StrategyCard) -> ExperimentBudget:
+    return ExperimentBudget(
+        budget_id="experiment-budget:sqlite",
+        created_at=now,
+        strategy_card_id=card.card_id,
+        max_trials=5,
+        used_trials=1,
+        remaining_trials=4,
+        status="OPEN",
+        budget_scope="strategy_card",
+        decision_basis="test",
+    )
+
+
+def _experiment_trial(
+    now: datetime,
+    card: StrategyCard,
+    dataset: ResearchDataset,
+    result: BacktestResult,
+) -> ExperimentTrial:
+    return ExperimentTrial(
+        trial_id="experiment-trial:sqlite",
+        created_at=now,
+        strategy_card_id=card.card_id,
+        trial_index=1,
+        status="FAILED",
+        symbol="BTC-USD",
+        seed=42,
+        dataset_id=dataset.dataset_id,
+        backtest_result_id=result.result_id,
+        walk_forward_validation_id=None,
+        event_edge_evaluation_id=None,
+        prompt_hash="prompt-hash",
+        code_hash="code-hash",
+        parameters={"fast_window": 3, "slow_window": 7},
+        metric_summary={"excess_return": -0.01},
+        failure_reason="negative_after_cost_edge",
+        started_at=now,
+        completed_at=now,
+        decision_basis="test",
+    )
+
+
 def _paper_order(now: datetime, decision: StrategyDecision) -> PaperOrder:
     return PaperOrder(
         order_id="paper-order:sqlite",
@@ -581,6 +653,9 @@ def _seed_repository(repository) -> dict:
     backtest_run = _backtest_run(now, market_candle)
     backtest_result = _backtest_result(now, backtest_run)
     walk_forward_validation = _walk_forward_validation(now, backtest_result)
+    strategy_card = _strategy_card(now)
+    experiment_budget = _experiment_budget(now, strategy_card)
+    experiment_trial = _experiment_trial(now, strategy_card, dataset, backtest_result)
 
     repository.save_market_candle(market_candle)
     repository.save_macro_event(macro_event)
@@ -608,6 +683,9 @@ def _seed_repository(repository) -> dict:
     repository.save_backtest_run(backtest_run)
     repository.save_backtest_result(backtest_result)
     repository.save_walk_forward_validation(walk_forward_validation)
+    repository.save_strategy_card(strategy_card)
+    repository.save_experiment_budget(experiment_budget)
+    repository.save_experiment_trial(experiment_trial)
     return {
         "forecast": forecast,
         "score": score,
@@ -635,6 +713,9 @@ def _seed_repository(repository) -> dict:
         "backtest_run": backtest_run,
         "backtest_result": backtest_result,
         "walk_forward_validation": walk_forward_validation,
+        "strategy_card": strategy_card,
+        "experiment_budget": experiment_budget,
+        "experiment_trial": experiment_trial,
     }
 
 
@@ -670,6 +751,9 @@ def test_sqlite_repository_round_trips_and_dedupes_m1_artifacts(tmp_path):
     assert repository.load_backtest_runs() == [artifacts["backtest_run"]]
     assert repository.load_backtest_results() == [artifacts["backtest_result"]]
     assert repository.load_walk_forward_validations() == [artifacts["walk_forward_validation"]]
+    assert repository.load_strategy_cards() == [artifacts["strategy_card"]]
+    assert repository.load_experiment_budgets() == [artifacts["experiment_budget"]]
+    assert repository.load_experiment_trials() == [artifacts["experiment_trial"]]
     assert repository.artifact_counts()["forecasts"] == 1
 
 
@@ -724,6 +808,9 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert sqlite_repository.load_backtest_runs() == [artifacts["backtest_run"]]
     assert sqlite_repository.load_backtest_results() == [artifacts["backtest_result"]]
     assert sqlite_repository.load_walk_forward_validations() == [artifacts["walk_forward_validation"]]
+    assert sqlite_repository.load_strategy_cards() == [artifacts["strategy_card"]]
+    assert sqlite_repository.load_experiment_budgets() == [artifacts["experiment_budget"]]
+    assert sqlite_repository.load_experiment_trials() == [artifacts["experiment_trial"]]
 
     assert main(["db-health", "--storage-dir", str(tmp_path)]) == 0
     health_result = json.loads(capsys.readouterr().out)
@@ -746,6 +833,9 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert health_result["artifact_counts"]["backtest_runs"] == 1
     assert health_result["artifact_counts"]["backtest_results"] == 1
     assert health_result["artifact_counts"]["walk_forward_validations"] == 1
+    assert health_result["artifact_counts"]["strategy_cards"] == 1
+    assert health_result["artifact_counts"]["experiment_budgets"] == 1
+    assert health_result["artifact_counts"]["experiment_trials"] == 1
 
 
 def test_db_health_flags_malformed_provider_run_payload(tmp_path, capsys):
@@ -807,3 +897,6 @@ def test_export_jsonl_writes_compatibility_artifacts(tmp_path, capsys):
     assert exported_repository.load_backtest_runs() == [artifacts["backtest_run"]]
     assert exported_repository.load_backtest_results() == [artifacts["backtest_result"]]
     assert exported_repository.load_walk_forward_validations() == [artifacts["walk_forward_validation"]]
+    assert exported_repository.load_strategy_cards() == [artifacts["strategy_card"]]
+    assert exported_repository.load_experiment_budgets() == [artifacts["experiment_budget"]]
+    assert exported_repository.load_experiment_trials() == [artifacts["experiment_trial"]]

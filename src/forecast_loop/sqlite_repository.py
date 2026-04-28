@@ -23,6 +23,8 @@ from forecast_loop.models import (
     FeatureSnapshot,
     Forecast,
     ForecastScore,
+    ExperimentBudget,
+    ExperimentTrial,
     MacroEvent,
     MarketReactionCheck,
     MarketCandleRecord,
@@ -40,6 +42,7 @@ from forecast_loop.models import (
     SourceDocument,
     SourceIngestionRun,
     SourceRegistryEntry,
+    StrategyCard,
     StrategyDecision,
     WalkForwardValidation,
 )
@@ -128,6 +131,9 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         "validation_id",
         WalkForwardValidation.from_dict,
     ),
+    ArtifactSpec("strategy_cards", "strategy_cards.jsonl", "card_id", StrategyCard.from_dict),
+    ArtifactSpec("experiment_budgets", "experiment_budgets.jsonl", "budget_id", ExperimentBudget.from_dict),
+    ArtifactSpec("experiment_trials", "experiment_trials.jsonl", "trial_id", ExperimentTrial.from_dict),
 )
 _SPEC_BY_TYPE = {spec.artifact_type: spec for spec in ARTIFACT_SPECS}
 
@@ -408,6 +414,24 @@ class SQLiteRepository:
     def load_walk_forward_validations(self) -> list[WalkForwardValidation]:
         return self._load("walk_forward_validations", WalkForwardValidation.from_dict)
 
+    def save_strategy_card(self, card: StrategyCard) -> None:
+        self._save_unique("strategy_cards", card.card_id, card.to_dict())
+
+    def load_strategy_cards(self) -> list[StrategyCard]:
+        return self._load("strategy_cards", StrategyCard.from_dict)
+
+    def save_experiment_budget(self, budget: ExperimentBudget) -> None:
+        self._save_unique("experiment_budgets", budget.budget_id, budget.to_dict())
+
+    def load_experiment_budgets(self) -> list[ExperimentBudget]:
+        return self._load("experiment_budgets", ExperimentBudget.from_dict)
+
+    def save_experiment_trial(self, trial: ExperimentTrial) -> None:
+        self._save_unique("experiment_trials", trial.trial_id, trial.to_dict())
+
+    def load_experiment_trials(self) -> list[ExperimentTrial]:
+        return self._load("experiment_trials", ExperimentTrial.from_dict)
+
     def artifact_counts(self) -> dict[str, int]:
         with self._connect() as connection:
             rows = connection.execute(
@@ -553,6 +577,12 @@ def migrate_jsonl_to_sqlite(storage_dir: Path | str, db_path: Path | str | None 
         sqlite_repository.save_backtest_result(result)
     for validation in json_repository.load_walk_forward_validations():
         sqlite_repository.save_walk_forward_validation(validation)
+    for card in json_repository.load_strategy_cards():
+        sqlite_repository.save_strategy_card(card)
+    for budget in json_repository.load_experiment_budgets():
+        sqlite_repository.save_experiment_budget(budget)
+    for trial in json_repository.load_experiment_trials():
+        sqlite_repository.save_experiment_trial(trial)
 
     after_counts = sqlite_repository.artifact_counts()
     return {

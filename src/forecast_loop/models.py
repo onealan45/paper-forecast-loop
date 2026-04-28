@@ -678,6 +678,259 @@ class WalkForwardValidation:
 
 
 @dataclass(slots=True)
+class StrategyCard:
+    card_id: str
+    created_at: datetime
+    strategy_name: str
+    strategy_family: str
+    version: str
+    status: str
+    symbols: list[str]
+    hypothesis: str
+    signal_description: str
+    entry_rules: list[str]
+    exit_rules: list[str]
+    risk_rules: list[str]
+    parameters: dict[str, object]
+    data_requirements: list[str]
+    feature_snapshot_ids: list[str]
+    backtest_result_ids: list[str]
+    walk_forward_validation_ids: list[str]
+    event_edge_evaluation_ids: list[str]
+    parent_card_id: str | None
+    author: str
+    decision_basis: str
+
+    ALLOWED_STATUSES = {"DRAFT", "ACTIVE", "RETIRED", "QUARANTINED"}
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        strategy_name: str,
+        strategy_family: str,
+        version: str,
+        symbols: list[str],
+        hypothesis: str,
+        parameters: dict[str, object],
+    ) -> str:
+        return _stable_artifact_id(
+            "strategy-card",
+            {
+                "strategy_name": strategy_name,
+                "strategy_family": strategy_family,
+                "version": version,
+                "symbols": sorted(symbols),
+                "hypothesis": hypothesis,
+                "parameters": parameters,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "StrategyCard":
+        status = payload.get("status", "DRAFT")
+        if status not in cls.ALLOWED_STATUSES:
+            raise ValueError(f"unsupported strategy card status: {status}")
+        symbols = list(payload.get("symbols", []))
+        parameters = dict(payload.get("parameters") or {})
+        strategy_name = _require_string(payload, "strategy_name")
+        strategy_family = _require_string(payload, "strategy_family")
+        hypothesis = _require_string(payload, "hypothesis")
+        version = payload.get("version", "v1")
+        card_id = payload.get("card_id") or cls.build_id(
+            strategy_name=strategy_name,
+            strategy_family=strategy_family,
+            version=version,
+            symbols=symbols,
+            hypothesis=hypothesis,
+            parameters=parameters,
+        )
+        return cls(
+            card_id=card_id,
+            created_at=_require_aware_datetime(payload, "created_at"),
+            strategy_name=strategy_name,
+            strategy_family=strategy_family,
+            version=version,
+            status=status,
+            symbols=symbols,
+            hypothesis=hypothesis,
+            signal_description=payload.get("signal_description", ""),
+            entry_rules=list(payload.get("entry_rules", [])),
+            exit_rules=list(payload.get("exit_rules", [])),
+            risk_rules=list(payload.get("risk_rules", [])),
+            parameters=parameters,
+            data_requirements=list(payload.get("data_requirements", [])),
+            feature_snapshot_ids=list(payload.get("feature_snapshot_ids", [])),
+            backtest_result_ids=list(payload.get("backtest_result_ids", [])),
+            walk_forward_validation_ids=list(payload.get("walk_forward_validation_ids", [])),
+            event_edge_evaluation_ids=list(payload.get("event_edge_evaluation_ids", [])),
+            parent_card_id=payload.get("parent_card_id"),
+            author=payload.get("author", "codex"),
+            decision_basis=payload.get("decision_basis", "legacy_strategy_card"),
+        )
+
+
+@dataclass(slots=True)
+class ExperimentBudget:
+    budget_id: str
+    created_at: datetime
+    strategy_card_id: str
+    max_trials: int
+    used_trials: int
+    remaining_trials: int
+    status: str
+    budget_scope: str
+    decision_basis: str
+
+    ALLOWED_STATUSES = {"OPEN", "EXHAUSTED"}
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        strategy_card_id: str,
+        max_trials: int,
+        used_trials: int,
+        remaining_trials: int,
+        status: str,
+    ) -> str:
+        return _stable_artifact_id(
+            "experiment-budget",
+            {
+                "strategy_card_id": strategy_card_id,
+                "max_trials": max_trials,
+                "used_trials": used_trials,
+                "remaining_trials": remaining_trials,
+                "status": status,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "ExperimentBudget":
+        status = payload.get("status", "OPEN")
+        if status not in cls.ALLOWED_STATUSES:
+            raise ValueError(f"unsupported experiment budget status: {status}")
+        return cls(
+            budget_id=_require_string(payload, "budget_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            strategy_card_id=_require_string(payload, "strategy_card_id"),
+            max_trials=int(payload.get("max_trials", 0)),
+            used_trials=int(payload.get("used_trials", 0)),
+            remaining_trials=int(payload.get("remaining_trials", 0)),
+            status=status,
+            budget_scope=payload.get("budget_scope", "strategy_card"),
+            decision_basis=payload.get("decision_basis", "legacy_experiment_budget"),
+        )
+
+
+@dataclass(slots=True)
+class ExperimentTrial:
+    trial_id: str
+    created_at: datetime
+    strategy_card_id: str
+    trial_index: int
+    status: str
+    symbol: str
+    seed: int | None
+    dataset_id: str | None
+    backtest_result_id: str | None
+    walk_forward_validation_id: str | None
+    event_edge_evaluation_id: str | None
+    prompt_hash: str | None
+    code_hash: str | None
+    parameters: dict[str, object]
+    metric_summary: dict[str, object]
+    failure_reason: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    decision_basis: str
+
+    ALLOWED_STATUSES = {"PENDING", "RUNNING", "PASSED", "FAILED", "ABORTED", "INVALID"}
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        strategy_card_id: str,
+        trial_index: int,
+        status: str,
+        seed: int | None,
+        prompt_hash: str | None,
+        code_hash: str | None,
+        parameters: dict[str, object],
+    ) -> str:
+        return _stable_artifact_id(
+            "experiment-trial",
+            {
+                "strategy_card_id": strategy_card_id,
+                "trial_index": trial_index,
+                "status": status,
+                "seed": seed,
+                "prompt_hash": prompt_hash,
+                "code_hash": code_hash,
+                "parameters": parameters,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        payload["started_at"] = _serialize_datetime(self.started_at)
+        payload["completed_at"] = _serialize_datetime(self.completed_at)
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "ExperimentTrial":
+        status = payload.get("status", "PENDING")
+        if status not in cls.ALLOWED_STATUSES:
+            raise ValueError(f"unsupported experiment trial status: {status}")
+        seed = payload.get("seed")
+        parameters = dict(payload.get("parameters") or {})
+        strategy_card_id = _require_string(payload, "strategy_card_id")
+        trial_index = int(payload.get("trial_index", 0))
+        trial_id = payload.get("trial_id") or cls.build_id(
+            strategy_card_id=strategy_card_id,
+            trial_index=trial_index,
+            status=status,
+            seed=int(seed) if seed is not None else None,
+            prompt_hash=payload.get("prompt_hash"),
+            code_hash=payload.get("code_hash"),
+            parameters=parameters,
+        )
+        return cls(
+            trial_id=trial_id,
+            created_at=_require_aware_datetime(payload, "created_at"),
+            strategy_card_id=strategy_card_id,
+            trial_index=trial_index,
+            status=status,
+            symbol=_require_string(payload, "symbol"),
+            seed=int(seed) if seed is not None else None,
+            dataset_id=payload.get("dataset_id"),
+            backtest_result_id=payload.get("backtest_result_id"),
+            walk_forward_validation_id=payload.get("walk_forward_validation_id"),
+            event_edge_evaluation_id=payload.get("event_edge_evaluation_id"),
+            prompt_hash=payload.get("prompt_hash"),
+            code_hash=payload.get("code_hash"),
+            parameters=parameters,
+            metric_summary=dict(payload.get("metric_summary") or {}),
+            failure_reason=payload.get("failure_reason"),
+            started_at=_optional_aware_datetime(payload, "started_at"),
+            completed_at=_optional_aware_datetime(payload, "completed_at"),
+            decision_basis=payload.get("decision_basis", "legacy_experiment_trial"),
+        )
+
+
+@dataclass(slots=True)
 class SourceRegistryEntry:
     source_id: str
     source_name: str

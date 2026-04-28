@@ -14,6 +14,17 @@ from forecast_loop.models import (
 )
 
 
+REVISION_CARD_BASIS = "paper_shadow_strategy_revision_candidate"
+REVISION_AGENDA_BASIS = "paper_shadow_strategy_revision_agenda"
+
+
+@dataclass(slots=True)
+class StrategyRevisionCandidate:
+    strategy_card: StrategyCard
+    research_agenda: ResearchAgenda | None
+    source_outcome: PaperShadowOutcome | None
+
+
 @dataclass(slots=True)
 class StrategyResearchChain:
     strategy_card: StrategyCard | None
@@ -23,6 +34,7 @@ class StrategyResearchChain:
     paper_shadow_outcome: PaperShadowOutcome | None
     research_agenda: ResearchAgenda | None
     research_autopilot_run: ResearchAutopilotRun | None
+    revision_candidate: StrategyRevisionCandidate | None
 
 
 def resolve_latest_strategy_research_chain(
@@ -56,10 +68,11 @@ def resolve_latest_strategy_research_chain(
     entry_by_id = {item.entry_id: item for item in entries}
     outcome_by_id = {item.outcome_id: item for item in outcomes}
     agenda_by_id = {item.agenda_id: item for item in agendas}
+    revision_candidate = _latest_revision_candidate(cards, outcome_by_id, agendas)
 
     latest_run = _latest(runs)
     if latest_run is not None:
-        return _chain_from_ids(
+        chain = _chain_from_ids(
             symbol=symbol,
             strategy_card_id=latest_run.strategy_card_id,
             experiment_trial_id=latest_run.experiment_trial_id,
@@ -76,16 +89,18 @@ def resolve_latest_strategy_research_chain(
             agenda_by_id=agenda_by_id,
             agendas=agendas,
         )
+        chain.revision_candidate = revision_candidate
+        return chain
 
     latest_anchor = _latest_anchor(cards, trials, evaluations, entries, outcomes, agendas)
     if latest_anchor is None:
-        return StrategyResearchChain(None, None, None, None, None, None, None)
+        return StrategyResearchChain(None, None, None, None, None, None, None, revision_candidate)
 
     kind, anchor = latest_anchor
     if kind == "outcome":
         outcome = anchor
         assert isinstance(outcome, PaperShadowOutcome)
-        return _chain_from_ids(
+        chain = _chain_from_ids(
             symbol=symbol,
             strategy_card_id=outcome.strategy_card_id,
             experiment_trial_id=outcome.trial_id,
@@ -102,10 +117,12 @@ def resolve_latest_strategy_research_chain(
             agenda_by_id=agenda_by_id,
             agendas=agendas,
         )
+        chain.revision_candidate = revision_candidate
+        return chain
     if kind == "entry":
         entry = anchor
         assert isinstance(entry, LeaderboardEntry)
-        return _chain_from_ids(
+        chain = _chain_from_ids(
             symbol=symbol,
             strategy_card_id=entry.strategy_card_id,
             experiment_trial_id=entry.trial_id,
@@ -122,10 +139,12 @@ def resolve_latest_strategy_research_chain(
             agenda_by_id=agenda_by_id,
             agendas=agendas,
         )
+        chain.revision_candidate = revision_candidate
+        return chain
     if kind == "evaluation":
         evaluation = anchor
         assert isinstance(evaluation, LockedEvaluationResult)
-        return _chain_from_ids(
+        chain = _chain_from_ids(
             symbol=symbol,
             strategy_card_id=evaluation.strategy_card_id,
             experiment_trial_id=evaluation.trial_id,
@@ -142,10 +161,12 @@ def resolve_latest_strategy_research_chain(
             agenda_by_id=agenda_by_id,
             agendas=agendas,
         )
+        chain.revision_candidate = revision_candidate
+        return chain
     if kind == "trial":
         trial = anchor
         assert isinstance(trial, ExperimentTrial)
-        return _chain_from_ids(
+        chain = _chain_from_ids(
             symbol=symbol,
             strategy_card_id=trial.strategy_card_id,
             experiment_trial_id=trial.trial_id,
@@ -162,15 +183,26 @@ def resolve_latest_strategy_research_chain(
             agenda_by_id=agenda_by_id,
             agendas=agendas,
         )
+        chain.revision_candidate = revision_candidate
+        return chain
     if kind == "agenda":
         agenda = anchor
         assert isinstance(agenda, ResearchAgenda)
         card = _latest([card_by_id[item] for item in agenda.strategy_card_ids if item in card_by_id])
-        return StrategyResearchChain(card, None, None, None, None, agenda, None)
+        return StrategyResearchChain(card, None, None, None, None, agenda, None, revision_candidate)
 
     card = anchor
     assert isinstance(card, StrategyCard)
-    return StrategyResearchChain(card, None, None, None, None, _latest_agenda_for_card(agendas, card.card_id), None)
+    return StrategyResearchChain(
+        card,
+        None,
+        None,
+        None,
+        None,
+        _latest_agenda_for_card(agendas, card.card_id),
+        None,
+        revision_candidate,
+    )
 
 
 def _chain_from_ids(
@@ -216,7 +248,37 @@ def _chain_from_ids(
     agenda = _valid_agenda(agenda_by_id.get(agenda_id or ""), symbol, strategy_card_id)
     if agenda is None:
         agenda = _latest_agenda_for_card(agendas, strategy_card_id)
-    return StrategyResearchChain(card, trial, evaluation, entry, outcome, agenda, research_autopilot_run)
+    return StrategyResearchChain(card, trial, evaluation, entry, outcome, agenda, research_autopilot_run, None)
+
+
+def _latest_revision_candidate(
+    cards: list[StrategyCard],
+    outcome_by_id: dict[str, PaperShadowOutcome],
+    agendas: list[ResearchAgenda],
+) -> StrategyRevisionCandidate | None:
+    revision_cards = [
+        card
+        for card in cards
+        if card.status == "DRAFT"
+        and card.decision_basis == REVISION_CARD_BASIS
+        and isinstance(card.parameters.get("revision_source_outcome_id"), str)
+    ]
+    revision = _latest(revision_cards)
+    if revision is None:
+        return None
+    source_outcome_id = str(revision.parameters["revision_source_outcome_id"])
+    source_outcome = outcome_by_id.get(source_outcome_id)
+    revision_agendas = [
+        agenda
+        for agenda in agendas
+        if revision.card_id in agenda.strategy_card_ids and agenda.decision_basis == REVISION_AGENDA_BASIS
+    ]
+    agenda = _latest(revision_agendas)
+    return StrategyRevisionCandidate(
+        strategy_card=revision,
+        research_agenda=agenda,
+        source_outcome=source_outcome,
+    )
 
 
 def _latest_anchor(

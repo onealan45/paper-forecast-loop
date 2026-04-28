@@ -12,14 +12,19 @@ from forecast_loop.models import (
     BacktestRun,
     BrokerOrder,
     BrokerReconciliation,
+    CanonicalEvent,
     ExecutionSafetyGate,
     EquityCurvePoint,
+    EventEdgeEvaluation,
+    EventReliabilityCheck,
     EvaluationSummary,
+    FeatureSnapshot,
     Forecast,
     ForecastScore,
     HealthCheckResult,
     HealthFinding,
     MarketCandleRecord,
+    MarketReactionCheck,
     NotificationArtifact,
     PaperFill,
     PaperControlEvent,
@@ -31,6 +36,8 @@ from forecast_loop.models import (
     ResearchDataset,
     RiskSnapshot,
     Review,
+    SourceDocument,
+    SourceIngestionRun,
     StrategyDecision,
     WalkForwardValidation,
 )
@@ -86,6 +93,29 @@ def run_health_check(
 
     artifact_rows = {
         "forecasts": _load_jsonl(storage_path / "forecasts.jsonl", Forecast.from_dict, findings),
+        "source_documents": _load_jsonl(storage_path / "source_documents.jsonl", SourceDocument.from_dict, findings),
+        "source_ingestion_runs": _load_jsonl(
+            storage_path / "source_ingestion_runs.jsonl",
+            SourceIngestionRun.from_dict,
+            findings,
+        ),
+        "canonical_events": _load_jsonl(storage_path / "canonical_events.jsonl", CanonicalEvent.from_dict, findings),
+        "event_reliability_checks": _load_jsonl(
+            storage_path / "event_reliability_checks.jsonl",
+            EventReliabilityCheck.from_dict,
+            findings,
+        ),
+        "market_reaction_checks": _load_jsonl(
+            storage_path / "market_reaction_checks.jsonl",
+            MarketReactionCheck.from_dict,
+            findings,
+        ),
+        "event_edge_evaluations": _load_jsonl(
+            storage_path / "event_edge_evaluations.jsonl",
+            EventEdgeEvaluation.from_dict,
+            findings,
+        ),
+        "feature_snapshots": _load_jsonl(storage_path / "feature_snapshots.jsonl", FeatureSnapshot.from_dict, findings),
         "scores": _load_jsonl(storage_path / "scores.jsonl", ForecastScore.from_dict, findings),
         "reviews": _load_jsonl(storage_path / "reviews.jsonl", Review.from_dict, findings),
         "proposals": _load_jsonl(storage_path / "proposals.jsonl", Proposal.from_dict, findings),
@@ -145,6 +175,13 @@ def run_health_check(
     repair_requests: list[RepairRequest] = artifact_rows["repair_requests"]
     research_datasets: list[ResearchDataset] = artifact_rows["research_datasets"]
     market_candles: list[MarketCandleRecord] = artifact_rows["market_candles"]
+    source_documents: list[SourceDocument] = artifact_rows["source_documents"]
+    source_ingestion_runs: list[SourceIngestionRun] = artifact_rows["source_ingestion_runs"]
+    canonical_events: list[CanonicalEvent] = artifact_rows["canonical_events"]
+    event_reliability_checks: list[EventReliabilityCheck] = artifact_rows["event_reliability_checks"]
+    market_reaction_checks: list[MarketReactionCheck] = artifact_rows["market_reaction_checks"]
+    event_edge_evaluations: list[EventEdgeEvaluation] = artifact_rows["event_edge_evaluations"]
+    feature_snapshots: list[FeatureSnapshot] = artifact_rows["feature_snapshots"]
     backtest_runs: list[BacktestRun] = artifact_rows["backtest_runs"]
     backtest_results: list[BacktestResult] = artifact_rows["backtest_results"]
     walk_forward_validations: list[WalkForwardValidation] = artifact_rows["walk_forward_validations"]
@@ -176,6 +213,23 @@ def run_health_check(
     _check_duplicate_ids(repair_requests, "repair_request_id", storage_path / "repair_requests.jsonl", findings)
     _check_duplicate_ids(research_datasets, "dataset_id", storage_path / "research_datasets.jsonl", findings)
     _check_duplicate_ids(market_candles, "candle_id", storage_path / "market_candles.jsonl", findings)
+    _check_duplicate_ids(source_documents, "document_id", storage_path / "source_documents.jsonl", findings)
+    _check_duplicate_ids(
+        source_ingestion_runs,
+        "ingestion_run_id",
+        storage_path / "source_ingestion_runs.jsonl",
+        findings,
+    )
+    _check_duplicate_ids(canonical_events, "event_id", storage_path / "canonical_events.jsonl", findings)
+    _check_duplicate_ids(event_reliability_checks, "check_id", storage_path / "event_reliability_checks.jsonl", findings)
+    _check_duplicate_ids(market_reaction_checks, "check_id", storage_path / "market_reaction_checks.jsonl", findings)
+    _check_duplicate_ids(
+        event_edge_evaluations,
+        "evaluation_id",
+        storage_path / "event_edge_evaluations.jsonl",
+        findings,
+    )
+    _check_duplicate_ids(feature_snapshots, "feature_snapshot_id", storage_path / "feature_snapshots.jsonl", findings)
     _check_duplicate_ids(backtest_runs, "backtest_id", storage_path / "backtest_runs.jsonl", findings)
     _check_duplicate_ids(backtest_results, "result_id", storage_path / "backtest_results.jsonl", findings)
     _check_duplicate_ids(
@@ -223,10 +277,23 @@ def run_health_check(
         baselines,
         evaluation_summaries,
         research_datasets,
+        source_documents,
+        source_ingestion_runs,
+        canonical_events,
+        event_reliability_checks,
+        market_reaction_checks,
+        feature_snapshots,
         market_candles,
         backtest_runs,
         backtest_results,
         walk_forward_validations,
+        findings,
+    )
+    _check_m7_evidence_integrity(
+        storage_path,
+        source_documents,
+        canonical_events,
+        feature_snapshots,
         findings,
     )
     _check_research_dataset_leakage(storage_path, research_datasets, findings)
@@ -493,6 +560,12 @@ def _check_links(
     baselines: list[BaselineEvaluation],
     evaluation_summaries: list[EvaluationSummary],
     research_datasets: list[ResearchDataset],
+    source_documents: list[SourceDocument],
+    source_ingestion_runs: list[SourceIngestionRun],
+    canonical_events: list[CanonicalEvent],
+    event_reliability_checks: list[EventReliabilityCheck],
+    market_reaction_checks: list[MarketReactionCheck],
+    feature_snapshots: list[FeatureSnapshot],
     market_candles: list[MarketCandleRecord],
     backtest_runs: list[BacktestRun],
     backtest_results: list[BacktestResult],
@@ -504,6 +577,8 @@ def _check_links(
     review_ids = {review.review_id for review in reviews}
     proposal_ids = {proposal.proposal_id for proposal in proposals}
     baseline_ids = {baseline.baseline_id for baseline in baselines}
+    source_document_ids = {document.document_id for document in source_documents}
+    canonical_event_ids = {event.event_id for event in canonical_events}
     candle_ids = {candle.candle_id for candle in market_candles}
     backtest_run_ids = {run.backtest_id for run in backtest_runs}
     backtest_result_ids = {result.result_id for result in backtest_results}
@@ -626,6 +701,80 @@ def _check_links(
                 findings,
             )
 
+    for run in source_ingestion_runs:
+        missing_documents = [document_id for document_id in run.document_ids if document_id not in source_document_ids]
+        if missing_documents:
+            _add_link_finding(
+                "source_ingestion_run_missing_document",
+                storage_path / "source_ingestion_runs.jsonl",
+                run.ingestion_run_id,
+                ", ".join(missing_documents),
+                findings,
+            )
+
+    for event in canonical_events:
+        missing_documents = [
+            document_id for document_id in event.source_document_ids if document_id not in source_document_ids
+        ]
+        if missing_documents:
+            _add_link_finding(
+                "canonical_event_missing_source_document",
+                storage_path / "canonical_events.jsonl",
+                event.event_id,
+                ", ".join(missing_documents),
+                findings,
+            )
+        if event.primary_document_id and event.primary_document_id not in source_document_ids:
+            _add_link_finding(
+                "canonical_event_missing_primary_document",
+                storage_path / "canonical_events.jsonl",
+                event.event_id,
+                event.primary_document_id,
+                findings,
+            )
+
+    for check in event_reliability_checks:
+        if check.event_id not in canonical_event_ids:
+            _add_link_finding(
+                "event_reliability_missing_event",
+                storage_path / "event_reliability_checks.jsonl",
+                check.check_id,
+                check.event_id,
+                findings,
+            )
+
+    for check in market_reaction_checks:
+        if check.event_id not in canonical_event_ids:
+            _add_link_finding(
+                "market_reaction_missing_event",
+                storage_path / "market_reaction_checks.jsonl",
+                check.check_id,
+                check.event_id,
+                findings,
+            )
+
+    for snapshot in feature_snapshots:
+        missing_documents = [
+            document_id for document_id in snapshot.source_document_ids if document_id not in source_document_ids
+        ]
+        missing_events = [event_id for event_id in snapshot.event_ids if event_id not in canonical_event_ids]
+        if missing_documents:
+            _add_link_finding(
+                "feature_snapshot_missing_source_document",
+                storage_path / "feature_snapshots.jsonl",
+                snapshot.feature_snapshot_id,
+                ", ".join(missing_documents),
+                findings,
+            )
+        if missing_events:
+            _add_link_finding(
+                "feature_snapshot_missing_event",
+                storage_path / "feature_snapshots.jsonl",
+                snapshot.feature_snapshot_id,
+                ", ".join(missing_events),
+                findings,
+            )
+
     for result in backtest_results:
         if result.backtest_id not in backtest_run_ids:
             _add_link_finding(
@@ -674,6 +823,126 @@ def _add_link_finding(code: str, path: Path, source_id: str, missing_id: str, fi
             code=code,
             severity="blocking",
             message=f"{source_id} references missing artifact {missing_id}.",
+            artifact_path=str(path),
+            repair_required=True,
+        )
+    )
+
+
+def _check_m7_evidence_integrity(
+    storage_path: Path,
+    source_documents: list[SourceDocument],
+    canonical_events: list[CanonicalEvent],
+    feature_snapshots: list[FeatureSnapshot],
+    findings: list[HealthFinding],
+) -> None:
+    source_path = storage_path / "source_documents.jsonl"
+    event_path = storage_path / "canonical_events.jsonl"
+    feature_path = storage_path / "feature_snapshots.jsonl"
+    documents_by_id = {document.document_id: document for document in source_documents}
+
+    for document in source_documents:
+        if document.published_at is None or document.available_at is None:
+            _add_integrity_finding(
+                "source_document_missing_required_timestamp",
+                source_path,
+                document.document_id,
+                "source document must include published_at and available_at before it can become decision-time evidence",
+                findings,
+            )
+        if not document.source_url and not document.stable_source_id:
+            _add_integrity_finding(
+                "source_document_missing_stable_source",
+                source_path,
+                document.document_id,
+                "source document must include source_url or stable_source_id",
+                findings,
+            )
+        if not document.raw_text_hash or not document.normalized_text_hash:
+            _add_integrity_finding(
+                "source_document_missing_text_hash",
+                source_path,
+                document.document_id,
+                "source document must include raw and normalized text hashes",
+                findings,
+            )
+        ordered_times = [
+            value
+            for value in [document.published_at, document.available_at, document.fetched_at, document.processed_at]
+            if value is not None
+        ]
+        if any(later < earlier for earlier, later in zip(ordered_times, ordered_times[1:])):
+            _add_integrity_finding(
+                "source_document_timestamp_order_invalid",
+                source_path,
+                document.document_id,
+                "source document timestamps must be ordered published_at <= available_at <= fetched_at <= processed_at",
+                findings,
+            )
+
+    for event in canonical_events:
+        if event.published_at is None or event.available_at is None:
+            _add_integrity_finding(
+                "canonical_event_missing_required_timestamp",
+                event_path,
+                event.event_id,
+                "canonical event must include published_at and available_at before it can become decision-time evidence",
+                findings,
+            )
+
+    for snapshot in feature_snapshots:
+        if snapshot.feature_timestamp > snapshot.decision_timestamp:
+            _add_integrity_finding(
+                "feature_snapshot_feature_after_decision",
+                feature_path,
+                snapshot.feature_snapshot_id,
+                "feature_timestamp must be <= decision_timestamp",
+                findings,
+            )
+        if snapshot.training_cutoff > snapshot.decision_timestamp:
+            _add_integrity_finding(
+                "feature_snapshot_training_cutoff_after_decision",
+                feature_path,
+                snapshot.feature_snapshot_id,
+                "training_cutoff must be <= decision_timestamp",
+                findings,
+            )
+        if not snapshot.leakage_safe:
+            _add_integrity_finding(
+                "feature_snapshot_leakage_not_safe",
+                feature_path,
+                snapshot.feature_snapshot_id,
+                "feature snapshot is marked leakage_safe=false",
+                findings,
+            )
+        late_documents = [
+            document_id
+            for document_id in snapshot.source_document_ids
+            if (document := documents_by_id.get(document_id)) is not None
+            and document.fetched_at > snapshot.decision_timestamp
+        ]
+        if late_documents:
+            _add_integrity_finding(
+                "feature_snapshot_source_fetched_after_decision",
+                feature_path,
+                snapshot.feature_snapshot_id,
+                f"source documents were fetched after decision timestamp: {', '.join(late_documents)}",
+                findings,
+            )
+
+
+def _add_integrity_finding(
+    code: str,
+    path: Path,
+    artifact_id: str,
+    message: str,
+    findings: list[HealthFinding],
+) -> None:
+    findings.append(
+        HealthFinding(
+            code=code,
+            severity="blocking",
+            message=f"{artifact_id}: {message}.",
             artifact_path=str(path),
             repair_required=True,
         )

@@ -14,12 +14,17 @@ from forecast_loop.models import (
     BacktestRun,
     BrokerOrder,
     BrokerReconciliation,
+    CanonicalEvent,
+    EventEdgeEvaluation,
+    EventReliabilityCheck,
     ExecutionSafetyGate,
     EquityCurvePoint,
     EvaluationSummary,
+    FeatureSnapshot,
     Forecast,
     ForecastScore,
     MacroEvent,
+    MarketReactionCheck,
     MarketCandleRecord,
     NotificationArtifact,
     PaperFill,
@@ -32,6 +37,8 @@ from forecast_loop.models import (
     ResearchDataset,
     RiskSnapshot,
     Review,
+    SourceDocument,
+    SourceIngestionRun,
     StrategyDecision,
     WalkForwardValidation,
 )
@@ -53,6 +60,33 @@ class ArtifactSpec:
 ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("market_candles", "market_candles.jsonl", "candle_id", MarketCandleRecord.from_dict),
     ArtifactSpec("macro_events", "macro_events.jsonl", "event_id", MacroEvent.from_dict),
+    ArtifactSpec("source_documents", "source_documents.jsonl", "document_id", SourceDocument.from_dict),
+    ArtifactSpec(
+        "source_ingestion_runs",
+        "source_ingestion_runs.jsonl",
+        "ingestion_run_id",
+        SourceIngestionRun.from_dict,
+    ),
+    ArtifactSpec("canonical_events", "canonical_events.jsonl", "event_id", CanonicalEvent.from_dict),
+    ArtifactSpec(
+        "event_reliability_checks",
+        "event_reliability_checks.jsonl",
+        "check_id",
+        EventReliabilityCheck.from_dict,
+    ),
+    ArtifactSpec(
+        "market_reaction_checks",
+        "market_reaction_checks.jsonl",
+        "check_id",
+        MarketReactionCheck.from_dict,
+    ),
+    ArtifactSpec(
+        "event_edge_evaluations",
+        "event_edge_evaluations.jsonl",
+        "evaluation_id",
+        EventEdgeEvaluation.from_dict,
+    ),
+    ArtifactSpec("feature_snapshots", "feature_snapshots.jsonl", "feature_snapshot_id", FeatureSnapshot.from_dict),
     ArtifactSpec("forecasts", "forecasts.jsonl", "forecast_id", Forecast.from_dict),
     ArtifactSpec("scores", "scores.jsonl", "score_id", ForecastScore.from_dict),
     ArtifactSpec("reviews", "reviews.jsonl", "review_id", Review.from_dict),
@@ -157,6 +191,48 @@ class SQLiteRepository:
 
     def load_macro_events(self) -> list[MacroEvent]:
         return self._load("macro_events", MacroEvent.from_dict)
+
+    def save_source_document(self, document: SourceDocument) -> None:
+        self._save_unique("source_documents", document.document_id, document.to_dict())
+
+    def load_source_documents(self) -> list[SourceDocument]:
+        return self._load("source_documents", SourceDocument.from_dict)
+
+    def save_source_ingestion_run(self, run: SourceIngestionRun) -> None:
+        self._save_unique("source_ingestion_runs", run.ingestion_run_id, run.to_dict())
+
+    def load_source_ingestion_runs(self) -> list[SourceIngestionRun]:
+        return self._load("source_ingestion_runs", SourceIngestionRun.from_dict)
+
+    def save_canonical_event(self, event: CanonicalEvent) -> None:
+        self._save_unique("canonical_events", event.event_id, event.to_dict())
+
+    def load_canonical_events(self) -> list[CanonicalEvent]:
+        return self._load("canonical_events", CanonicalEvent.from_dict)
+
+    def save_event_reliability_check(self, check: EventReliabilityCheck) -> None:
+        self._save_unique("event_reliability_checks", check.check_id, check.to_dict())
+
+    def load_event_reliability_checks(self) -> list[EventReliabilityCheck]:
+        return self._load("event_reliability_checks", EventReliabilityCheck.from_dict)
+
+    def save_market_reaction_check(self, check: MarketReactionCheck) -> None:
+        self._save_unique("market_reaction_checks", check.check_id, check.to_dict())
+
+    def load_market_reaction_checks(self) -> list[MarketReactionCheck]:
+        return self._load("market_reaction_checks", MarketReactionCheck.from_dict)
+
+    def save_event_edge_evaluation(self, evaluation: EventEdgeEvaluation) -> None:
+        self._save_unique("event_edge_evaluations", evaluation.evaluation_id, evaluation.to_dict())
+
+    def load_event_edge_evaluations(self) -> list[EventEdgeEvaluation]:
+        return self._load("event_edge_evaluations", EventEdgeEvaluation.from_dict)
+
+    def save_feature_snapshot(self, snapshot: FeatureSnapshot) -> None:
+        self._save_unique("feature_snapshots", snapshot.feature_snapshot_id, snapshot.to_dict())
+
+    def load_feature_snapshots(self) -> list[FeatureSnapshot]:
+        return self._load("feature_snapshots", FeatureSnapshot.from_dict)
 
     def save_forecast(self, forecast: Forecast) -> None:
         self._save_unique("forecasts", forecast.forecast_id, forecast.to_dict())
@@ -405,6 +481,20 @@ def migrate_jsonl_to_sqlite(storage_dir: Path | str, db_path: Path | str | None 
         sqlite_repository.save_market_candle(candle)
     for event in json_repository.load_macro_events():
         sqlite_repository.save_macro_event(event)
+    for document in json_repository.load_source_documents():
+        sqlite_repository.save_source_document(document)
+    for run in json_repository.load_source_ingestion_runs():
+        sqlite_repository.save_source_ingestion_run(run)
+    for event in json_repository.load_canonical_events():
+        sqlite_repository.save_canonical_event(event)
+    for check in json_repository.load_event_reliability_checks():
+        sqlite_repository.save_event_reliability_check(check)
+    for check in json_repository.load_market_reaction_checks():
+        sqlite_repository.save_market_reaction_check(check)
+    for evaluation in json_repository.load_event_edge_evaluations():
+        sqlite_repository.save_event_edge_evaluation(evaluation)
+    for snapshot in json_repository.load_feature_snapshots():
+        sqlite_repository.save_feature_snapshot(snapshot)
     for forecast in json_repository.load_forecasts():
         sqlite_repository.save_forecast(forecast)
     for score in json_repository.load_scores():

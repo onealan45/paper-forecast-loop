@@ -11,12 +11,17 @@ from forecast_loop.models import (
     BacktestRun,
     BrokerOrder,
     BrokerReconciliation,
+    CanonicalEvent,
+    EventEdgeEvaluation,
+    EventReliabilityCheck,
     ExecutionSafetyGate,
     EquityCurvePoint,
     EvaluationSummary,
+    FeatureSnapshot,
     Forecast,
     ForecastScore,
     MacroEvent,
+    MarketReactionCheck,
     MarketCandleRecord,
     NotificationArtifact,
     PaperFill,
@@ -29,6 +34,8 @@ from forecast_loop.models import (
     ResearchDataset,
     RiskSnapshot,
     Review,
+    SourceDocument,
+    SourceIngestionRun,
     StrategyDecision,
     WalkForwardValidation,
 )
@@ -42,6 +49,34 @@ class ArtifactRepository(Protocol):
     def save_macro_event(self, event: MacroEvent) -> None: ...
 
     def load_macro_events(self) -> list[MacroEvent]: ...
+
+    def save_source_document(self, document: SourceDocument) -> None: ...
+
+    def load_source_documents(self) -> list[SourceDocument]: ...
+
+    def save_source_ingestion_run(self, run: SourceIngestionRun) -> None: ...
+
+    def load_source_ingestion_runs(self) -> list[SourceIngestionRun]: ...
+
+    def save_canonical_event(self, event: CanonicalEvent) -> None: ...
+
+    def load_canonical_events(self) -> list[CanonicalEvent]: ...
+
+    def save_event_reliability_check(self, check: EventReliabilityCheck) -> None: ...
+
+    def load_event_reliability_checks(self) -> list[EventReliabilityCheck]: ...
+
+    def save_market_reaction_check(self, check: MarketReactionCheck) -> None: ...
+
+    def load_market_reaction_checks(self) -> list[MarketReactionCheck]: ...
+
+    def save_event_edge_evaluation(self, evaluation: EventEdgeEvaluation) -> None: ...
+
+    def load_event_edge_evaluations(self) -> list[EventEdgeEvaluation]: ...
+
+    def save_feature_snapshot(self, snapshot: FeatureSnapshot) -> None: ...
+
+    def load_feature_snapshots(self) -> list[FeatureSnapshot]: ...
 
     def save_forecast(self, forecast: Forecast) -> None: ...
 
@@ -152,6 +187,13 @@ class JsonFileRepository:
         self.root.mkdir(parents=True, exist_ok=True)
         self.market_candles_path = self.root / "market_candles.jsonl"
         self.macro_events_path = self.root / "macro_events.jsonl"
+        self.source_documents_path = self.root / "source_documents.jsonl"
+        self.source_ingestion_runs_path = self.root / "source_ingestion_runs.jsonl"
+        self.canonical_events_path = self.root / "canonical_events.jsonl"
+        self.event_reliability_checks_path = self.root / "event_reliability_checks.jsonl"
+        self.market_reaction_checks_path = self.root / "market_reaction_checks.jsonl"
+        self.event_edge_evaluations_path = self.root / "event_edge_evaluations.jsonl"
+        self.feature_snapshots_path = self.root / "feature_snapshots.jsonl"
         self.forecasts_path = self.root / "forecasts.jsonl"
         self.scores_path = self.root / "scores.jsonl"
         self.reviews_path = self.root / "reviews.jsonl"
@@ -196,6 +238,76 @@ class JsonFileRepository:
 
     def load_macro_events(self) -> list[MacroEvent]:
         return self._load_lines(self.macro_events_path, MacroEvent.from_dict)
+
+    def save_source_document(self, document: SourceDocument) -> None:
+        self._append_unique(
+            self.source_documents_path,
+            document.to_dict(),
+            identity_key="document_id",
+        )
+
+    def load_source_documents(self) -> list[SourceDocument]:
+        return self._load_lines(self.source_documents_path, SourceDocument.from_dict)
+
+    def save_source_ingestion_run(self, run: SourceIngestionRun) -> None:
+        self._append_unique(
+            self.source_ingestion_runs_path,
+            run.to_dict(),
+            identity_key="ingestion_run_id",
+        )
+
+    def load_source_ingestion_runs(self) -> list[SourceIngestionRun]:
+        return self._load_lines(self.source_ingestion_runs_path, SourceIngestionRun.from_dict)
+
+    def save_canonical_event(self, event: CanonicalEvent) -> None:
+        self._append_unique(
+            self.canonical_events_path,
+            event.to_dict(),
+            identity_key="event_id",
+        )
+
+    def load_canonical_events(self) -> list[CanonicalEvent]:
+        return self._load_lines(self.canonical_events_path, CanonicalEvent.from_dict)
+
+    def save_event_reliability_check(self, check: EventReliabilityCheck) -> None:
+        self._append_unique(
+            self.event_reliability_checks_path,
+            check.to_dict(),
+            identity_key="check_id",
+        )
+
+    def load_event_reliability_checks(self) -> list[EventReliabilityCheck]:
+        return self._load_lines(self.event_reliability_checks_path, EventReliabilityCheck.from_dict)
+
+    def save_market_reaction_check(self, check: MarketReactionCheck) -> None:
+        self._append_unique(
+            self.market_reaction_checks_path,
+            check.to_dict(),
+            identity_key="check_id",
+        )
+
+    def load_market_reaction_checks(self) -> list[MarketReactionCheck]:
+        return self._load_lines(self.market_reaction_checks_path, MarketReactionCheck.from_dict)
+
+    def save_event_edge_evaluation(self, evaluation: EventEdgeEvaluation) -> None:
+        self._append_unique(
+            self.event_edge_evaluations_path,
+            evaluation.to_dict(),
+            identity_key="evaluation_id",
+        )
+
+    def load_event_edge_evaluations(self) -> list[EventEdgeEvaluation]:
+        return self._load_lines(self.event_edge_evaluations_path, EventEdgeEvaluation.from_dict)
+
+    def save_feature_snapshot(self, snapshot: FeatureSnapshot) -> None:
+        self._append_unique(
+            self.feature_snapshots_path,
+            snapshot.to_dict(),
+            identity_key="feature_snapshot_id",
+        )
+
+    def load_feature_snapshots(self) -> list[FeatureSnapshot]:
+        return self._load_lines(self.feature_snapshots_path, FeatureSnapshot.from_dict)
 
     def save_forecast(self, forecast: Forecast) -> None:
         forecasts = self.load_forecasts()

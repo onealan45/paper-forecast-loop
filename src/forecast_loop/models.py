@@ -27,6 +27,17 @@ def _require_aware_datetime(payload: dict, key: str) -> datetime:
     return value
 
 
+def _optional_aware_datetime(payload: dict, key: str) -> datetime | None:
+    if key not in payload or payload[key] in (None, ""):
+        return None
+    value = _deserialize_datetime(payload[key])
+    if value is None:
+        return None
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        raise ValueError(f"datetime field must include timezone: {key}")
+    return value
+
+
 def _require_string(payload: dict, key: str) -> str:
     if key not in payload or not isinstance(payload[key], str) or not payload[key]:
         raise ValueError(f"missing required string field: {key}")
@@ -663,6 +674,348 @@ class WalkForwardValidation:
             backtest_result_ids=list(payload.get("backtest_result_ids", [])),
             windows=windows,
             decision_basis=payload.get("decision_basis", "legacy_walk_forward_validation"),
+        )
+
+
+@dataclass(slots=True)
+class SourceDocument:
+    document_id: str
+    source_name: str
+    source_type: str
+    source_url: str | None
+    stable_source_id: str | None
+    published_at: datetime | None
+    available_at: datetime | None
+    fetched_at: datetime
+    processed_at: datetime
+    language: str
+    headline: str
+    summary: str
+    raw_text_hash: str
+    normalized_text_hash: str
+    body_excerpt: str
+    entities: list[str]
+    symbols: list[str]
+    topics: list[str]
+    source_reliability_score: float
+    duplicate_group_id: str | None
+    license_note: str | None
+    ingestion_run_id: str | None
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        for key in ("published_at", "available_at", "fetched_at", "processed_at"):
+            payload[key] = _serialize_datetime(payload[key])
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "SourceDocument":
+        return cls(
+            document_id=_require_string(payload, "document_id"),
+            source_name=_require_string(payload, "source_name"),
+            source_type=_require_string(payload, "source_type"),
+            source_url=payload.get("source_url"),
+            stable_source_id=payload.get("stable_source_id"),
+            published_at=_optional_aware_datetime(payload, "published_at"),
+            available_at=_optional_aware_datetime(payload, "available_at"),
+            fetched_at=_require_aware_datetime(payload, "fetched_at"),
+            processed_at=_require_aware_datetime(payload, "processed_at"),
+            language=payload.get("language", "unknown"),
+            headline=payload.get("headline", ""),
+            summary=payload.get("summary", ""),
+            raw_text_hash=payload.get("raw_text_hash", ""),
+            normalized_text_hash=payload.get("normalized_text_hash", ""),
+            body_excerpt=payload.get("body_excerpt", ""),
+            entities=list(payload.get("entities", [])),
+            symbols=list(payload.get("symbols", [])),
+            topics=list(payload.get("topics", [])),
+            source_reliability_score=float(payload.get("source_reliability_score", 0.0)),
+            duplicate_group_id=payload.get("duplicate_group_id"),
+            license_note=payload.get("license_note"),
+            ingestion_run_id=payload.get("ingestion_run_id"),
+        )
+
+
+@dataclass(slots=True)
+class SourceIngestionRun:
+    ingestion_run_id: str
+    created_at: datetime
+    source_name: str
+    source_type: str
+    status: str
+    document_ids: list[str]
+    fetched_count: int
+    stored_count: int
+    error_message: str | None
+    decision_basis: str
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "SourceIngestionRun":
+        return cls(
+            ingestion_run_id=_require_string(payload, "ingestion_run_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            source_name=_require_string(payload, "source_name"),
+            source_type=_require_string(payload, "source_type"),
+            status=_require_string(payload, "status"),
+            document_ids=list(payload.get("document_ids", [])),
+            fetched_count=int(payload.get("fetched_count", 0)),
+            stored_count=int(payload.get("stored_count", 0)),
+            error_message=payload.get("error_message"),
+            decision_basis=payload.get("decision_basis", ""),
+        )
+
+
+@dataclass(slots=True)
+class CanonicalEvent:
+    event_id: str
+    event_family: str
+    event_type: str
+    symbol: str
+    title: str
+    summary: str
+    event_time: datetime | None
+    published_at: datetime | None
+    available_at: datetime | None
+    fetched_at: datetime
+    source_document_ids: list[str]
+    primary_document_id: str | None
+    credibility_score: float
+    cross_source_count: int
+    official_source_flag: bool
+    duplicate_group_id: str | None
+    status: str
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        for key in ("event_time", "published_at", "available_at", "fetched_at"):
+            payload[key] = _serialize_datetime(payload[key])
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "CanonicalEvent":
+        return cls(
+            event_id=_require_string(payload, "event_id"),
+            event_family=_require_string(payload, "event_family"),
+            event_type=_require_string(payload, "event_type"),
+            symbol=_require_string(payload, "symbol"),
+            title=payload.get("title", ""),
+            summary=payload.get("summary", ""),
+            event_time=_optional_aware_datetime(payload, "event_time"),
+            published_at=_optional_aware_datetime(payload, "published_at"),
+            available_at=_optional_aware_datetime(payload, "available_at"),
+            fetched_at=_require_aware_datetime(payload, "fetched_at"),
+            source_document_ids=list(payload.get("source_document_ids", [])),
+            primary_document_id=payload.get("primary_document_id"),
+            credibility_score=float(payload.get("credibility_score", 0.0)),
+            cross_source_count=int(payload.get("cross_source_count", 0)),
+            official_source_flag=bool(payload.get("official_source_flag", False)),
+            duplicate_group_id=payload.get("duplicate_group_id"),
+            status=payload.get("status", "candidate"),
+        )
+
+
+@dataclass(slots=True)
+class EventReliabilityCheck:
+    check_id: str
+    event_id: str
+    created_at: datetime
+    symbol: str
+    source_type: str
+    source_reliability_score: float
+    official_source_flag: bool
+    cross_source_count: int
+    duplicate_count: int
+    has_stable_source: bool
+    has_required_timestamps: bool
+    raw_hash_present: bool
+    passed: bool
+    blocked_reason: str | None
+    flags: list[str]
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "EventReliabilityCheck":
+        return cls(
+            check_id=_require_string(payload, "check_id"),
+            event_id=_require_string(payload, "event_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            symbol=_require_string(payload, "symbol"),
+            source_type=_require_string(payload, "source_type"),
+            source_reliability_score=float(payload.get("source_reliability_score", 0.0)),
+            official_source_flag=bool(payload.get("official_source_flag", False)),
+            cross_source_count=int(payload.get("cross_source_count", 0)),
+            duplicate_count=int(payload.get("duplicate_count", 0)),
+            has_stable_source=bool(payload.get("has_stable_source", False)),
+            has_required_timestamps=bool(payload.get("has_required_timestamps", False)),
+            raw_hash_present=bool(payload.get("raw_hash_present", False)),
+            passed=bool(payload.get("passed", False)),
+            blocked_reason=payload.get("blocked_reason"),
+            flags=list(payload.get("flags", [])),
+        )
+
+
+@dataclass(slots=True)
+class MarketReactionCheck:
+    check_id: str
+    event_id: str
+    symbol: str
+    created_at: datetime
+    decision_timestamp: datetime
+    event_timestamp_used: datetime
+    pre_event_ret_1h: float | None
+    pre_event_ret_4h: float | None
+    pre_event_ret_24h: float | None
+    post_event_ret_15m: float | None
+    post_event_ret_1h: float | None
+    pre_event_drift_z: float | None
+    volume_shock_z: float | None
+    priced_in_ratio: float | None
+    already_priced: bool
+    passed: bool
+    blocked_reason: str | None
+    flags: list[str]
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        for key in ("created_at", "decision_timestamp", "event_timestamp_used"):
+            payload[key] = _serialize_datetime(payload[key])
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "MarketReactionCheck":
+        return cls(
+            check_id=_require_string(payload, "check_id"),
+            event_id=_require_string(payload, "event_id"),
+            symbol=_require_string(payload, "symbol"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            decision_timestamp=_require_aware_datetime(payload, "decision_timestamp"),
+            event_timestamp_used=_require_aware_datetime(payload, "event_timestamp_used"),
+            pre_event_ret_1h=_optional_float(payload.get("pre_event_ret_1h")),
+            pre_event_ret_4h=_optional_float(payload.get("pre_event_ret_4h")),
+            pre_event_ret_24h=_optional_float(payload.get("pre_event_ret_24h")),
+            post_event_ret_15m=_optional_float(payload.get("post_event_ret_15m")),
+            post_event_ret_1h=_optional_float(payload.get("post_event_ret_1h")),
+            pre_event_drift_z=_optional_float(payload.get("pre_event_drift_z")),
+            volume_shock_z=_optional_float(payload.get("volume_shock_z")),
+            priced_in_ratio=_optional_float(payload.get("priced_in_ratio")),
+            already_priced=bool(payload.get("already_priced", False)),
+            passed=bool(payload.get("passed", False)),
+            blocked_reason=payload.get("blocked_reason"),
+            flags=list(payload.get("flags", [])),
+        )
+
+
+@dataclass(slots=True)
+class EventEdgeEvaluation:
+    evaluation_id: str
+    event_family: str
+    event_type: str
+    symbol: str
+    created_at: datetime
+    split: str
+    horizon_hours: int
+    sample_n: int
+    average_forward_return: float | None
+    average_benchmark_return: float | None
+    average_excess_return_after_costs: float | None
+    hit_rate: float | None
+    max_adverse_excursion_p50: float | None
+    max_adverse_excursion_p90: float | None
+    max_drawdown_if_traded: float | None
+    turnover: float | None
+    estimated_cost_bps: float
+    dsr: float | None
+    white_rc_p: float | None
+    stability_score: float | None
+    passed: bool
+    blocked_reason: str | None
+    flags: list[str]
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "EventEdgeEvaluation":
+        return cls(
+            evaluation_id=_require_string(payload, "evaluation_id"),
+            event_family=_require_string(payload, "event_family"),
+            event_type=_require_string(payload, "event_type"),
+            symbol=_require_string(payload, "symbol"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            split=payload.get("split", "validation"),
+            horizon_hours=int(payload.get("horizon_hours", 24)),
+            sample_n=int(payload.get("sample_n", 0)),
+            average_forward_return=_optional_float(payload.get("average_forward_return")),
+            average_benchmark_return=_optional_float(payload.get("average_benchmark_return")),
+            average_excess_return_after_costs=_optional_float(payload.get("average_excess_return_after_costs")),
+            hit_rate=_optional_float(payload.get("hit_rate")),
+            max_adverse_excursion_p50=_optional_float(payload.get("max_adverse_excursion_p50")),
+            max_adverse_excursion_p90=_optional_float(payload.get("max_adverse_excursion_p90")),
+            max_drawdown_if_traded=_optional_float(payload.get("max_drawdown_if_traded")),
+            turnover=_optional_float(payload.get("turnover")),
+            estimated_cost_bps=float(payload.get("estimated_cost_bps", 0.0)),
+            dsr=_optional_float(payload.get("dsr")),
+            white_rc_p=_optional_float(payload.get("white_rc_p")),
+            stability_score=_optional_float(payload.get("stability_score")),
+            passed=bool(payload.get("passed", False)),
+            blocked_reason=payload.get("blocked_reason"),
+            flags=list(payload.get("flags", [])),
+        )
+
+
+@dataclass(slots=True)
+class FeatureSnapshot:
+    feature_snapshot_id: str
+    created_at: datetime
+    decision_timestamp: datetime
+    symbol: str
+    source_kind: str
+    feature_namespace: str
+    feature_name: str
+    feature_value: float | str | bool | None
+    feature_timestamp: datetime
+    training_cutoff: datetime
+    source_document_ids: list[str]
+    event_ids: list[str]
+    lineage_hash: str
+    leakage_safe: bool
+    flags: list[str]
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        for key in ("created_at", "decision_timestamp", "feature_timestamp", "training_cutoff"):
+            payload[key] = _serialize_datetime(payload[key])
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "FeatureSnapshot":
+        return cls(
+            feature_snapshot_id=_require_string(payload, "feature_snapshot_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            decision_timestamp=_require_aware_datetime(payload, "decision_timestamp"),
+            symbol=_require_string(payload, "symbol"),
+            source_kind=_require_string(payload, "source_kind"),
+            feature_namespace=_require_string(payload, "feature_namespace"),
+            feature_name=_require_string(payload, "feature_name"),
+            feature_value=payload.get("feature_value"),
+            feature_timestamp=_require_aware_datetime(payload, "feature_timestamp"),
+            training_cutoff=_require_aware_datetime(payload, "training_cutoff"),
+            source_document_ids=list(payload.get("source_document_ids", [])),
+            event_ids=list(payload.get("event_ids", [])),
+            lineage_hash=payload.get("lineage_hash", ""),
+            leakage_safe=bool(payload.get("leakage_safe", False)),
+            flags=list(payload.get("flags", [])),
         )
 
 

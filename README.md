@@ -69,6 +69,9 @@ factory:
 - M1-M6 provide the paper-only decision, health, research, portfolio, UI, and
   sandbox-safety spine.
 - M7A is an artifact foundation, not a completed intelligence engine.
+- M7B adds the fixture-only source registry and source document import layer.
+- M7C converts imported source documents into canonical events and event
+  reliability checks.
 - PR0 must make the codebase reviewable before more strategy intelligence is
   stacked on top.
 - M7B-M7F should turn source documents, canonical events, source reliability,
@@ -165,6 +168,7 @@ This version intentionally includes:
   - `macro-calendar`
   - `import-source-documents`
   - `source-registry`
+  - `build-events`
   - `build-research-dataset`
   - `research-report`
   - `backtest`

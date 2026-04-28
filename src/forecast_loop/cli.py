@@ -22,6 +22,7 @@ from forecast_loop.dashboard import write_dashboard_html
 from forecast_loop.decision import generate_strategy_decision
 from forecast_loop.evaluation import build_evaluation_summary
 from forecast_loop.execution_safety import evaluate_execution_safety_gate
+from forecast_loop.event_reliability import build_event_reliability
 from forecast_loop.health import run_health_check
 from forecast_loop.macro_events import import_macro_events, macro_calendar
 from forecast_loop.maintenance import repair_storage
@@ -268,6 +269,12 @@ def main(argv: list[str] | None = None) -> int:
     source_registry_cmd.add_argument("--storage-dir", required=True)
     source_registry_cmd.add_argument("--format", choices=["json", "text"], default="json")
 
+    build_events_cmd = subparsers.add_parser("build-events")
+    build_events_cmd.add_argument("--storage-dir", required=True)
+    build_events_cmd.add_argument("--symbol")
+    build_events_cmd.add_argument("--created-at", required=True)
+    build_events_cmd.add_argument("--min-reliability-score", type=float, default=70.0)
+
     build_research_dataset_cmd = subparsers.add_parser("build-research-dataset")
     build_research_dataset_cmd.add_argument("--storage-dir", required=True)
     build_research_dataset_cmd.add_argument("--symbol", default="BTC-USD")
@@ -369,6 +376,8 @@ def main(argv: list[str] | None = None) -> int:
             return _import_source_documents(args)
         if args.command == "source-registry":
             return _source_registry(args)
+        if args.command == "build-events":
+            return _build_events(args)
         if args.command == "build-research-dataset":
             return _build_research_dataset(args)
         if args.command == "research-report":
@@ -1201,6 +1210,18 @@ def _source_registry(args) -> int:
             print(f"{source.source_id}\t{source.source_type}\t{source.provider}\t{decision_status}")
     else:
         print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _build_events(args) -> int:
+    created_at = _parse_datetime(args.created_at)
+    result = build_event_reliability(
+        storage_dir=args.storage_dir,
+        created_at=created_at,
+        symbol=args.symbol,
+        min_reliability_score=args.min_reliability_score,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0
 
 

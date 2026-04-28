@@ -864,10 +864,11 @@ class CanonicalEvent:
     official_source_flag: bool
     duplicate_group_id: str | None
     status: str
+    created_at: datetime | None = None
 
     def to_dict(self) -> dict:
         payload = asdict(self)
-        for key in ("event_time", "published_at", "available_at", "fetched_at"):
+        for key in ("event_time", "published_at", "available_at", "fetched_at", "created_at"):
             payload[key] = _serialize_datetime(payload[key])
         return payload
 
@@ -891,6 +892,7 @@ class CanonicalEvent:
             official_source_flag=bool(payload.get("official_source_flag", False)),
             duplicate_group_id=payload.get("duplicate_group_id"),
             status=payload.get("status", "candidate"),
+            created_at=_optional_aware_datetime(payload, "created_at"),
         )
 
 

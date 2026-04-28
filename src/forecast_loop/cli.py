@@ -21,6 +21,7 @@ from forecast_loop.control import record_control_event
 from forecast_loop.dashboard import write_dashboard_html
 from forecast_loop.decision import generate_strategy_decision
 from forecast_loop.evaluation import build_evaluation_summary
+from forecast_loop.event_edge import build_event_edge_evaluations
 from forecast_loop.execution_safety import evaluate_execution_safety_gate
 from forecast_loop.event_reliability import build_event_reliability
 from forecast_loop.health import run_health_check
@@ -283,6 +284,14 @@ def main(argv: list[str] | None = None) -> int:
     build_market_reactions_cmd.add_argument("--already-priced-return-threshold", type=float, default=0.03)
     build_market_reactions_cmd.add_argument("--volume-shock-z-threshold", type=float, default=3.0)
 
+    build_event_edge_cmd = subparsers.add_parser("build-event-edge")
+    build_event_edge_cmd.add_argument("--storage-dir", required=True)
+    build_event_edge_cmd.add_argument("--symbol")
+    build_event_edge_cmd.add_argument("--created-at", required=True)
+    build_event_edge_cmd.add_argument("--horizon-hours", type=int, default=24)
+    build_event_edge_cmd.add_argument("--min-sample-size", type=int, default=3)
+    build_event_edge_cmd.add_argument("--estimated-cost-bps", type=float, default=10.0)
+
     build_research_dataset_cmd = subparsers.add_parser("build-research-dataset")
     build_research_dataset_cmd.add_argument("--storage-dir", required=True)
     build_research_dataset_cmd.add_argument("--symbol", default="BTC-USD")
@@ -388,6 +397,8 @@ def main(argv: list[str] | None = None) -> int:
             return _build_events(args)
         if args.command == "build-market-reactions":
             return _build_market_reactions(args)
+        if args.command == "build-event-edge":
+            return _build_event_edge(args)
         if args.command == "build-research-dataset":
             return _build_research_dataset(args)
         if args.command == "research-report":
@@ -1243,6 +1254,20 @@ def _build_market_reactions(args) -> int:
         symbol=args.symbol,
         already_priced_return_threshold=args.already_priced_return_threshold,
         volume_shock_z_threshold=args.volume_shock_z_threshold,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _build_event_edge(args) -> int:
+    created_at = _parse_datetime(args.created_at)
+    result = build_event_edge_evaluations(
+        storage_dir=args.storage_dir,
+        created_at=created_at,
+        symbol=args.symbol,
+        horizon_hours=args.horizon_hours,
+        min_sample_size=args.min_sample_size,
+        estimated_cost_bps=args.estimated_cost_bps,
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0

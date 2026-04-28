@@ -74,6 +74,8 @@ factory:
   reliability checks.
 - M7D adds market reaction / already-priced checks over canonical event
   snapshots and stored candles.
+- M7E adds event-family historical edge evaluation over passed market reaction
+  samples.
 - PR0 must make the codebase reviewable before more strategy intelligence is
   stacked on top.
 - M7B-M7F should turn source documents, canonical events, source reliability,
@@ -172,6 +174,7 @@ This version intentionally includes:
   - `source-registry`
   - `build-events`
   - `build-market-reactions`
+  - `build-event-edge`
   - `build-research-dataset`
   - `research-report`
   - `backtest`

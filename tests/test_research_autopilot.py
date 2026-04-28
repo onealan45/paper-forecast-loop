@@ -16,6 +16,7 @@ from forecast_loop.models import (
 )
 from forecast_loop.sqlite_repository import SQLiteRepository, export_sqlite_to_jsonl, migrate_jsonl_to_sqlite
 from forecast_loop.storage import JsonFileRepository
+from forecast_loop.strategy_evolution import propose_strategy_revision
 
 
 def _now() -> datetime:
@@ -454,6 +455,134 @@ def test_research_autopilot_retire_outcome_requires_revision(tmp_path):
     assert run.loop_status == "REVISION_REQUIRED"
     assert run.next_research_action == "CREATE_REVISION_AGENDA"
     assert "negative_excess_return" in run.blocked_reasons
+
+
+def test_propose_strategy_revision_creates_draft_child_card_and_agenda(tmp_path):
+    repository, card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    outcome.failure_attributions = ["negative_excess_return", "turnover_breach"]
+    (tmp_path / "paper_shadow_outcomes.jsonl").write_text(
+        json.dumps(outcome.to_dict()) + "\n",
+        encoding="utf-8",
+    )
+
+    result = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    )
+
+    revision = result.strategy_card
+    agenda = result.research_agenda
+    assert revision.status == "DRAFT"
+    assert revision.parent_card_id == card.card_id
+    assert revision.author == "codex-strategy-evolution"
+    assert revision.decision_basis == "paper_shadow_strategy_revision_candidate"
+    assert revision.parameters["revision_source_outcome_id"] == outcome.outcome_id
+    assert revision.parameters["revision_failure_attributions"] == [
+        "negative_excess_return",
+        "turnover_breach",
+    ]
+    assert revision.backtest_result_ids == []
+    assert revision.walk_forward_validation_ids == []
+    assert any("positive after-cost edge" in rule for rule in revision.entry_rules)
+    assert any("cooldown" in rule for rule in revision.risk_rules)
+    assert agenda.strategy_card_ids == [revision.card_id]
+    assert "revision" in agenda.title.lower()
+    assert "negative_excess_return" in agenda.hypothesis
+    assert "paper_shadow_outcome" in agenda.expected_artifacts
+
+
+def test_propose_strategy_revision_rejects_promotion_ready_outcome(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(tmp_path)
+
+    try:
+        propose_strategy_revision(
+            repository=repository,
+            created_at=_now(),
+            paper_shadow_outcome_id=outcome.outcome_id,
+        )
+    except ValueError as exc:
+        assert "does not require revision" in str(exc)
+    else:
+        raise AssertionError("promotion-ready outcome should not create a revision")
+
+
+def test_propose_strategy_revision_is_idempotent(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+
+    first = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    )
+    second = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    )
+
+    assert second.strategy_card.card_id == first.strategy_card.card_id
+    assert second.research_agenda.agenda_id == first.research_agenda.agenda_id
+    assert len(repository.load_strategy_cards()) == 2
+    assert len(repository.load_research_agendas()) == 1
+
+
+def test_propose_strategy_revision_ignores_later_revision_version_for_same_outcome(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+
+    first = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    )
+    second = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+        revision_version="manual-v2",
+    )
+
+    assert second.strategy_card.card_id == first.strategy_card.card_id
+    assert second.strategy_card.version == first.strategy_card.version
+    assert second.research_agenda.agenda_id == first.research_agenda.agenda_id
+    assert len(repository.load_strategy_cards()) == 2
+    assert len(repository.load_research_agendas()) == 1
+
+
+def test_cli_propose_strategy_revision_outputs_revision_and_persists(tmp_path, capsys):
+    _repository, card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+
+    assert main(
+        [
+            "propose-strategy-revision",
+            "--storage-dir",
+            str(tmp_path),
+            "--paper-shadow-outcome-id",
+            outcome.outcome_id,
+            "--created-at",
+            "2026-04-28T14:00:00+00:00",
+        ]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    revision = payload["revision_strategy_card"]
+    agenda = payload["revision_research_agenda"]
+    assert revision["card_id"].startswith("strategy-card:")
+    assert revision["parent_card_id"] == card.card_id
+    assert agenda["agenda_id"].startswith("research-agenda:")
+    assert agenda["strategy_card_ids"] == [revision["card_id"]]
 
 
 def test_cli_creates_research_agenda_and_autopilot_run(tmp_path, capsys):

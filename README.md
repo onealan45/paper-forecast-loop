@@ -97,6 +97,9 @@ factory:
 - PR11 adds Codex governance docs and prompts: controller decisions, worker
   handoffs, final reviewer prompts, Windows autopilot runbook, and docs tests
   for required gates and role catalog alignment.
+- PR12 adds the first self-evolving strategy primitive: failed paper-shadow
+  outcomes can produce DRAFT child strategy-card revision candidates plus a
+  linked retest agenda.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -212,6 +215,7 @@ This version intentionally includes:
   - `record-paper-shadow-outcome`
   - `create-research-agenda`
   - `record-research-autopilot-run`
+  - `propose-strategy-revision`
 
 This version intentionally excludes:
 
@@ -661,6 +665,19 @@ PR9 adds the first loop-level research artifacts:
 This is an audit loop, not a scheduler. It does not generate strategies by
 itself, mutate strategy cards, or place orders. It makes the learning cycle
 inspectable so later stages can add real strategy revision workers.
+
+### Strategy Revision Candidates
+
+PR12 adds the first bounded self-evolving strategy primitive:
+
+- `propose-strategy-revision` consumes a failed `paper_shadow_outcome`.
+- It creates a DRAFT child `strategy_cards.jsonl` row with `parent_card_id`,
+  failure-attribution metadata, and concrete rule/parameter mutations.
+- It creates a linked `research_agendas.jsonl` row for retesting the revision.
+- It is idempotent for the same outcome and does not promote the revised card.
+
+This is not a full autonomous strategy trainer. It turns evidence from failed
+simulated shadow windows into a specific next hypothesis for locked evaluation.
 
 ### Strategy-Visible UX
 
@@ -1206,6 +1223,17 @@ python run_forecast_loop.py record-research-autopilot-run --storage-dir .\paper_
 `next_research_action` is derived from locked evaluation, leaderboard, decision,
 and paper-shadow outcome state.
 
+Propose a DRAFT strategy revision from a failed paper-shadow outcome:
+
+```powershell
+python run_forecast_loop.py propose-strategy-revision --storage-dir .\paper_storage\manual-research --paper-shadow-outcome-id paper-shadow-outcome:example --created-at 2026-04-28T14:00:00+00:00
+```
+
+`propose-strategy-revision` writes a child `strategy_cards.jsonl` row and a
+linked `research_agendas.jsonl` row. The generated strategy card remains
+`DRAFT`; it must pass a new locked evaluation and paper-shadow cycle before any
+later promotion workflow may trust it.
+
 Generate a Markdown research report from existing artifacts:
 
 ```powershell
@@ -1292,6 +1320,6 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - research quality gates now block BUY/SELL unless sample size, baseline edge,
   backtest, drawdown, and walk-forward evidence pass
 - PR9/PR10/PR11 research autopilot, strategy-visible UX, and Codex governance
-  docs exist, but full scheduling, automatic strategy mutation, autonomous
-  strategy generation, and deeper CPCV/PBO/DSR/bootstrap statistics remain
-  deferred
+  docs exist, and PR12 can produce evidence-linked DRAFT revision candidates,
+  but full scheduling, autonomous strategy generation, automatic promotion, and
+  deeper CPCV/PBO/DSR/bootstrap statistics remain deferred

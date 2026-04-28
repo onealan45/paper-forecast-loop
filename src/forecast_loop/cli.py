@@ -57,6 +57,7 @@ from forecast_loop.stock_data import (
     market_calendar_payload,
     run_stock_candle_health,
 )
+from forecast_loop.strategy_evolution import propose_strategy_revision
 from forecast_loop.sqlite_repository import (
     export_sqlite_to_jsonl,
     initialize_sqlite_database,
@@ -445,6 +446,13 @@ def main(argv: list[str] | None = None) -> int:
     research_autopilot_cmd.add_argument("--paper-shadow-outcome-id")
     research_autopilot_cmd.add_argument("--created-at")
 
+    strategy_revision_cmd = subparsers.add_parser("propose-strategy-revision")
+    strategy_revision_cmd.add_argument("--storage-dir", required=True)
+    strategy_revision_cmd.add_argument("--paper-shadow-outcome-id", required=True)
+    strategy_revision_cmd.add_argument("--author", default="codex-strategy-evolution")
+    strategy_revision_cmd.add_argument("--revision-version")
+    strategy_revision_cmd.add_argument("--created-at")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -537,6 +545,8 @@ def main(argv: list[str] | None = None) -> int:
             return _create_research_agenda(args)
         if args.command == "record-research-autopilot-run":
             return _record_research_autopilot_run(args)
+        if args.command == "propose-strategy-revision":
+            return _propose_strategy_revision(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -1633,6 +1643,27 @@ def _record_research_autopilot_run(args) -> int:
         paper_shadow_outcome_id=args.paper_shadow_outcome_id,
     )
     print(json.dumps({"research_autopilot_run": run.to_dict()}, ensure_ascii=False))
+    return 0
+
+
+def _propose_strategy_revision(args) -> int:
+    created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
+    result = propose_strategy_revision(
+        repository=JsonFileRepository(args.storage_dir),
+        created_at=created_at,
+        paper_shadow_outcome_id=args.paper_shadow_outcome_id,
+        author=args.author,
+        revision_version=args.revision_version,
+    )
+    print(
+        json.dumps(
+            {
+                "revision_strategy_card": result.strategy_card.to_dict(),
+                "revision_research_agenda": result.research_agenda.to_dict(),
+            },
+            ensure_ascii=False,
+        )
+    )
     return 0
 
 

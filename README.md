@@ -109,6 +109,14 @@ This version intentionally includes:
   - JSONL artifacts for audit export and backward compatibility:
     - `market_candles.jsonl`
     - `macro_events.jsonl`
+    - `source_registry.jsonl`
+    - `source_documents.jsonl`
+    - `source_ingestion_runs.jsonl`
+    - `canonical_events.jsonl`
+    - `event_reliability_checks.jsonl`
+    - `market_reaction_checks.jsonl`
+    - `event_edge_evaluations.jsonl`
+    - `feature_snapshots.jsonl`
     - `forecasts.jsonl`
     - `scores.jsonl`
     - `reviews.jsonl`
@@ -155,6 +163,8 @@ This version intentionally includes:
   - `market-calendar`
   - `import-macro-events`
   - `macro-calendar`
+  - `import-source-documents`
+  - `source-registry`
   - `build-research-dataset`
   - `research-report`
   - `backtest`

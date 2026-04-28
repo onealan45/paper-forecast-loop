@@ -678,6 +678,79 @@ class WalkForwardValidation:
 
 
 @dataclass(slots=True)
+class SourceRegistryEntry:
+    source_id: str
+    source_name: str
+    source_type: str
+    provider: str
+    license_notes: str
+    rate_limit_policy: str
+    update_lag_seconds: int | None
+    timestamp_policy: dict
+    point_in_time_support: str
+    reliability_base_score: float
+    lookahead_risk: str
+    allowed_for_decision: bool
+    allowed_for_research_only: bool
+    requires_secret: bool
+    secret_env_vars: list[str]
+    fixture_path: str | None
+
+    ALLOWED_SOURCE_TYPES = {
+        "official",
+        "regulator",
+        "exchange",
+        "company",
+        "news",
+        "social",
+        "onchain",
+        "macro",
+        "market",
+        "fixture",
+        "unknown",
+    }
+    ALLOWED_POINT_IN_TIME_SUPPORT = {"full", "partial", "none", "unknown"}
+    ALLOWED_LOOKAHEAD_RISK = {"low", "medium", "high"}
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "SourceRegistryEntry":
+        source_type = _require_string(payload, "source_type")
+        if source_type not in cls.ALLOWED_SOURCE_TYPES:
+            raise ValueError(f"unsupported source_type: {source_type}")
+        point_in_time_support = _require_string(payload, "point_in_time_support")
+        if point_in_time_support not in cls.ALLOWED_POINT_IN_TIME_SUPPORT:
+            raise ValueError(f"unsupported point_in_time_support: {point_in_time_support}")
+        lookahead_risk = _require_string(payload, "lookahead_risk")
+        if lookahead_risk not in cls.ALLOWED_LOOKAHEAD_RISK:
+            raise ValueError(f"unsupported lookahead_risk: {lookahead_risk}")
+        secret_env_vars = [str(item) for item in payload.get("secret_env_vars", [])]
+        if any("=" in item for item in secret_env_vars):
+            raise ValueError("secret_env_vars must contain variable names, not secret assignments")
+        update_lag = payload.get("update_lag_seconds")
+        return cls(
+            source_id=_require_string(payload, "source_id"),
+            source_name=_require_string(payload, "source_name"),
+            source_type=source_type,
+            provider=_require_string(payload, "provider"),
+            license_notes=str(payload.get("license_notes", "")),
+            rate_limit_policy=str(payload.get("rate_limit_policy", "")),
+            update_lag_seconds=int(update_lag) if update_lag is not None else None,
+            timestamp_policy=dict(payload.get("timestamp_policy", {})),
+            point_in_time_support=point_in_time_support,
+            reliability_base_score=float(payload.get("reliability_base_score", 0.0)),
+            lookahead_risk=lookahead_risk,
+            allowed_for_decision=bool(payload.get("allowed_for_decision", False)),
+            allowed_for_research_only=bool(payload.get("allowed_for_research_only", True)),
+            requires_secret=bool(payload.get("requires_secret", False)),
+            secret_env_vars=secret_env_vars,
+            fixture_path=payload.get("fixture_path"),
+        )
+
+
+@dataclass(slots=True)
 class SourceDocument:
     document_id: str
     source_name: str
@@ -701,6 +774,7 @@ class SourceDocument:
     duplicate_group_id: str | None
     license_note: str | None
     ingestion_run_id: str | None
+    source_id: str | None = None
 
     def to_dict(self) -> dict:
         payload = asdict(self)
@@ -733,6 +807,7 @@ class SourceDocument:
             duplicate_group_id=payload.get("duplicate_group_id"),
             license_note=payload.get("license_note"),
             ingestion_run_id=payload.get("ingestion_run_id"),
+            source_id=payload.get("source_id"),
         )
 
 

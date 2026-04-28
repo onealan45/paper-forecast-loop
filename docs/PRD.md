@@ -1,4 +1,4 @@
-# PRD: AI Operator Trading Bot and Paper Forecast Loop
+# PRD: AI Strategy Research And Prediction Lab
 
 **Version:** 0.1
 **Date:** 2026-04-22
@@ -7,22 +7,87 @@
 
 ## 1. Product Summary
 
-This product is an **AI-first trading operator** with a **paper-only strategy-research robot**.
+This project is an **AI-first strategy research and prediction lab**.
 
-It is not a live auto-trading system in V1. Its purpose is to:
+It is not a productization project and it is not a live order-execution system.
+Its purpose is to:
 
 - generate recurring market forecasts from public data
 - wait for the prediction window to complete
 - validate forecast quality
 - compare forecast quality against baselines
 - review results
-- produce a paper-only strategy decision for the next horizon
+- produce a strategy decision for the next horizon for research, backtesting,
+  and simulation
+- discover, test, and refine strategies through natural-language control
 - raise Codex-ready repair requests when health checks find blocking failures
-- present the entire process in a modern, minimal, practical operator UI
+- present concrete strategies, backtests, predictions, and research rationale in
+  the UI
 
 The core product idea is:
 
-> The user is not manually operating a bot. The user is supervising an AI that researches, explains, and produces auditable paper-only decisions.
+> The user is using natural language to direct an AI research loop that studies markets, creates strategies, backtests them, predicts outcomes, and reflects on what works.
+
+The hard boundary is narrow:
+
+> Do not place real orders and do not move real capital.
+
+Other tools, data sources, strategy generation methods, and automated research
+loops are acceptable when they improve research, backtesting, prediction,
+simulation, or strategy reflection.
+
+## 1.0 User Direction Update
+
+The user's current preference is:
+
+- research ability and prediction ability are more important than conservative
+  safety framing;
+- the system may use any useful information source, not only public data, as
+  long as the source is recorded well enough for research use;
+- natural-language strategy generation is acceptable because the user controls
+  the system through natural language;
+- self-evolving skills are desirable because the user wants continuous study,
+  learning, reflection, and strategy improvement;
+- large tool access inside the automated loop is acceptable when it is bounded
+  by the no-real-order rule;
+- UX must expose concrete strategies, hypotheses, backtests, prediction logic,
+  and strategy changes instead of only artifact health and system status;
+- sandbox or broker safety gates must not block research simulation. They only
+  exist to prevent accidental real execution.
+
+## 1.1 Research Background: Alpha Factory Direction
+
+The post-M1-M6 research background is recorded in
+[`docs/architecture/alpha-factory-research-background.md`](architecture/alpha-factory-research-background.md).
+
+The long-term direction is a research-capable, prediction-focused,
+multi-strategy Alpha Factory. The system should generate and evaluate many
+candidate alphas, learn from prior experiments, and improve strategy quality
+over time.
+
+The core research principle is:
+
+> 放開策略搜尋空間，鎖死評估流程。
+
+This keeps strategy exploration broad while preventing the evaluation loop from
+turning into adaptive data mining. The evaluation path should still record fixed
+data snapshots, split manifests, trial budgets, leakage checks, baseline
+comparisons, validation statistics, holdout evidence, simulation results, and
+repair artifacts.
+
+Product implications:
+
+- Candidate strategy generation can be broad, natural-language-driven, and
+  self-improving.
+- The evaluation path must be deterministic, versioned, and auditable.
+- Failed experiments must be retained as evidence, not discarded.
+- Promotion inside the research loop must depend on research evidence, not on
+  one attractive backtest or one recent forecast.
+- Provider limitations, data gaps, and validation weaknesses must be visible to
+  the operator before any BUY/SELL decision is trusted.
+- The next major stage should prioritize Vibe-Trading-style research breadth,
+  strategy skills, backtesting, MCP/tool surfaces, and prediction quality while
+  preserving the no-real-order rule.
 
 ## 2. Problem Statement
 
@@ -31,28 +96,47 @@ Most trading dashboards are either:
 - execution terminals that are too dense and manual, or
 - AI/chat interfaces that hide performance, state, and risk
 
-The intended product must solve both problems:
+The intended research lab must solve both problems:
 
-- show clear performance first
-- make the AI's current intent obvious
-- let the user inspect why the AI did something
-- keep the system paper-only and reviewable before any live deployment discussion
+- show concrete strategy performance first
+- make the AI's current research hypothesis obvious
+- let the user inspect why the AI predicts something
+- let the user see what strategy is being tested, changed, promoted, or rejected
+- keep real order execution unavailable
 
 ## 3. Product Goals
 
 ### Primary Goals
 
-- Make `today's performance` the first thing the user understands.
-- Make `what the AI is doing right now` obvious at a glance.
+- Make current strategy performance and prediction quality the first thing the
+  user understands.
+- Make `what strategy the AI is studying or testing right now` obvious at a
+  glance.
 - Let the user inspect `why the AI made each decision`.
 - Run a repeatable `ingest -> forecast -> validate -> score -> compare baseline -> decide -> health audit -> repair if needed` loop.
-- Keep the system `paper-only`, `public-data-first`, and `safe by design`.
+- Keep the system `no-real-order`, research-focused, and simulation-first.
+- Learn from Vibe-Trading-style capabilities: skills, swarm workflows, MCP
+  tools, broad data loaders, backtest engines, agent memory, and strategy
+  export/review surfaces.
+- Preserve a locked research evaluation path so broader strategy search does not
+  become uncontrolled data mining.
+- Make weak evidence visible by blocking BUY/SELL rather than producing fake
+  conviction.
+- Keep provider quality, leakage checks, baseline edge, drawdown, costs,
+  validation results, and paper-shadow status inspectable from artifacts and UI.
+- Increase the share of work spent on analysis, prediction, strategy discovery,
+  backtesting, simulation, and strategy self-reflection.
 
 ### Secondary Goals
 
-- Provide a premium desktop UX inspired by Codex for Windows interaction patterns.
-- Support hourly automated strategy research with fallback to repair/building mode when the system breaks.
-- Keep the system small, explainable, and reviewable in V1.
+- Provide a practical research UX that exposes concrete strategies and evidence.
+- Support automated strategy research with fallback to repair/building mode when
+  the system breaks.
+- Keep the system explainable and reviewable, but do not optimize for
+  productization.
+- Support future Alpha Factory stages through data contracts, experiment
+  registry, locked splits, validation reports, leaderboard governance, and
+  quarantine artifacts.
 
 ## 4. Non-Goals
 
@@ -63,6 +147,7 @@ The following are explicitly out of scope for V1:
 - real broker or exchange order submission
 - real API key handling
 - automatic strategy promotion to live capital
+- cherry-picking only successful experiments while hiding failed trials
 - multi-team collaboration workflows
 - multi-account portfolio management
 - full mobile parity with desktop depth
@@ -86,11 +171,16 @@ Note: the exact persona was not explicitly finalized in the Q&A, but this is the
 ## 6. Product Principles
 
 - **Performance first:** The first screen must answer whether the system is making or losing money.
-- **AI state clarity:** The user must immediately know what the AI is trying to do and what it is currently doing.
-- **Traceability over hype:** The second layer of the product is a decision timeline, not a marketing summary.
-- **Paper-only by default:** Every loop output must remain non-live and reviewable.
-- **Minimal surface area:** Use a small, clear information architecture instead of a dense trading terminal.
-- **Codex-like behavior:** Calm, premium, context-rich, desktop-oriented interaction rather than card-heavy dashboard design.
+- **Strategy clarity:** The user must immediately know what strategy,
+  hypothesis, and prediction the AI is currently testing.
+- **Prediction over hygiene:** Artifact health matters, but the visible center
+  of the system should be strategy quality and prediction quality.
+- **No real orders:** Research, simulation, and tool use may be broad, but the
+  system must not submit real orders or move real capital.
+- **Concrete strategy visibility:** The UI must show strategy logic, parameters,
+  backtest results, prediction rationale, revisions, and next experiments.
+- **Learning loop:** The system should remember research lessons and evolve
+  reusable strategy skills when evidence supports a change.
 
 ## 7. UX Requirements
 
@@ -201,9 +291,11 @@ It should avoid:
 - desktop is the primary deep-review environment
 - mobile keeps summary, AI state, key timeline moments, alerts, and emergency controls
 
-## 8. Control and Safety Requirements
+## 8. Control and Execution Boundary Requirements
 
-The user should retain high-level intervention, but manual trading is not the focus.
+The user should retain high-level intervention, but manual execution is not the
+focus. Controls should help research and simulation, not turn the system into a
+live trading terminal.
 
 ### Allowed High-Level Controls
 
@@ -239,35 +331,36 @@ Future V1 should support:
 - in-app notifications
 - immediate push-like or Telegram-like notifications
 
-## 10. Forecasting and Strategy-Research Loop
+## 10. Forecasting, Strategy Research, And Simulation Loop
 
 ## 10.1 Core Loop
 
-The product’s research engine should follow this loop:
+The research engine should evolve toward this loop:
 
-1. The system ingests public market data
+1. The system ingests useful market, macro, sentiment, fundamental, flow, or
+   alternative data sources
 2. AI generates a forecast
-3. The system waits for the forecast horizon to complete
-4. The system validates forecast quality against realized public data
-5. The system compares forecast quality against baselines
-6. The system updates minimal paper portfolio context
-7. The system generates a paper-only strategy decision
-8. The system audits health and creates a Codex repair request if blocking failures exist
-9. The next research cycle begins
+3. AI generates or revises a strategy hypothesis
+4. The system runs backtests and simulations
+5. The system waits for forecast horizons to complete when needed
+6. The system validates prediction quality against realized data
+7. The system compares strategy and forecast quality against baselines
+8. The system records lessons and may propose skill updates
+9. The system generates a simulated strategy decision
+10. The system audits health and creates a Codex repair request if blocking failures exist
+11. The next research cycle begins
 
 ## 10.2 V1 Boundary
 
 V1 remains:
 
-- paper-only
-- public-data-first
 - no real capital
 - no live execution
-- no live broker or exchange adapter
 - no real order submission
-- no automatic strategy promotion
+- no required live broker or exchange adapter
+- no secret-dependent research path
 
-V1 can produce paper-only strategy decisions such as:
+V1 can produce simulated strategy decisions such as:
 
 - `BUY`
 - `SELL`
@@ -280,7 +373,9 @@ not better than baseline.
 
 ## 10.3 Data Scope
 
-Initial data should come from publicly accessible sources.
+The project accepts any useful information source for research when it improves
+prediction, backtesting, simulation, or strategy discovery. Public data is the
+current implementation baseline, not the long-term product constraint.
 
 Current practical V1 path:
 
@@ -356,7 +451,8 @@ V1 MVP should include:
 
 - one initial automation symbol, with per-symbol multi-asset decisions available when artifacts exist
 - one strategy context
-- one public-data provider
+- at least one working data provider, with room to add non-public or paid
+  research sources later
 - immutable forecast artifacts
 - score artifacts
 - review artifacts
@@ -375,7 +471,7 @@ V1 MVP should include:
 - research dataset artifacts with no-lookahead leakage checks
 - expanded baseline suite covering no-trade/cash, buy-and-hold, moving-average,
   momentum, and deterministic-random baselines
-- paper-only backtest run/result artifacts with return, benchmark, drawdown,
+- simulated backtest run/result artifacts with return, benchmark, drawdown,
   Sharpe, turnover, and win-rate metrics
 - walk-forward validation artifacts with rolling boundaries, aggregate metrics,
   and overfit-risk flags
@@ -393,7 +489,7 @@ V1 MVP should include:
 - health/repair queue view exposing current health, blocking findings, repair
   request status, repair prompts, affected artifacts, recommended tests, and
   acceptance criteria
-- audited paper-only control event artifacts with confirmation requirements for
+- audited simulated-control event artifacts with confirmation requirements for
   risky controls and paper-order blocking gates for emergency stop, pause, stop
   new entries, reduce risk, and max position
 - automation run log artifacts that record cycle steps, health checks,
@@ -401,7 +497,7 @@ V1 MVP should include:
 - health-check output
 - Codex repair request artifacts
 - minimal CLI
-- hourly paper-only automation
+- hourly research automation
 - fallback automation for repair mode
 
 ## 12. Success Criteria
@@ -409,14 +505,17 @@ V1 MVP should include:
 V1 should be considered product-ready for internal iteration only when:
 
 - forecasts are generated on schedule
+- concrete strategy hypotheses and backtest results are visible
 - forecast windows are correctly aligned to provider data boundaries
 - scoring only happens after complete data coverage
 - reviews, proposals, and strategy decisions are based on trustworthy evidence
 - strategy decisions show action, confidence, risk, invalidation conditions, and linked artifacts
 - weak evidence does not produce fake BUY/SELL certainty
+- the system can revise or propose reusable strategy skills from prior evidence
 - blocking storage, ingestion, or provider problems create repair requests
 - the system can fail safely and fall back to development mode
-- the UI can present performance, intent, and decision history coherently
+- the UI can present strategy logic, prediction rationale, backtests, revisions,
+  and decision history coherently
 
 ## 13. Known Gaps Before Full V1 Confidence
 
@@ -425,33 +524,38 @@ provider-aligned forecast anchors, complete target-window coverage before
 scoring, incomplete realized windows, replay determinism, and dashboard
 operator-state framing.
 
-Remaining gaps are now product and operations scope, not known loop-blocking
+Remaining gaps are now research capability and operations scope, not known loop-blocking
 correctness defects:
 
-- strategy and regime classification remain intentionally simple
+- strategy and regime classification remain too simple for the user's current
+  research goals
 - the current read-only UX includes static HTML plus a local operator console;
-  controls are audited CLI events, while browser forms remain deferred
+  it does not yet make concrete strategy logic prominent enough
 - automation run logs are audit artifacts only; scheduler orchestration remains
   outside the repo
-- automation is local and paper-only, with manual evidence checks before any resume
-- paper portfolio accounting and risk gates are local simulations and not broker reconciliation or external execution
+- automation is local and simulation-first, with manual evidence checks before
+  any resume
+- paper portfolio accounting and risk gates are local simulations
 - SQLite repository migration/export now exists, while the hourly loop and dashboard still use JSONL artifacts by default until later M2 integration
 - health-check creates repair requests and the operator console can inspect
   them, but there is no autonomous repair daemon in this repo
-- there is no live execution layer, and live broker/exchange integration remains explicitly unavailable
+- there is no live execution layer, which is acceptable because the user wants
+  research and simulation rather than real orders
 - CoinGecko moving-window replay remains disabled; replay can now use imported stored candles
-- ETF/stock support is fixture-only and US-calendar-only; no live stock API or paid provider is wired
+- ETF/stock support is fixture-only and US-calendar-only; broader data sources
+  should be added when they improve prediction
 - Taiwan ETF calendar/provider support remains deferred
 - macro events are visible as imported calendar artifacts, but do not yet drive research features or strategy decisions
 - per-symbol multi-asset decisions do not yet perform portfolio optimization or cross-asset allocation
-- research datasets are generated artifacts only; no model training or optimizer is included yet
+- research datasets are generated artifacts only; no strong strategy generation,
+  model training, self-evolving skill loop, or optimizer is included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved
-- walk-forward validation now influences paper-only BUY/SELL gates through
+- walk-forward validation now influences simulated BUY/SELL gates through
   M4F research-quality checks
 - research reports summarize available artifacts only; strategy behavior changes
   come from M4F research-quality gates
 
-The repository is suitable for continued paper-only hourly research only when
+The repository is suitable for continued hourly research only when
 tests pass, active storage repair status is fresh, dashboard freshness is
 visible, strategy decision/health status are visible, and
 `last_run_meta.json.new_forecast.forecast_id` matches the newest forecast tail

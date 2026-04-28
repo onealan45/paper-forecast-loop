@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -444,14 +444,14 @@ def test_dashboard_prioritizes_strategy_decision_and_health_status(tmp_path):
     from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
 
     repository = JsonFileRepository(tmp_path)
-    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    now = datetime.now(tz=UTC).replace(microsecond=0)
     forecast = Forecast(
         forecast_id="forecast:decision",
         symbol="BTC-USD",
         created_at=now,
         anchor_time=now,
         target_window_start=now,
-        target_window_end=now.replace(day=25),
+        target_window_end=now + timedelta(hours=24),
         candle_interval_minutes=60,
         expected_candle_count=25,
         status="pending",

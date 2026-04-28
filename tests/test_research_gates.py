@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from forecast_loop.decision import generate_strategy_decision
-from forecast_loop.models import BacktestResult, WalkForwardValidation, WalkForwardWindow
+from forecast_loop.models import BacktestResult, EventEdgeEvaluation, WalkForwardValidation, WalkForwardWindow
 from forecast_loop.storage import JsonFileRepository
 from tests.test_m1_strategy import _forecast, _ok_risk, _seed_scores
 
@@ -84,6 +84,40 @@ def _walk_forward(
     )
 
 
+def _event_edge(
+    now: datetime,
+    *,
+    evaluation_id: str = "event-edge:gate",
+    passed: bool = True,
+    average_excess_return_after_costs: float = 0.02,
+) -> EventEdgeEvaluation:
+    return EventEdgeEvaluation(
+        evaluation_id=evaluation_id,
+        event_family="crypto_flow",
+        event_type="CRYPTO_FLOW",
+        symbol="BTC-USD",
+        created_at=now,
+        split="historical_event_sample",
+        horizon_hours=24,
+        sample_n=5,
+        average_forward_return=0.03,
+        average_benchmark_return=0.0,
+        average_excess_return_after_costs=average_excess_return_after_costs,
+        hit_rate=0.6,
+        max_adverse_excursion_p50=-0.01,
+        max_adverse_excursion_p90=-0.03,
+        max_drawdown_if_traded=-0.05,
+        turnover=5.0,
+        estimated_cost_bps=10.0,
+        dsr=None,
+        white_rc_p=None,
+        stability_score=None,
+        passed=passed,
+        blocked_reason=None if passed else "non_positive_after_cost_edge",
+        flags=[] if passed else ["non_positive_after_cost_edge"],
+    )
+
+
 def _seed_strong_directional_context(repository: JsonFileRepository, now: datetime, *, predicted_regime: str = "trend_up") -> None:
     _seed_scores(
         repository,
@@ -105,6 +139,7 @@ def test_research_gate_allows_buy_when_quality_artifacts_pass(tmp_path):
     _seed_strong_directional_context(repository, now)
     repository.save_backtest_result(_backtest(now))
     repository.save_walk_forward_validation(_walk_forward(now))
+    repository.save_event_edge_evaluation(_event_edge(now))
 
     decision = generate_strategy_decision(
         repository=repository,
@@ -119,6 +154,58 @@ def test_research_gate_allows_buy_when_quality_artifacts_pass(tmp_path):
     assert decision.blocked_reason is None
     assert "research_gate=" in decision.decision_basis
     assert "flags=none" in decision.decision_basis
+    assert "event_edge=event-edge:gate" in decision.decision_basis
+
+
+def test_research_gate_blocks_buy_when_event_edge_missing(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    _seed_strong_directional_context(repository, now)
+    repository.save_backtest_result(_backtest(now))
+    repository.save_walk_forward_validation(_walk_forward(now))
+
+    decision = generate_strategy_decision(
+        repository=repository,
+        symbol="BTC-USD",
+        horizon_hours=24,
+        now=now,
+        risk_snapshot=_ok_risk(now),
+    )
+
+    assert decision.action == "HOLD"
+    assert decision.tradeable is False
+    assert decision.blocked_reason == "research_event_edge_missing"
+    assert "event_edge=missing" in decision.decision_basis
+
+
+def test_research_gate_blocks_buy_when_event_edge_fails(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    _seed_strong_directional_context(repository, now)
+    repository.save_backtest_result(_backtest(now))
+    repository.save_walk_forward_validation(_walk_forward(now))
+    repository.save_event_edge_evaluation(
+        _event_edge(
+            now,
+            evaluation_id="event-edge:failed",
+            passed=False,
+            average_excess_return_after_costs=-0.01,
+        )
+    )
+
+    decision = generate_strategy_decision(
+        repository=repository,
+        symbol="BTC-USD",
+        horizon_hours=24,
+        now=now,
+        risk_snapshot=_ok_risk(now),
+    )
+
+    assert decision.action == "HOLD"
+    assert decision.tradeable is False
+    assert decision.blocked_reason == "research_event_edge_not_passed"
+    assert "event_edge=event-edge:failed" in decision.decision_basis
+    assert "research_event_edge_not_positive" in decision.decision_basis
 
 
 def test_research_gate_blocks_buy_when_backtest_missing(tmp_path):
@@ -126,6 +213,7 @@ def test_research_gate_blocks_buy_when_backtest_missing(tmp_path):
     now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
     _seed_strong_directional_context(repository, now)
     repository.save_walk_forward_validation(_walk_forward(now))
+    repository.save_event_edge_evaluation(_event_edge(now))
 
     decision = generate_strategy_decision(
         repository=repository,
@@ -148,6 +236,7 @@ def test_research_gate_reduces_risk_when_walk_forward_overfit_flags_exist(tmp_pa
     repository.save_walk_forward_validation(
         _walk_forward(now, overfit_flags=["aggregate_underperforms_benchmark"])
     )
+    repository.save_event_edge_evaluation(_event_edge(now))
 
     decision = generate_strategy_decision(
         repository=repository,
@@ -173,6 +262,7 @@ def test_research_gate_uses_latest_research_artifacts_by_created_at(tmp_path):
     repository.save_backtest_result(newer)
     repository.save_backtest_result(older)
     repository.save_walk_forward_validation(_walk_forward(now))
+    repository.save_event_edge_evaluation(_event_edge(now))
 
     decision = generate_strategy_decision(
         repository=repository,

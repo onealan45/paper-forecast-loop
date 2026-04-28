@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from forecast_loop.models import BaselineEvaluation, BacktestResult, WalkForwardValidation
+from forecast_loop.models import BaselineEvaluation, BacktestResult, EventEdgeEvaluation, WalkForwardValidation
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +20,7 @@ def evaluate_research_gates(
     baseline: BaselineEvaluation,
     latest_backtest: BacktestResult | None,
     latest_walk_forward: WalkForwardValidation | None,
+    latest_event_edge: EventEdgeEvaluation | None = None,
     min_sample_size: int = 5,
     min_model_edge: float = 0.0,
     max_drawdown: float = 0.25,
@@ -48,6 +49,16 @@ def evaluate_research_gates(
             flags.append("research_walk_forward_not_beating_benchmark")
         if latest_walk_forward.overfit_risk_flags:
             flags.append("research_walk_forward_overfit_risk")
+    if latest_event_edge is None:
+        flags.append("research_event_edge_missing")
+    else:
+        if not latest_event_edge.passed:
+            flags.append("research_event_edge_not_passed")
+        if (
+            latest_event_edge.average_excess_return_after_costs is None
+            or latest_event_edge.average_excess_return_after_costs <= 0
+        ):
+            flags.append("research_event_edge_not_positive")
 
     if "research_backtest_drawdown_too_high" in flags or "research_walk_forward_overfit_risk" in flags:
         recommended_action = "REDUCE_RISK"
@@ -69,6 +80,7 @@ def evaluate_research_gates(
             baseline=baseline,
             latest_backtest=latest_backtest,
             latest_walk_forward=latest_walk_forward,
+            latest_event_edge=latest_event_edge,
             flags=flags,
         ),
     )
@@ -79,6 +91,7 @@ def _decision_basis(
     baseline: BaselineEvaluation,
     latest_backtest: BacktestResult | None,
     latest_walk_forward: WalkForwardValidation | None,
+    latest_event_edge: EventEdgeEvaluation | None,
     flags: list[str],
 ) -> str:
     return (
@@ -94,5 +107,10 @@ def _decision_basis(
         f"walk_forward_average_excess_return={latest_walk_forward.average_excess_return if latest_walk_forward else None}; "
         f"walk_forward_average_test_return={latest_walk_forward.average_test_return if latest_walk_forward else None}; "
         f"walk_forward_average_benchmark_return={latest_walk_forward.average_benchmark_return if latest_walk_forward else None}; "
+        f"event_edge={latest_event_edge.evaluation_id if latest_event_edge else 'missing'}; "
+        f"event_edge_sample_n={latest_event_edge.sample_n if latest_event_edge else None}; "
+        f"event_edge_average_excess_after_costs={latest_event_edge.average_excess_return_after_costs if latest_event_edge else None}; "
+        f"event_edge_passed={latest_event_edge.passed if latest_event_edge else None}; "
+        f"event_edge_flags={','.join(latest_event_edge.flags) if latest_event_edge else 'missing'}; "
         f"flags={','.join(sorted(set(flags))) or 'none'}"
     )

@@ -29,6 +29,7 @@ from forecast_loop.models import (
     MarketReactionCheck,
     MarketCandleRecord,
     NotificationArtifact,
+    PaperShadowOutcome,
     PaperFill,
     PaperControlEvent,
     PaperOrder,
@@ -220,6 +221,10 @@ class ArtifactRepository(Protocol):
 
     def load_leaderboard_entries(self) -> list[LeaderboardEntry]: ...
 
+    def save_paper_shadow_outcome(self, outcome: PaperShadowOutcome) -> None: ...
+
+    def load_paper_shadow_outcomes(self) -> list[PaperShadowOutcome]: ...
+
 
 class JsonFileRepository:
     def __init__(self, root: Path | str) -> None:
@@ -266,6 +271,7 @@ class JsonFileRepository:
         self.cost_model_snapshots_path = self.root / "cost_model_snapshots.jsonl"
         self.locked_evaluation_results_path = self.root / "locked_evaluation_results.jsonl"
         self.leaderboard_entries_path = self.root / "leaderboard_entries.jsonl"
+        self.paper_shadow_outcomes_path = self.root / "paper_shadow_outcomes.jsonl"
 
     def save_market_candle(self, candle: MarketCandleRecord) -> None:
         self._append_unique(
@@ -692,6 +698,16 @@ class JsonFileRepository:
 
     def load_leaderboard_entries(self) -> list[LeaderboardEntry]:
         return self._load_lines(self.leaderboard_entries_path, LeaderboardEntry.from_dict)
+
+    def save_paper_shadow_outcome(self, outcome: PaperShadowOutcome) -> None:
+        self._append_unique(
+            self.paper_shadow_outcomes_path,
+            outcome.to_dict(),
+            identity_key="outcome_id",
+        )
+
+    def load_paper_shadow_outcomes(self) -> list[PaperShadowOutcome]:
+        return self._load_lines(self.paper_shadow_outcomes_path, PaperShadowOutcome.from_dict)
 
     def _append(self, path: Path, payload: dict) -> None:
         with path.open("a", encoding="utf-8") as handle:

@@ -37,11 +37,11 @@ as the completed factory.
 
 | Layer | Current M1-M6 state | Alpha Factory gap |
 |---|---|---|
-| Decision layer | Produces paper-only strategy decisions with evidence, risk, and blocked reasons. | Needs per-strategy candidate lineage, paper-shadow promotion state, and demotion history. |
+| Decision layer | Produces paper-only strategy decisions with evidence, risk, blocked reasons, and PR8 paper-shadow outcome recommendations. | Needs richer per-strategy candidate lineage, demotion history, and automatic revision proposals. |
 | Health and repair | Detects artifact and runtime issues and can write repair requests. | Needs research-specific findings for provider distortion, experiment invalidation, and promotion quarantine. |
 | Storage | Has SQLite migration support and JSONL audit/export compatibility. | Needs stronger research snapshot metadata and larger dataset storage conventions. |
 | Data providers | Supports sample, CoinGecko, stored candles, and CSV stock fixtures. | Needs canonical primary/secondary provider comparison before serious promotion. |
-| Research evidence | Supports baselines, research datasets, backtests, reports, walk-forward, research gates, PR6 strategy-card / experiment-trial registry, and PR7 locked-evaluation / leaderboard hard-gate artifacts. | Needs strategy generation, self-evolving skills, CPCV-like paths, PBO, DSR, bootstrap, and parameter stability. |
+| Research evidence | Supports baselines, research datasets, backtests, reports, walk-forward, research gates, PR6 strategy-card / experiment-trial registry, PR7 locked-evaluation / leaderboard hard-gate artifacts, and PR8 paper-shadow outcome learning. | Needs strategy generation, self-evolving skills, CPCV-like paths, PBO, DSR, bootstrap, and parameter stability. |
 | UI and operations | Shows read-only decisions, health, portfolio, risk, automation, and broker/sandbox state. | Needs concrete strategy visibility, candidate lifecycle, hypothesis changes, leaderboard, paper-shadow status, and quarantine visibility. |
 
 ## Core Direction
@@ -233,7 +233,8 @@ materially stronger in this order:
 | M7F | Decision integration | Event-derived evidence can influence decisions only after source, reaction, edge, baseline, research, risk, and health gates pass. |
 | PR6 | Strategy card and experiment registry | Strategies become versioned cards, trial budgets are recorded, and failed / aborted / invalid trials are persisted. |
 | PR7 | Locked evaluation and leaderboard gates | Split manifests, cost models, locked evaluation results, and leaderboard entries exist; `alpha_score` is blocked until hard gates pass. |
-| M8+ | Paper-shadow learning and strategy-visible UX | Paper-shadow outcomes feed failure attribution, deeper anti-overfit statistics are added, and UX exposes concrete strategy reasoning. |
+| PR8 | Paper-shadow outcome learning | Leaderboard candidates can record simulated shadow-window results, failure attribution, and promotion / retire / quarantine recommendations. |
+| M8+ | Autopilot loop and strategy-visible UX | Paper-shadow scheduling, strategy revision loops, deeper anti-overfit statistics, and UX expose concrete strategy reasoning. |
 
 These stages should preserve the current execution boundary: no real orders and
 no real capital movement.

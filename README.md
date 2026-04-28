@@ -84,9 +84,12 @@ factory:
 - PR7 adds locked split manifests, cost model snapshots, locked evaluation
   results, and leaderboard hard gates so `alpha_score` is impossible until
   mandatory evidence gates pass.
+- PR8 adds paper-shadow outcome artifacts so leaderboard candidates can be
+  marked promotion-ready, revised, retired, or quarantined after simulated
+  shadow results.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, experiment registry, validation depth, leaderboard governance,
-  paper-shadow learning, and self-evolving research skills.
+  deeper paper-shadow learning, and self-evolving research skills.
 - Vibe-Trading is a useful reference for skills, swarm workflows, MCP tools,
   agent memory, backtest breadth, data loaders, and UX surfaces.
 - CoinGecko remains useful for prototype and cross-check work, but serious
@@ -153,6 +156,7 @@ This version intentionally includes:
     - `cost_model_snapshots.jsonl`
     - `locked_evaluation_results.jsonl`
     - `leaderboard_entries.jsonl`
+    - `paper_shadow_outcomes.jsonl`
 - CLI execution via:
   - `run-once`
   - `replay-range`
@@ -193,6 +197,7 @@ This version intentionally includes:
   - `record-experiment-trial`
   - `lock-evaluation-protocol`
   - `evaluate-leaderboard-gate`
+  - `record-paper-shadow-outcome`
 
 This version intentionally excludes:
 
@@ -615,6 +620,19 @@ PR7 adds hard-gate artifacts for ranking strategy candidates:
 
 This stage does not implement CPCV/PBO/DSR/bootstrap statistics yet. It creates
 the fixed artifact contract that later statistical gates can extend.
+
+### Paper-Shadow Outcome Artifacts
+
+PR8 adds the first outcome-learning artifact after leaderboard gating:
+
+- `paper_shadow_outcomes.jsonl`: immutable paper-shadow window results linked to
+  one leaderboard entry, locked evaluation, strategy card, and experiment trial.
+
+Each outcome records observed return, benchmark return, after-cost excess
+return, max adverse excursion, turnover, failure attribution labels, an outcome
+grade, and a recommendation such as `PROMOTION_READY`, `RETIRE`, or
+`QUARANTINE`. This does not automatically mutate strategy cards or submit
+orders; it gives later research/autopilot stages auditable feedback.
 
 ### Repair Request Artifact
 
@@ -1094,6 +1112,17 @@ python run_forecast_loop.py evaluate-leaderboard-gate --storage-dir .\paper_stor
 `leaderboard_entries.jsonl`. If any hard gate fails, the entry remains visible
 but not rankable.
 
+Record the simulated paper-shadow result for a leaderboard entry:
+
+```powershell
+python run_forecast_loop.py record-paper-shadow-outcome --storage-dir .\paper_storage\manual-research --leaderboard-entry-id leaderboard-entry:example --window-start 2026-04-28T00:00:00+00:00 --window-end 2026-04-29T00:00:00+00:00 --observed-return 0.05 --benchmark-return 0.01
+```
+
+`record-paper-shadow-outcome` writes `paper_shadow_outcomes.jsonl`. Positive
+after-cost excess return can become `PROMOTION_READY`; negative or high-risk
+outcomes recommend `RETIRE`, `REVISE`, or `QUARANTINE` without changing strategy
+state automatically.
+
 Generate a Markdown research report from existing artifacts:
 
 ```powershell
@@ -1179,5 +1208,6 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - research reports summarize existing artifacts only; they do not create new strategy gates
 - research quality gates now block BUY/SELL unless sample size, baseline edge,
   backtest, drawdown, and walk-forward evidence pass
-- PR7 leaderboard gates exist, but deeper CPCV/PBO/DSR/bootstrap statistics,
-  paper-shadow promotion, and strategy-visible UX remain deferred
+- PR8 paper-shadow outcomes exist, but full paper-shadow scheduling, automatic
+  strategy mutation, deeper CPCV/PBO/DSR/bootstrap statistics, and
+  strategy-visible UX remain deferred

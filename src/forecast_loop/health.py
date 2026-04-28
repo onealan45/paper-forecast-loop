@@ -31,6 +31,7 @@ from forecast_loop.models import (
     MarketCandleRecord,
     MarketReactionCheck,
     NotificationArtifact,
+    PaperShadowOutcome,
     PaperFill,
     PaperControlEvent,
     PaperOrder,
@@ -192,6 +193,11 @@ def run_health_check(
             LeaderboardEntry.from_dict,
             findings,
         ),
+        "paper_shadow_outcomes": _load_jsonl(
+            storage_path / "paper_shadow_outcomes.jsonl",
+            PaperShadowOutcome.from_dict,
+            findings,
+        ),
     }
     forecasts: list[Forecast] = artifact_rows["forecasts"]
     scores: list[ForecastScore] = artifact_rows["scores"]
@@ -233,6 +239,7 @@ def run_health_check(
     cost_model_snapshots: list[CostModelSnapshot] = artifact_rows["cost_model_snapshots"]
     locked_evaluation_results: list[LockedEvaluationResult] = artifact_rows["locked_evaluation_results"]
     leaderboard_entries: list[LeaderboardEntry] = artifact_rows["leaderboard_entries"]
+    paper_shadow_outcomes: list[PaperShadowOutcome] = artifact_rows["paper_shadow_outcomes"]
 
     _check_duplicate_ids(forecasts, "forecast_id", storage_path / "forecasts.jsonl", findings)
     _check_duplicate_ids(scores, "score_id", storage_path / "scores.jsonl", findings)
@@ -304,6 +311,12 @@ def run_health_check(
         findings,
     )
     _check_duplicate_ids(leaderboard_entries, "entry_id", storage_path / "leaderboard_entries.jsonl", findings)
+    _check_duplicate_ids(
+        paper_shadow_outcomes,
+        "outcome_id",
+        storage_path / "paper_shadow_outcomes.jsonl",
+        findings,
+    )
 
     scoped_forecasts = [forecast for forecast in forecasts if forecast.symbol == symbol]
     latest_forecast = scoped_forecasts[-1] if scoped_forecasts else None
@@ -361,6 +374,7 @@ def run_health_check(
         cost_model_snapshots,
         locked_evaluation_results,
         leaderboard_entries,
+        paper_shadow_outcomes,
         findings,
     )
     _check_m7_evidence_integrity(
@@ -653,6 +667,7 @@ def _check_links(
     cost_model_snapshots: list[CostModelSnapshot],
     locked_evaluation_results: list[LockedEvaluationResult],
     leaderboard_entries: list[LeaderboardEntry],
+    paper_shadow_outcomes: list[PaperShadowOutcome],
     findings: list[HealthFinding],
 ) -> None:
     forecast_ids = {forecast.forecast_id for forecast in forecasts}
@@ -672,6 +687,7 @@ def _check_links(
     split_manifest_ids = {manifest.manifest_id for manifest in split_manifests}
     cost_model_ids = {snapshot.cost_model_id for snapshot in cost_model_snapshots}
     locked_evaluation_ids = {result.evaluation_id for result in locked_evaluation_results}
+    locked_evaluation_by_id = {result.evaluation_id: result for result in locked_evaluation_results}
 
     for score in scores:
         if score.forecast_id not in forecast_ids:
@@ -1123,6 +1139,93 @@ def _check_links(
                 storage_path / "leaderboard_entries.jsonl",
                 entry.entry_id,
                 entry.trial_id,
+                findings,
+            )
+
+    leaderboard_by_id = {entry.entry_id: entry for entry in leaderboard_entries}
+    for outcome in paper_shadow_outcomes:
+        entry = leaderboard_by_id.get(outcome.leaderboard_entry_id)
+        if entry is None:
+            _add_link_finding(
+                "paper_shadow_outcome_missing_leaderboard_entry",
+                storage_path / "paper_shadow_outcomes.jsonl",
+                outcome.outcome_id,
+                outcome.leaderboard_entry_id,
+                findings,
+            )
+        elif outcome.symbol != entry.symbol:
+            _add_link_finding(
+                "paper_shadow_outcome_symbol_mismatch",
+                storage_path / "paper_shadow_outcomes.jsonl",
+                outcome.outcome_id,
+                entry.symbol,
+                findings,
+            )
+        else:
+            if outcome.evaluation_id != entry.evaluation_id:
+                _add_link_finding(
+                    "paper_shadow_outcome_leaderboard_evaluation_mismatch",
+                    storage_path / "paper_shadow_outcomes.jsonl",
+                    outcome.outcome_id,
+                    entry.evaluation_id,
+                    findings,
+                )
+            if outcome.strategy_card_id != entry.strategy_card_id:
+                _add_link_finding(
+                    "paper_shadow_outcome_leaderboard_strategy_card_mismatch",
+                    storage_path / "paper_shadow_outcomes.jsonl",
+                    outcome.outcome_id,
+                    entry.strategy_card_id,
+                    findings,
+                )
+            if outcome.trial_id != entry.trial_id:
+                _add_link_finding(
+                    "paper_shadow_outcome_leaderboard_trial_mismatch",
+                    storage_path / "paper_shadow_outcomes.jsonl",
+                    outcome.outcome_id,
+                    entry.trial_id,
+                    findings,
+                )
+        if outcome.evaluation_id not in locked_evaluation_ids:
+            _add_link_finding(
+                "paper_shadow_outcome_missing_locked_evaluation",
+                storage_path / "paper_shadow_outcomes.jsonl",
+                outcome.outcome_id,
+                outcome.evaluation_id,
+                findings,
+            )
+        else:
+            evaluation = locked_evaluation_by_id[outcome.evaluation_id]
+            if outcome.strategy_card_id != evaluation.strategy_card_id:
+                _add_link_finding(
+                    "paper_shadow_outcome_evaluation_strategy_card_mismatch",
+                    storage_path / "paper_shadow_outcomes.jsonl",
+                    outcome.outcome_id,
+                    evaluation.strategy_card_id,
+                    findings,
+                )
+            if outcome.trial_id != evaluation.trial_id:
+                _add_link_finding(
+                    "paper_shadow_outcome_evaluation_trial_mismatch",
+                    storage_path / "paper_shadow_outcomes.jsonl",
+                    outcome.outcome_id,
+                    evaluation.trial_id,
+                    findings,
+                )
+        if outcome.strategy_card_id not in strategy_card_ids:
+            _add_link_finding(
+                "paper_shadow_outcome_missing_strategy_card",
+                storage_path / "paper_shadow_outcomes.jsonl",
+                outcome.outcome_id,
+                outcome.strategy_card_id,
+                findings,
+            )
+        if outcome.trial_id not in trial_ids:
+            _add_link_finding(
+                "paper_shadow_outcome_missing_experiment_trial",
+                storage_path / "paper_shadow_outcomes.jsonl",
+                outcome.outcome_id,
+                outcome.trial_id,
                 findings,
             )
 

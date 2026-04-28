@@ -1212,6 +1212,84 @@ class LeaderboardEntry:
 
 
 @dataclass(slots=True)
+class PaperShadowOutcome:
+    outcome_id: str
+    created_at: datetime
+    leaderboard_entry_id: str
+    evaluation_id: str
+    strategy_card_id: str
+    trial_id: str
+    symbol: str
+    window_start: datetime
+    window_end: datetime
+    observed_return: float | None
+    benchmark_return: float | None
+    excess_return_after_costs: float | None
+    max_adverse_excursion: float | None
+    turnover: float | None
+    outcome_grade: str
+    failure_attributions: list[str]
+    recommended_promotion_stage: str
+    recommended_strategy_action: str
+    blocked_reasons: list[str]
+    notes: list[str]
+    decision_basis: str
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        leaderboard_entry_id: str,
+        window_start: datetime,
+        window_end: datetime,
+        observed_return: float | None,
+        benchmark_return: float | None,
+    ) -> str:
+        return _stable_artifact_id(
+            "paper-shadow-outcome",
+            {
+                "leaderboard_entry_id": leaderboard_entry_id,
+                "window_start": window_start.isoformat(),
+                "window_end": window_end.isoformat(),
+                "observed_return": observed_return,
+                "benchmark_return": benchmark_return,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        for key in ("created_at", "window_start", "window_end"):
+            payload[key] = payload[key].isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "PaperShadowOutcome":
+        return cls(
+            outcome_id=_require_string(payload, "outcome_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            leaderboard_entry_id=_require_string(payload, "leaderboard_entry_id"),
+            evaluation_id=_require_string(payload, "evaluation_id"),
+            strategy_card_id=_require_string(payload, "strategy_card_id"),
+            trial_id=_require_string(payload, "trial_id"),
+            symbol=_require_string(payload, "symbol"),
+            window_start=_require_aware_datetime(payload, "window_start"),
+            window_end=_require_aware_datetime(payload, "window_end"),
+            observed_return=_optional_float(payload.get("observed_return")),
+            benchmark_return=_optional_float(payload.get("benchmark_return")),
+            excess_return_after_costs=_optional_float(payload.get("excess_return_after_costs")),
+            max_adverse_excursion=_optional_float(payload.get("max_adverse_excursion")),
+            turnover=_optional_float(payload.get("turnover")),
+            outcome_grade=payload.get("outcome_grade", "INSUFFICIENT"),
+            failure_attributions=list(payload.get("failure_attributions", [])),
+            recommended_promotion_stage=payload.get("recommended_promotion_stage", "PAPER_SHADOW_PENDING"),
+            recommended_strategy_action=payload.get("recommended_strategy_action", "CONTINUE_SHADOW"),
+            blocked_reasons=list(payload.get("blocked_reasons", [])),
+            notes=list(payload.get("notes", [])),
+            decision_basis=payload.get("decision_basis", "legacy_paper_shadow_outcome"),
+        )
+
+
+@dataclass(slots=True)
 class SourceRegistryEntry:
     source_id: str
     source_name: str

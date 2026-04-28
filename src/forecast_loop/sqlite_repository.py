@@ -32,6 +32,7 @@ from forecast_loop.models import (
     MarketReactionCheck,
     MarketCandleRecord,
     NotificationArtifact,
+    PaperShadowOutcome,
     PaperFill,
     PaperControlEvent,
     PaperOrder,
@@ -147,6 +148,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         LockedEvaluationResult.from_dict,
     ),
     ArtifactSpec("leaderboard_entries", "leaderboard_entries.jsonl", "entry_id", LeaderboardEntry.from_dict),
+    ArtifactSpec("paper_shadow_outcomes", "paper_shadow_outcomes.jsonl", "outcome_id", PaperShadowOutcome.from_dict),
 )
 _SPEC_BY_TYPE = {spec.artifact_type: spec for spec in ARTIFACT_SPECS}
 
@@ -469,6 +471,12 @@ class SQLiteRepository:
     def load_leaderboard_entries(self) -> list[LeaderboardEntry]:
         return self._load("leaderboard_entries", LeaderboardEntry.from_dict)
 
+    def save_paper_shadow_outcome(self, outcome: PaperShadowOutcome) -> None:
+        self._save_unique("paper_shadow_outcomes", outcome.outcome_id, outcome.to_dict())
+
+    def load_paper_shadow_outcomes(self) -> list[PaperShadowOutcome]:
+        return self._load("paper_shadow_outcomes", PaperShadowOutcome.from_dict)
+
     def artifact_counts(self) -> dict[str, int]:
         with self._connect() as connection:
             rows = connection.execute(
@@ -628,6 +636,8 @@ def migrate_jsonl_to_sqlite(storage_dir: Path | str, db_path: Path | str | None 
         sqlite_repository.save_locked_evaluation_result(result)
     for entry in json_repository.load_leaderboard_entries():
         sqlite_repository.save_leaderboard_entry(entry)
+    for outcome in json_repository.load_paper_shadow_outcomes():
+        sqlite_repository.save_paper_shadow_outcome(outcome)
 
     after_counts = sqlite_repository.artifact_counts()
     return {

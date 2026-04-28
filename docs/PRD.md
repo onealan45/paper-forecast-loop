@@ -78,6 +78,9 @@ The PRD follows that decision:
 - PR7 starts Locked Evaluation and Leaderboard Gates: split manifests, cost
   model snapshots, locked evaluation results, and leaderboard entries where
   `alpha_score` is impossible until hard gates pass.
+- PR8 starts Paper-Shadow Outcome Learning: leaderboard entries can now receive
+  simulated shadow-window outcomes with excess return, failure attribution, and
+  promotion / retire / quarantine recommendations.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard

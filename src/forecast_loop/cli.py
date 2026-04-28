@@ -39,6 +39,7 @@ from forecast_loop.operator_console import (
     write_operator_console_page,
 )
 from forecast_loop.orders import create_paper_order_from_decision
+from forecast_loop.paper_shadow import record_paper_shadow_outcome
 from forecast_loop.pipeline import ForecastingLoop
 from forecast_loop.provider_audit import AuditedMarketDataProvider
 from forecast_loop.portfolio import create_portfolio_snapshot, fill_paper_order, save_portfolio_mark
@@ -410,6 +411,18 @@ def main(argv: list[str] | None = None) -> int:
     leaderboard_gate_cmd.add_argument("--event-edge-evaluation-id")
     leaderboard_gate_cmd.add_argument("--created-at")
 
+    paper_shadow_cmd = subparsers.add_parser("record-paper-shadow-outcome")
+    paper_shadow_cmd.add_argument("--storage-dir", required=True)
+    paper_shadow_cmd.add_argument("--leaderboard-entry-id", required=True)
+    paper_shadow_cmd.add_argument("--window-start", required=True)
+    paper_shadow_cmd.add_argument("--window-end", required=True)
+    paper_shadow_cmd.add_argument("--observed-return", type=float, required=True)
+    paper_shadow_cmd.add_argument("--benchmark-return", type=float, required=True)
+    paper_shadow_cmd.add_argument("--max-adverse-excursion", type=float)
+    paper_shadow_cmd.add_argument("--turnover", type=float)
+    paper_shadow_cmd.add_argument("--note")
+    paper_shadow_cmd.add_argument("--created-at")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -496,6 +509,8 @@ def main(argv: list[str] | None = None) -> int:
             return _lock_evaluation_protocol(args)
         if args.command == "evaluate-leaderboard-gate":
             return _evaluate_leaderboard_gate(args)
+        if args.command == "record-paper-shadow-outcome":
+            return _record_paper_shadow_outcome(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -1536,6 +1551,29 @@ def _evaluate_leaderboard_gate(args) -> int:
             ensure_ascii=False,
         )
     )
+    return 0
+
+
+def _record_paper_shadow_outcome(args) -> int:
+    created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
+    storage_dir = Path(args.storage_dir)
+    if not storage_dir.exists():
+        raise ValueError(f"storage directory does not exist: {storage_dir}")
+    if not storage_dir.is_dir():
+        raise ValueError(f"storage path is not a directory: {storage_dir}")
+    outcome = record_paper_shadow_outcome(
+        repository=JsonFileRepository(storage_dir),
+        created_at=created_at,
+        leaderboard_entry_id=args.leaderboard_entry_id,
+        window_start=_parse_datetime(args.window_start),
+        window_end=_parse_datetime(args.window_end),
+        observed_return=args.observed_return,
+        benchmark_return=args.benchmark_return,
+        max_adverse_excursion=args.max_adverse_excursion,
+        turnover=args.turnover,
+        note=args.note,
+    )
+    print(json.dumps({"paper_shadow_outcome": outcome.to_dict()}, ensure_ascii=False))
     return 0
 
 

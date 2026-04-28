@@ -25,6 +25,7 @@ from forecast_loop.execution_safety import evaluate_execution_safety_gate
 from forecast_loop.event_reliability import build_event_reliability
 from forecast_loop.health import run_health_check
 from forecast_loop.macro_events import import_macro_events, macro_calendar
+from forecast_loop.market_reaction import build_market_reactions
 from forecast_loop.maintenance import repair_storage
 from forecast_loop.models import PaperControlAction, StrategyDecision
 from forecast_loop.notifications import generate_notification_artifacts
@@ -275,6 +276,13 @@ def main(argv: list[str] | None = None) -> int:
     build_events_cmd.add_argument("--created-at", required=True)
     build_events_cmd.add_argument("--min-reliability-score", type=float, default=70.0)
 
+    build_market_reactions_cmd = subparsers.add_parser("build-market-reactions")
+    build_market_reactions_cmd.add_argument("--storage-dir", required=True)
+    build_market_reactions_cmd.add_argument("--symbol")
+    build_market_reactions_cmd.add_argument("--created-at", required=True)
+    build_market_reactions_cmd.add_argument("--already-priced-return-threshold", type=float, default=0.03)
+    build_market_reactions_cmd.add_argument("--volume-shock-z-threshold", type=float, default=3.0)
+
     build_research_dataset_cmd = subparsers.add_parser("build-research-dataset")
     build_research_dataset_cmd.add_argument("--storage-dir", required=True)
     build_research_dataset_cmd.add_argument("--symbol", default="BTC-USD")
@@ -378,6 +386,8 @@ def main(argv: list[str] | None = None) -> int:
             return _source_registry(args)
         if args.command == "build-events":
             return _build_events(args)
+        if args.command == "build-market-reactions":
+            return _build_market_reactions(args)
         if args.command == "build-research-dataset":
             return _build_research_dataset(args)
         if args.command == "research-report":
@@ -1220,6 +1230,19 @@ def _build_events(args) -> int:
         created_at=created_at,
         symbol=args.symbol,
         min_reliability_score=args.min_reliability_score,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _build_market_reactions(args) -> int:
+    created_at = _parse_datetime(args.created_at)
+    result = build_market_reactions(
+        storage_dir=args.storage_dir,
+        created_at=created_at,
+        symbol=args.symbol,
+        already_priced_return_threshold=args.already_priced_return_threshold,
+        volume_shock_z_threshold=args.volume_shock_z_threshold,
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0

@@ -1,13 +1,15 @@
 # Master Decision Brief Recording Review
 
-**日期：** 2026-04-28  
-**Branch：** `codex/record-master-decision-brief`  
-**Reviewer：** independent reviewer subagent `019dd497-0ea8-77b1-b22b-d5ef774974ce`  
-**Scope：** master decision docs only  
+**日期：** 2026-04-28
+**Branch：** `codex/record-master-decision-brief`
+**Reviewer：** independent reviewer subagent `019dd497-0ea8-77b1-b22b-d5ef774974ce`
+**Scope：** master decision docs only
 
 ## Verdict
 
 Initial verdict: **BLOCKED until tracking fix**
+
+Follow-up verdict: **BLOCKED until trailing-whitespace fix**
 
 ## Finding
 
@@ -36,8 +38,10 @@ Reviewer 確認內容面沒有 blocking 矛盾：
 - 放開策略搜尋空間，但鎖死評估流程。
 - no real orders / no real capital / no secrets 是目前執行邊界，不是永久產品邊界。
 - Markdown link 在目前工作樹可解析。
-- `git diff --check` 沒有 whitespace error。
+- Initial untracked-file review did not find whitespace issues in tracked
+  changes. Follow-up branch-level review found trailing whitespace in newly
+  tracked metadata lines; those lines were rewritten without hard-break spaces.
 
 ## Final Status
 
-Pending resolution verification in commit/push flow.
+Pending final reviewer confirmation after tracking and trailing-whitespace fixes.

@@ -1,8 +1,8 @@
 # Autonomous Alpha Factory Master Decision
 
-**日期基準：** 2026-04-28  
-**來源：** ChatGPT Pro master decision brief  
-**狀態：** Repo execution contract after M7A  
+**日期基準：** 2026-04-28
+**來源：** ChatGPT Pro master decision brief
+**狀態：** Repo execution contract after M7A
 
 ## Summary
 

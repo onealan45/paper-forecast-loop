@@ -76,6 +76,8 @@ factory:
   snapshots and stored candles.
 - M7E adds event-family historical edge evaluation over passed market reaction
   samples.
+- M7F integrates event-edge evidence into the research gate, so BUY/SELL remains
+  blocked unless the latest event edge evaluation also passes.
 - PR0 must make the codebase reviewable before more strategy intelligence is
   stacked on top.
 - M7B-M7F should turn source documents, canonical events, source reliability,

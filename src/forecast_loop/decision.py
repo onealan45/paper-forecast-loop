@@ -58,10 +58,12 @@ def generate_strategy_decision(
     repository.save_baseline_evaluation(baseline)
     latest_backtest = _latest_for_symbol(repository.load_backtest_results(), symbol)
     latest_walk_forward = _latest_for_symbol(repository.load_walk_forward_validations(), symbol)
+    latest_event_edge = _latest_for_symbol(repository.load_event_edge_evaluations(), symbol)
     research_gate = evaluate_research_gates(
         baseline=baseline,
         latest_backtest=latest_backtest,
         latest_walk_forward=latest_walk_forward,
+        latest_event_edge=latest_event_edge,
     )
     portfolio = _latest_or_empty_portfolio(repository, now)
     current_position_pct = portfolio.position_pct_for(symbol)

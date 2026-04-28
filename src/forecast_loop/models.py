@@ -931,6 +931,287 @@ class ExperimentTrial:
 
 
 @dataclass(slots=True)
+class SplitManifest:
+    manifest_id: str
+    created_at: datetime
+    symbol: str
+    strategy_card_id: str
+    dataset_id: str
+    train_start: datetime
+    train_end: datetime
+    validation_start: datetime
+    validation_end: datetime
+    holdout_start: datetime
+    holdout_end: datetime
+    embargo_hours: int
+    status: str
+    locked_by: str
+    decision_basis: str
+
+    ALLOWED_STATUSES = {"LOCKED", "RETIRED"}
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        symbol: str,
+        strategy_card_id: str,
+        dataset_id: str,
+        train_start: datetime,
+        train_end: datetime,
+        validation_start: datetime,
+        validation_end: datetime,
+        holdout_start: datetime,
+        holdout_end: datetime,
+        embargo_hours: int,
+    ) -> str:
+        return _stable_artifact_id(
+            "split-manifest",
+            {
+                "symbol": symbol,
+                "strategy_card_id": strategy_card_id,
+                "dataset_id": dataset_id,
+                "train_start": train_start.isoformat(),
+                "train_end": train_end.isoformat(),
+                "validation_start": validation_start.isoformat(),
+                "validation_end": validation_end.isoformat(),
+                "holdout_start": holdout_start.isoformat(),
+                "holdout_end": holdout_end.isoformat(),
+                "embargo_hours": embargo_hours,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        for key in (
+            "created_at",
+            "train_start",
+            "train_end",
+            "validation_start",
+            "validation_end",
+            "holdout_start",
+            "holdout_end",
+        ):
+            payload[key] = payload[key].isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "SplitManifest":
+        status = payload.get("status", "LOCKED")
+        if status not in cls.ALLOWED_STATUSES:
+            raise ValueError(f"unsupported split manifest status: {status}")
+        return cls(
+            manifest_id=_require_string(payload, "manifest_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            symbol=_require_string(payload, "symbol"),
+            strategy_card_id=_require_string(payload, "strategy_card_id"),
+            dataset_id=_require_string(payload, "dataset_id"),
+            train_start=_require_aware_datetime(payload, "train_start"),
+            train_end=_require_aware_datetime(payload, "train_end"),
+            validation_start=_require_aware_datetime(payload, "validation_start"),
+            validation_end=_require_aware_datetime(payload, "validation_end"),
+            holdout_start=_require_aware_datetime(payload, "holdout_start"),
+            holdout_end=_require_aware_datetime(payload, "holdout_end"),
+            embargo_hours=int(payload.get("embargo_hours", 0)),
+            status=status,
+            locked_by=payload.get("locked_by", "codex"),
+            decision_basis=payload.get("decision_basis", "legacy_split_manifest"),
+        )
+
+
+@dataclass(slots=True)
+class CostModelSnapshot:
+    cost_model_id: str
+    created_at: datetime
+    symbol: str
+    fee_bps: float
+    slippage_bps: float
+    max_turnover: float
+    max_drawdown: float
+    baseline_suite_version: str
+    status: str
+    decision_basis: str
+
+    ALLOWED_STATUSES = {"LOCKED", "RETIRED"}
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        symbol: str,
+        fee_bps: float,
+        slippage_bps: float,
+        max_turnover: float,
+        max_drawdown: float,
+        baseline_suite_version: str,
+    ) -> str:
+        return _stable_artifact_id(
+            "cost-model",
+            {
+                "symbol": symbol,
+                "fee_bps": round(fee_bps, 8),
+                "slippage_bps": round(slippage_bps, 8),
+                "max_turnover": round(max_turnover, 8),
+                "max_drawdown": round(max_drawdown, 8),
+                "baseline_suite_version": baseline_suite_version,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "CostModelSnapshot":
+        status = payload.get("status", "LOCKED")
+        if status not in cls.ALLOWED_STATUSES:
+            raise ValueError(f"unsupported cost model status: {status}")
+        return cls(
+            cost_model_id=_require_string(payload, "cost_model_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            symbol=_require_string(payload, "symbol"),
+            fee_bps=float(payload.get("fee_bps", 0.0)),
+            slippage_bps=float(payload.get("slippage_bps", 0.0)),
+            max_turnover=float(payload.get("max_turnover", 0.0)),
+            max_drawdown=float(payload.get("max_drawdown", 0.0)),
+            baseline_suite_version=payload.get("baseline_suite_version", "m4b-v1"),
+            status=status,
+            decision_basis=payload.get("decision_basis", "legacy_cost_model_snapshot"),
+        )
+
+
+@dataclass(slots=True)
+class LockedEvaluationResult:
+    evaluation_id: str
+    created_at: datetime
+    strategy_card_id: str
+    trial_id: str
+    split_manifest_id: str
+    cost_model_id: str
+    baseline_id: str
+    backtest_result_id: str
+    walk_forward_validation_id: str
+    event_edge_evaluation_id: str | None
+    passed: bool
+    rankable: bool
+    alpha_score: float | None
+    blocked_reasons: list[str]
+    gate_metrics: dict[str, object]
+    decision_basis: str
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        strategy_card_id: str,
+        trial_id: str,
+        split_manifest_id: str,
+        cost_model_id: str,
+        baseline_id: str,
+        backtest_result_id: str,
+        walk_forward_validation_id: str,
+        event_edge_evaluation_id: str | None,
+    ) -> str:
+        return _stable_artifact_id(
+            "locked-evaluation",
+            {
+                "strategy_card_id": strategy_card_id,
+                "trial_id": trial_id,
+                "split_manifest_id": split_manifest_id,
+                "cost_model_id": cost_model_id,
+                "baseline_id": baseline_id,
+                "backtest_result_id": backtest_result_id,
+                "walk_forward_validation_id": walk_forward_validation_id,
+                "event_edge_evaluation_id": event_edge_evaluation_id,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "LockedEvaluationResult":
+        return cls(
+            evaluation_id=_require_string(payload, "evaluation_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            strategy_card_id=_require_string(payload, "strategy_card_id"),
+            trial_id=_require_string(payload, "trial_id"),
+            split_manifest_id=_require_string(payload, "split_manifest_id"),
+            cost_model_id=_require_string(payload, "cost_model_id"),
+            baseline_id=_require_string(payload, "baseline_id"),
+            backtest_result_id=_require_string(payload, "backtest_result_id"),
+            walk_forward_validation_id=_require_string(payload, "walk_forward_validation_id"),
+            event_edge_evaluation_id=payload.get("event_edge_evaluation_id"),
+            passed=bool(payload.get("passed", False)),
+            rankable=bool(payload.get("rankable", False)),
+            alpha_score=_optional_float(payload.get("alpha_score")),
+            blocked_reasons=list(payload.get("blocked_reasons", [])),
+            gate_metrics=dict(payload.get("gate_metrics") or {}),
+            decision_basis=payload.get("decision_basis", "legacy_locked_evaluation_result"),
+        )
+
+
+@dataclass(slots=True)
+class LeaderboardEntry:
+    entry_id: str
+    created_at: datetime
+    strategy_card_id: str
+    evaluation_id: str
+    trial_id: str
+    symbol: str
+    rankable: bool
+    alpha_score: float | None
+    promotion_stage: str
+    blocked_reasons: list[str]
+    leaderboard_rules_version: str
+    decision_basis: str
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        strategy_card_id: str,
+        evaluation_id: str,
+        trial_id: str,
+        leaderboard_rules_version: str,
+    ) -> str:
+        return _stable_artifact_id(
+            "leaderboard-entry",
+            {
+                "strategy_card_id": strategy_card_id,
+                "evaluation_id": evaluation_id,
+                "trial_id": trial_id,
+                "leaderboard_rules_version": leaderboard_rules_version,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "LeaderboardEntry":
+        return cls(
+            entry_id=_require_string(payload, "entry_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            strategy_card_id=_require_string(payload, "strategy_card_id"),
+            evaluation_id=_require_string(payload, "evaluation_id"),
+            trial_id=_require_string(payload, "trial_id"),
+            symbol=_require_string(payload, "symbol"),
+            rankable=bool(payload.get("rankable", False)),
+            alpha_score=_optional_float(payload.get("alpha_score")),
+            promotion_stage=payload.get("promotion_stage", "BLOCKED"),
+            blocked_reasons=list(payload.get("blocked_reasons", [])),
+            leaderboard_rules_version=payload.get("leaderboard_rules_version", "pr7-v1"),
+            decision_basis=payload.get("decision_basis", "legacy_leaderboard_entry"),
+        )
+
+
+@dataclass(slots=True)
 class SourceRegistryEntry:
     source_id: str
     source_name: str

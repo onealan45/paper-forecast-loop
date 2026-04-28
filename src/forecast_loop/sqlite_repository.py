@@ -15,6 +15,7 @@ from forecast_loop.models import (
     BrokerOrder,
     BrokerReconciliation,
     CanonicalEvent,
+    CostModelSnapshot,
     EventEdgeEvaluation,
     EventReliabilityCheck,
     ExecutionSafetyGate,
@@ -23,6 +24,8 @@ from forecast_loop.models import (
     FeatureSnapshot,
     Forecast,
     ForecastScore,
+    LeaderboardEntry,
+    LockedEvaluationResult,
     ExperimentBudget,
     ExperimentTrial,
     MacroEvent,
@@ -42,6 +45,7 @@ from forecast_loop.models import (
     SourceDocument,
     SourceIngestionRun,
     SourceRegistryEntry,
+    SplitManifest,
     StrategyCard,
     StrategyDecision,
     WalkForwardValidation,
@@ -134,6 +138,15 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec("strategy_cards", "strategy_cards.jsonl", "card_id", StrategyCard.from_dict),
     ArtifactSpec("experiment_budgets", "experiment_budgets.jsonl", "budget_id", ExperimentBudget.from_dict),
     ArtifactSpec("experiment_trials", "experiment_trials.jsonl", "trial_id", ExperimentTrial.from_dict),
+    ArtifactSpec("split_manifests", "split_manifests.jsonl", "manifest_id", SplitManifest.from_dict),
+    ArtifactSpec("cost_model_snapshots", "cost_model_snapshots.jsonl", "cost_model_id", CostModelSnapshot.from_dict),
+    ArtifactSpec(
+        "locked_evaluation_results",
+        "locked_evaluation_results.jsonl",
+        "evaluation_id",
+        LockedEvaluationResult.from_dict,
+    ),
+    ArtifactSpec("leaderboard_entries", "leaderboard_entries.jsonl", "entry_id", LeaderboardEntry.from_dict),
 )
 _SPEC_BY_TYPE = {spec.artifact_type: spec for spec in ARTIFACT_SPECS}
 
@@ -432,6 +445,30 @@ class SQLiteRepository:
     def load_experiment_trials(self) -> list[ExperimentTrial]:
         return self._load("experiment_trials", ExperimentTrial.from_dict)
 
+    def save_split_manifest(self, manifest: SplitManifest) -> None:
+        self._save_unique("split_manifests", manifest.manifest_id, manifest.to_dict())
+
+    def load_split_manifests(self) -> list[SplitManifest]:
+        return self._load("split_manifests", SplitManifest.from_dict)
+
+    def save_cost_model_snapshot(self, snapshot: CostModelSnapshot) -> None:
+        self._save_unique("cost_model_snapshots", snapshot.cost_model_id, snapshot.to_dict())
+
+    def load_cost_model_snapshots(self) -> list[CostModelSnapshot]:
+        return self._load("cost_model_snapshots", CostModelSnapshot.from_dict)
+
+    def save_locked_evaluation_result(self, result: LockedEvaluationResult) -> None:
+        self._save_unique("locked_evaluation_results", result.evaluation_id, result.to_dict())
+
+    def load_locked_evaluation_results(self) -> list[LockedEvaluationResult]:
+        return self._load("locked_evaluation_results", LockedEvaluationResult.from_dict)
+
+    def save_leaderboard_entry(self, entry: LeaderboardEntry) -> None:
+        self._save_unique("leaderboard_entries", entry.entry_id, entry.to_dict())
+
+    def load_leaderboard_entries(self) -> list[LeaderboardEntry]:
+        return self._load("leaderboard_entries", LeaderboardEntry.from_dict)
+
     def artifact_counts(self) -> dict[str, int]:
         with self._connect() as connection:
             rows = connection.execute(
@@ -583,6 +620,14 @@ def migrate_jsonl_to_sqlite(storage_dir: Path | str, db_path: Path | str | None 
         sqlite_repository.save_experiment_budget(budget)
     for trial in json_repository.load_experiment_trials():
         sqlite_repository.save_experiment_trial(trial)
+    for manifest in json_repository.load_split_manifests():
+        sqlite_repository.save_split_manifest(manifest)
+    for cost_model in json_repository.load_cost_model_snapshots():
+        sqlite_repository.save_cost_model_snapshot(cost_model)
+    for result in json_repository.load_locked_evaluation_results():
+        sqlite_repository.save_locked_evaluation_result(result)
+    for entry in json_repository.load_leaderboard_entries():
+        sqlite_repository.save_leaderboard_entry(entry)
 
     after_counts = sqlite_repository.artifact_counts()
     return {

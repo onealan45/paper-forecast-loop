@@ -13,6 +13,7 @@ from forecast_loop.models import (
     BrokerOrder,
     BrokerReconciliation,
     CanonicalEvent,
+    CostModelSnapshot,
     ExecutionSafetyGate,
     EquityCurvePoint,
     EventEdgeEvaluation,
@@ -23,6 +24,8 @@ from forecast_loop.models import (
     FeatureSnapshot,
     Forecast,
     ForecastScore,
+    LeaderboardEntry,
+    LockedEvaluationResult,
     HealthCheckResult,
     HealthFinding,
     MarketCandleRecord,
@@ -43,6 +46,7 @@ from forecast_loop.models import (
     SourceRegistryEntry,
     StrategyCard,
     StrategyDecision,
+    SplitManifest,
     WalkForwardValidation,
 )
 from forecast_loop.storage import JsonFileRepository
@@ -172,6 +176,22 @@ def run_health_check(
             ExperimentTrial.from_dict,
             findings,
         ),
+        "split_manifests": _load_jsonl(storage_path / "split_manifests.jsonl", SplitManifest.from_dict, findings),
+        "cost_model_snapshots": _load_jsonl(
+            storage_path / "cost_model_snapshots.jsonl",
+            CostModelSnapshot.from_dict,
+            findings,
+        ),
+        "locked_evaluation_results": _load_jsonl(
+            storage_path / "locked_evaluation_results.jsonl",
+            LockedEvaluationResult.from_dict,
+            findings,
+        ),
+        "leaderboard_entries": _load_jsonl(
+            storage_path / "leaderboard_entries.jsonl",
+            LeaderboardEntry.from_dict,
+            findings,
+        ),
     }
     forecasts: list[Forecast] = artifact_rows["forecasts"]
     scores: list[ForecastScore] = artifact_rows["scores"]
@@ -209,6 +229,10 @@ def run_health_check(
     strategy_cards: list[StrategyCard] = artifact_rows["strategy_cards"]
     experiment_budgets: list[ExperimentBudget] = artifact_rows["experiment_budgets"]
     experiment_trials: list[ExperimentTrial] = artifact_rows["experiment_trials"]
+    split_manifests: list[SplitManifest] = artifact_rows["split_manifests"]
+    cost_model_snapshots: list[CostModelSnapshot] = artifact_rows["cost_model_snapshots"]
+    locked_evaluation_results: list[LockedEvaluationResult] = artifact_rows["locked_evaluation_results"]
+    leaderboard_entries: list[LeaderboardEntry] = artifact_rows["leaderboard_entries"]
 
     _check_duplicate_ids(forecasts, "forecast_id", storage_path / "forecasts.jsonl", findings)
     _check_duplicate_ids(scores, "score_id", storage_path / "scores.jsonl", findings)
@@ -266,6 +290,20 @@ def run_health_check(
     _check_duplicate_ids(strategy_cards, "card_id", storage_path / "strategy_cards.jsonl", findings)
     _check_duplicate_ids(experiment_budgets, "budget_id", storage_path / "experiment_budgets.jsonl", findings)
     _check_duplicate_ids(experiment_trials, "trial_id", storage_path / "experiment_trials.jsonl", findings)
+    _check_duplicate_ids(split_manifests, "manifest_id", storage_path / "split_manifests.jsonl", findings)
+    _check_duplicate_ids(
+        cost_model_snapshots,
+        "cost_model_id",
+        storage_path / "cost_model_snapshots.jsonl",
+        findings,
+    )
+    _check_duplicate_ids(
+        locked_evaluation_results,
+        "evaluation_id",
+        storage_path / "locked_evaluation_results.jsonl",
+        findings,
+    )
+    _check_duplicate_ids(leaderboard_entries, "entry_id", storage_path / "leaderboard_entries.jsonl", findings)
 
     scoped_forecasts = [forecast for forecast in forecasts if forecast.symbol == symbol]
     latest_forecast = scoped_forecasts[-1] if scoped_forecasts else None
@@ -319,6 +357,10 @@ def run_health_check(
         strategy_cards,
         experiment_budgets,
         experiment_trials,
+        split_manifests,
+        cost_model_snapshots,
+        locked_evaluation_results,
+        leaderboard_entries,
         findings,
     )
     _check_m7_evidence_integrity(
@@ -607,6 +649,10 @@ def _check_links(
     strategy_cards: list[StrategyCard],
     experiment_budgets: list[ExperimentBudget],
     experiment_trials: list[ExperimentTrial],
+    split_manifests: list[SplitManifest],
+    cost_model_snapshots: list[CostModelSnapshot],
+    locked_evaluation_results: list[LockedEvaluationResult],
+    leaderboard_entries: list[LeaderboardEntry],
     findings: list[HealthFinding],
 ) -> None:
     forecast_ids = {forecast.forecast_id for forecast in forecasts}
@@ -622,6 +668,10 @@ def _check_links(
     event_edge_evaluation_ids = {evaluation.evaluation_id for evaluation in event_edge_evaluations}
     strategy_card_ids = {card.card_id for card in strategy_cards}
     walk_forward_validation_ids = {validation.validation_id for validation in walk_forward_validations}
+    trial_ids = {trial.trial_id for trial in experiment_trials}
+    split_manifest_ids = {manifest.manifest_id for manifest in split_manifests}
+    cost_model_ids = {snapshot.cost_model_id for snapshot in cost_model_snapshots}
+    locked_evaluation_ids = {result.evaluation_id for result in locked_evaluation_results}
 
     for score in scores:
         if score.forecast_id not in forecast_ids:
@@ -963,6 +1013,116 @@ def _check_links(
                 storage_path / "experiment_trials.jsonl",
                 trial.trial_id,
                 trial.event_edge_evaluation_id,
+                findings,
+            )
+
+    for split in split_manifests:
+        if split.strategy_card_id not in strategy_card_ids:
+            _add_link_finding(
+                "split_manifest_missing_strategy_card",
+                storage_path / "split_manifests.jsonl",
+                split.manifest_id,
+                split.strategy_card_id,
+                findings,
+            )
+        if split.dataset_id not in {dataset.dataset_id for dataset in research_datasets}:
+            _add_link_finding(
+                "split_manifest_missing_research_dataset",
+                storage_path / "split_manifests.jsonl",
+                split.manifest_id,
+                split.dataset_id,
+                findings,
+            )
+
+    for result in locked_evaluation_results:
+        if result.strategy_card_id not in strategy_card_ids:
+            _add_link_finding(
+                "locked_evaluation_missing_strategy_card",
+                storage_path / "locked_evaluation_results.jsonl",
+                result.evaluation_id,
+                result.strategy_card_id,
+                findings,
+            )
+        if result.trial_id not in trial_ids:
+            _add_link_finding(
+                "locked_evaluation_missing_trial",
+                storage_path / "locked_evaluation_results.jsonl",
+                result.evaluation_id,
+                result.trial_id,
+                findings,
+            )
+        if result.split_manifest_id not in split_manifest_ids:
+            _add_link_finding(
+                "locked_evaluation_missing_split_manifest",
+                storage_path / "locked_evaluation_results.jsonl",
+                result.evaluation_id,
+                result.split_manifest_id,
+                findings,
+            )
+        if result.cost_model_id not in cost_model_ids:
+            _add_link_finding(
+                "locked_evaluation_missing_cost_model",
+                storage_path / "locked_evaluation_results.jsonl",
+                result.evaluation_id,
+                result.cost_model_id,
+                findings,
+            )
+        if result.baseline_id not in baseline_ids:
+            _add_link_finding(
+                "locked_evaluation_missing_baseline",
+                storage_path / "locked_evaluation_results.jsonl",
+                result.evaluation_id,
+                result.baseline_id,
+                findings,
+            )
+        if result.backtest_result_id not in backtest_result_ids:
+            _add_link_finding(
+                "locked_evaluation_missing_backtest_result",
+                storage_path / "locked_evaluation_results.jsonl",
+                result.evaluation_id,
+                result.backtest_result_id,
+                findings,
+            )
+        if result.walk_forward_validation_id not in walk_forward_validation_ids:
+            _add_link_finding(
+                "locked_evaluation_missing_walk_forward_validation",
+                storage_path / "locked_evaluation_results.jsonl",
+                result.evaluation_id,
+                result.walk_forward_validation_id,
+                findings,
+            )
+        if result.event_edge_evaluation_id and result.event_edge_evaluation_id not in event_edge_evaluation_ids:
+            _add_link_finding(
+                "locked_evaluation_missing_event_edge_evaluation",
+                storage_path / "locked_evaluation_results.jsonl",
+                result.evaluation_id,
+                result.event_edge_evaluation_id,
+                findings,
+            )
+
+    for entry in leaderboard_entries:
+        if entry.strategy_card_id not in strategy_card_ids:
+            _add_link_finding(
+                "leaderboard_entry_missing_strategy_card",
+                storage_path / "leaderboard_entries.jsonl",
+                entry.entry_id,
+                entry.strategy_card_id,
+                findings,
+            )
+        if entry.evaluation_id not in locked_evaluation_ids:
+            _add_link_finding(
+                "leaderboard_entry_missing_locked_evaluation",
+                storage_path / "leaderboard_entries.jsonl",
+                entry.entry_id,
+                entry.evaluation_id,
+                findings,
+            )
+        if entry.trial_id not in trial_ids:
+            _add_link_finding(
+                "leaderboard_entry_missing_trial",
+                storage_path / "leaderboard_entries.jsonl",
+                entry.entry_id,
+                entry.trial_id,
                 findings,
             )
 

@@ -11,6 +11,7 @@ from forecast_loop.models import (
     BrokerOrder,
     BrokerReconciliation,
     BrokerOrderStatus,
+    CostModelSnapshot,
     ExecutionSafetyGate,
     EquityCurvePoint,
     ExperimentBudget,
@@ -18,6 +19,8 @@ from forecast_loop.models import (
     EvaluationSummary,
     Forecast,
     ForecastScore,
+    LeaderboardEntry,
+    LockedEvaluationResult,
     MacroEvent,
     MarketCandle,
     MarketCandleRecord,
@@ -37,6 +40,7 @@ from forecast_loop.models import (
     RiskSnapshot,
     StrategyCard,
     StrategyDecision,
+    SplitManifest,
     WalkForwardValidation,
     WalkForwardWindow,
 )
@@ -465,6 +469,88 @@ def _experiment_trial(
     )
 
 
+def _split_manifest(now: datetime, card: StrategyCard, dataset: ResearchDataset) -> SplitManifest:
+    return SplitManifest(
+        manifest_id="split-manifest:sqlite",
+        created_at=now,
+        symbol="BTC-USD",
+        strategy_card_id=card.card_id,
+        dataset_id=dataset.dataset_id,
+        train_start=now - timedelta(days=90),
+        train_end=now - timedelta(days=60),
+        validation_start=now - timedelta(days=59),
+        validation_end=now - timedelta(days=30),
+        holdout_start=now - timedelta(days=29),
+        holdout_end=now,
+        embargo_hours=24,
+        status="LOCKED",
+        locked_by="codex",
+        decision_basis="test",
+    )
+
+
+def _cost_model(now: datetime) -> CostModelSnapshot:
+    return CostModelSnapshot(
+        cost_model_id="cost-model:sqlite",
+        created_at=now,
+        symbol="BTC-USD",
+        fee_bps=5.0,
+        slippage_bps=10.0,
+        max_turnover=5.0,
+        max_drawdown=0.10,
+        baseline_suite_version="m4b-v1",
+        status="LOCKED",
+        decision_basis="test",
+    )
+
+
+def _locked_evaluation_result(
+    now: datetime,
+    card: StrategyCard,
+    trial: ExperimentTrial,
+    split: SplitManifest,
+    cost_model: CostModelSnapshot,
+    baseline: BaselineEvaluation,
+    result: BacktestResult,
+    validation: WalkForwardValidation,
+) -> LockedEvaluationResult:
+    return LockedEvaluationResult(
+        evaluation_id="locked-evaluation:sqlite",
+        created_at=now,
+        strategy_card_id=card.card_id,
+        trial_id=trial.trial_id,
+        split_manifest_id=split.manifest_id,
+        cost_model_id=cost_model.cost_model_id,
+        baseline_id=baseline.baseline_id,
+        backtest_result_id=result.result_id,
+        walk_forward_validation_id=validation.validation_id,
+        event_edge_evaluation_id=None,
+        passed=True,
+        rankable=True,
+        alpha_score=0.20,
+        blocked_reasons=[],
+        gate_metrics={"model_edge": baseline.model_edge},
+        decision_basis="test",
+    )
+
+
+def _leaderboard_entry(now: datetime, card: StrategyCard, trial: ExperimentTrial, result: LockedEvaluationResult) -> LeaderboardEntry:
+    return LeaderboardEntry(
+        entry_id="leaderboard-entry:sqlite",
+        created_at=now,
+        strategy_card_id=card.card_id,
+        evaluation_id=result.evaluation_id,
+        trial_id=trial.trial_id,
+        symbol="BTC-USD",
+        rankable=True,
+        alpha_score=result.alpha_score,
+        promotion_stage="CANDIDATE",
+        blocked_reasons=[],
+        leaderboard_rules_version="pr7-v1",
+        decision_basis="test",
+    )
+
+
 def _paper_order(now: datetime, decision: StrategyDecision) -> PaperOrder:
     return PaperOrder(
         order_id="paper-order:sqlite",
@@ -656,6 +742,19 @@ def _seed_repository(repository) -> dict:
     strategy_card = _strategy_card(now)
     experiment_budget = _experiment_budget(now, strategy_card)
     experiment_trial = _experiment_trial(now, strategy_card, dataset, backtest_result)
+    split_manifest = _split_manifest(now, strategy_card, dataset)
+    cost_model = _cost_model(now)
+    locked_evaluation = _locked_evaluation_result(
+        now,
+        strategy_card,
+        experiment_trial,
+        split_manifest,
+        cost_model,
+        baseline,
+        backtest_result,
+        walk_forward_validation,
+    )
+    leaderboard_entry = _leaderboard_entry(now, strategy_card, experiment_trial, locked_evaluation)
 
     repository.save_market_candle(market_candle)
     repository.save_macro_event(macro_event)
@@ -686,6 +785,10 @@ def _seed_repository(repository) -> dict:
     repository.save_strategy_card(strategy_card)
     repository.save_experiment_budget(experiment_budget)
     repository.save_experiment_trial(experiment_trial)
+    repository.save_split_manifest(split_manifest)
+    repository.save_cost_model_snapshot(cost_model)
+    repository.save_locked_evaluation_result(locked_evaluation)
+    repository.save_leaderboard_entry(leaderboard_entry)
     return {
         "forecast": forecast,
         "score": score,
@@ -716,6 +819,10 @@ def _seed_repository(repository) -> dict:
         "strategy_card": strategy_card,
         "experiment_budget": experiment_budget,
         "experiment_trial": experiment_trial,
+        "split_manifest": split_manifest,
+        "cost_model": cost_model,
+        "locked_evaluation": locked_evaluation,
+        "leaderboard_entry": leaderboard_entry,
     }
 
 
@@ -754,6 +861,10 @@ def test_sqlite_repository_round_trips_and_dedupes_m1_artifacts(tmp_path):
     assert repository.load_strategy_cards() == [artifacts["strategy_card"]]
     assert repository.load_experiment_budgets() == [artifacts["experiment_budget"]]
     assert repository.load_experiment_trials() == [artifacts["experiment_trial"]]
+    assert repository.load_split_manifests() == [artifacts["split_manifest"]]
+    assert repository.load_cost_model_snapshots() == [artifacts["cost_model"]]
+    assert repository.load_locked_evaluation_results() == [artifacts["locked_evaluation"]]
+    assert repository.load_leaderboard_entries() == [artifacts["leaderboard_entry"]]
     assert repository.artifact_counts()["forecasts"] == 1
 
 
@@ -811,6 +922,10 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert sqlite_repository.load_strategy_cards() == [artifacts["strategy_card"]]
     assert sqlite_repository.load_experiment_budgets() == [artifacts["experiment_budget"]]
     assert sqlite_repository.load_experiment_trials() == [artifacts["experiment_trial"]]
+    assert sqlite_repository.load_split_manifests() == [artifacts["split_manifest"]]
+    assert sqlite_repository.load_cost_model_snapshots() == [artifacts["cost_model"]]
+    assert sqlite_repository.load_locked_evaluation_results() == [artifacts["locked_evaluation"]]
+    assert sqlite_repository.load_leaderboard_entries() == [artifacts["leaderboard_entry"]]
 
     assert main(["db-health", "--storage-dir", str(tmp_path)]) == 0
     health_result = json.loads(capsys.readouterr().out)
@@ -836,6 +951,10 @@ def test_migrate_jsonl_to_sqlite_is_idempotent_and_preserves_parity(tmp_path, ca
     assert health_result["artifact_counts"]["strategy_cards"] == 1
     assert health_result["artifact_counts"]["experiment_budgets"] == 1
     assert health_result["artifact_counts"]["experiment_trials"] == 1
+    assert health_result["artifact_counts"]["split_manifests"] == 1
+    assert health_result["artifact_counts"]["cost_model_snapshots"] == 1
+    assert health_result["artifact_counts"]["locked_evaluation_results"] == 1
+    assert health_result["artifact_counts"]["leaderboard_entries"] == 1
 
 
 def test_db_health_flags_malformed_provider_run_payload(tmp_path, capsys):
@@ -900,3 +1019,7 @@ def test_export_jsonl_writes_compatibility_artifacts(tmp_path, capsys):
     assert exported_repository.load_strategy_cards() == [artifacts["strategy_card"]]
     assert exported_repository.load_experiment_budgets() == [artifacts["experiment_budget"]]
     assert exported_repository.load_experiment_trials() == [artifacts["experiment_trial"]]
+    assert exported_repository.load_split_manifests() == [artifacts["split_manifest"]]
+    assert exported_repository.load_cost_model_snapshots() == [artifacts["cost_model"]]
+    assert exported_repository.load_locked_evaluation_results() == [artifacts["locked_evaluation"]]
+    assert exported_repository.load_leaderboard_entries() == [artifacts["leaderboard_entry"]]

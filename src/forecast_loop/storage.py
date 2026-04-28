@@ -12,6 +12,7 @@ from forecast_loop.models import (
     BrokerOrder,
     BrokerReconciliation,
     CanonicalEvent,
+    CostModelSnapshot,
     EventEdgeEvaluation,
     EventReliabilityCheck,
     ExperimentBudget,
@@ -22,6 +23,8 @@ from forecast_loop.models import (
     FeatureSnapshot,
     Forecast,
     ForecastScore,
+    LeaderboardEntry,
+    LockedEvaluationResult,
     MacroEvent,
     MarketReactionCheck,
     MarketCandleRecord,
@@ -39,6 +42,7 @@ from forecast_loop.models import (
     SourceDocument,
     SourceIngestionRun,
     SourceRegistryEntry,
+    SplitManifest,
     StrategyCard,
     StrategyDecision,
     WalkForwardValidation,
@@ -200,6 +204,22 @@ class ArtifactRepository(Protocol):
 
     def load_experiment_trials(self) -> list[ExperimentTrial]: ...
 
+    def save_split_manifest(self, manifest: SplitManifest) -> None: ...
+
+    def load_split_manifests(self) -> list[SplitManifest]: ...
+
+    def save_cost_model_snapshot(self, snapshot: CostModelSnapshot) -> None: ...
+
+    def load_cost_model_snapshots(self) -> list[CostModelSnapshot]: ...
+
+    def save_locked_evaluation_result(self, result: LockedEvaluationResult) -> None: ...
+
+    def load_locked_evaluation_results(self) -> list[LockedEvaluationResult]: ...
+
+    def save_leaderboard_entry(self, entry: LeaderboardEntry) -> None: ...
+
+    def load_leaderboard_entries(self) -> list[LeaderboardEntry]: ...
+
 
 class JsonFileRepository:
     def __init__(self, root: Path | str) -> None:
@@ -242,6 +262,10 @@ class JsonFileRepository:
         self.strategy_cards_path = self.root / "strategy_cards.jsonl"
         self.experiment_budgets_path = self.root / "experiment_budgets.jsonl"
         self.experiment_trials_path = self.root / "experiment_trials.jsonl"
+        self.split_manifests_path = self.root / "split_manifests.jsonl"
+        self.cost_model_snapshots_path = self.root / "cost_model_snapshots.jsonl"
+        self.locked_evaluation_results_path = self.root / "locked_evaluation_results.jsonl"
+        self.leaderboard_entries_path = self.root / "leaderboard_entries.jsonl"
 
     def save_market_candle(self, candle: MarketCandleRecord) -> None:
         self._append_unique(
@@ -628,6 +652,46 @@ class JsonFileRepository:
 
     def load_experiment_trials(self) -> list[ExperimentTrial]:
         return self._load_lines(self.experiment_trials_path, ExperimentTrial.from_dict)
+
+    def save_split_manifest(self, manifest: SplitManifest) -> None:
+        self._append_unique(
+            self.split_manifests_path,
+            manifest.to_dict(),
+            identity_key="manifest_id",
+        )
+
+    def load_split_manifests(self) -> list[SplitManifest]:
+        return self._load_lines(self.split_manifests_path, SplitManifest.from_dict)
+
+    def save_cost_model_snapshot(self, snapshot: CostModelSnapshot) -> None:
+        self._append_unique(
+            self.cost_model_snapshots_path,
+            snapshot.to_dict(),
+            identity_key="cost_model_id",
+        )
+
+    def load_cost_model_snapshots(self) -> list[CostModelSnapshot]:
+        return self._load_lines(self.cost_model_snapshots_path, CostModelSnapshot.from_dict)
+
+    def save_locked_evaluation_result(self, result: LockedEvaluationResult) -> None:
+        self._append_unique(
+            self.locked_evaluation_results_path,
+            result.to_dict(),
+            identity_key="evaluation_id",
+        )
+
+    def load_locked_evaluation_results(self) -> list[LockedEvaluationResult]:
+        return self._load_lines(self.locked_evaluation_results_path, LockedEvaluationResult.from_dict)
+
+    def save_leaderboard_entry(self, entry: LeaderboardEntry) -> None:
+        self._append_unique(
+            self.leaderboard_entries_path,
+            entry.to_dict(),
+            identity_key="entry_id",
+        )
+
+    def load_leaderboard_entries(self) -> list[LeaderboardEntry]:
+        return self._load_lines(self.leaderboard_entries_path, LeaderboardEntry.from_dict)
 
     def _append(self, path: Path, payload: dict) -> None:
         with path.open("a", encoding="utf-8") as handle:

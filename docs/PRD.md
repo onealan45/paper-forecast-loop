@@ -91,6 +91,9 @@ The PRD follows that decision:
 - PR11 adds Codex Governance Docs And Prompts: controller decision template,
   worker handoff template, final reviewer prompt, Windows autopilot runbook, and
   docs tests for required gates and role catalog alignment.
+- PR12 adds Strategy Revision Candidates: failed paper-shadow outcomes can
+  produce DRAFT child strategy cards and linked retest agendas from explicit
+  failure attributions.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -118,6 +121,9 @@ Product implications:
 
 - Candidate strategy generation can be broad, natural-language-driven, and
   self-improving.
+- The first implemented self-evolving primitive is revision-candidate creation:
+  failed paper-shadow outcomes can become DRAFT child strategy cards that must
+  be retested before promotion.
 - The evaluation path must be deterministic, versioned, and auditable.
 - Failed experiments must be retained as evidence, not discarded.
 - Promotion inside the research loop must depend on research evidence, not on
@@ -592,8 +598,10 @@ correctness defects:
 - Taiwan ETF calendar/provider support remains deferred
 - macro events are visible as imported calendar artifacts, but do not yet drive research features or strategy decisions
 - per-symbol multi-asset decisions do not yet perform portfolio optimization or cross-asset allocation
-- research datasets are generated artifacts only; no strong strategy generation,
-  model training, self-evolving skill loop, or optimizer is included yet
+- research datasets are generated artifacts only; PR12 adds a first
+  paper-shadow-to-DRAFT-revision primitive, but strong strategy generation,
+  model training, deeper self-evolving skill loops, and optimizers are not
+  included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved
 - walk-forward validation now influences simulated BUY/SELL gates through
   M4F research-quality checks

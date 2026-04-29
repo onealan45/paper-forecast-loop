@@ -13,6 +13,7 @@ from forecast_loop.models import (
 )
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.storage import ArtifactRepository
+from forecast_loop.strategy_research import REVISION_REQUIRED_ACTIONS
 from forecast_loop.strategy_research import REVISION_CARD_BASIS
 
 
@@ -316,7 +317,7 @@ def _blocked_reasons(
         if outcome.trial_id != experiment_trial_id:
             blocked.append("paper_shadow_outcome_trial_mismatch")
         blocked.extend(outcome.blocked_reasons)
-        if outcome.recommended_strategy_action in {"RETIRE", "REVISE"}:
+        if outcome.recommended_strategy_action in REVISION_REQUIRED_ACTIONS:
             blocked.extend(outcome.failure_attributions)
     return _unique(blocked)
 
@@ -356,7 +357,7 @@ def _loop_status_and_action(
         return "READY_FOR_OPERATOR_REVIEW", "OPERATOR_REVIEW_FOR_PROMOTION"
     if outcome.recommended_strategy_action == "QUARANTINE":
         return "QUARANTINED", "QUARANTINE_STRATEGY_CARD"
-    if outcome.recommended_strategy_action in {"RETIRE", "REVISE"}:
+    if outcome.recommended_strategy_action in REVISION_REQUIRED_ACTIONS:
         return "REVISION_REQUIRED", "CREATE_REVISION_AGENDA"
     return "WAITING_FOR_SHADOW_OUTCOME", "WAIT_FOR_SHADOW_OUTCOME"
 

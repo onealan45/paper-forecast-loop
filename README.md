@@ -192,6 +192,10 @@ factory:
 - PR42 makes lineage-derived research agendas first-class in the strategy UX:
   dashboard and operator console now show the agenda basis, priority,
   hypothesis, and acceptance criteria next to the lineage summary.
+- PR43 adds a read-only `lineage-research-plan` CLI that turns the latest
+  lineage agenda into an executable next-task plan: revise, quarantine into a
+  replacement hypothesis, collect missing shadow evidence, or verify
+  cross-sample persistence.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -271,6 +275,7 @@ This version intentionally includes:
   - `operator-console`
   - `strategy-lineage`
   - `create-lineage-research-agenda`
+  - `lineage-research-plan`
   - `operator-control`
   - `repair-storage`
   - `decide`
@@ -1224,6 +1229,19 @@ python run_forecast_loop.py create-lineage-research-agenda --storage-dir .\paper
 the latest lineage verdict and next research focus to seed the next research
 loop; it does not create a decision, mutate a strategy card, or submit any
 order.
+
+Turn that lineage agenda into a machine-readable next research task:
+
+```powershell
+python run_forecast_loop.py lineage-research-plan --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD
+```
+
+`lineage-research-plan` is read-only. It reports the next concrete task for the
+current lineage agenda: propose a DRAFT revision, draft a replacement strategy
+hypothesis when the lineage is quarantined, collect missing paper-shadow
+evidence, or verify cross-sample persistence after improvement. When it emits a
+command, the command is intended to be directly runnable by the next research
+worker.
 
 Create a local paper order from the latest strategy decision:
 

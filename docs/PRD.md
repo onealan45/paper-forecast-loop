@@ -706,6 +706,10 @@ V1 MVP should include:
   mutating a strategy card
 - dashboard and operator console visibility for lineage-derived research
   agendas, including basis, priority, hypothesis, and acceptance criteria
+- read-only `lineage-research-plan` CLI output that converts the latest lineage
+  agenda into a concrete next task for a strategy research worker, including
+  runnable revision commands when appropriate and explicit new-strategy
+  research prompts when a lineage is quarantined
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,
@@ -739,6 +743,8 @@ V1 should be considered product-ready for internal iteration only when:
 - strategy decisions show action, confidence, risk, invalidation conditions, and linked artifacts
 - weak evidence does not produce fake BUY/SELL certainty
 - the system can revise or propose reusable strategy skills from prior evidence
+- the system can turn lineage evidence into a concrete next research task rather
+  than only displaying status
 - blocking storage, ingestion, or provider problems create repair requests
 - the system can fail safely and fall back to development mode
 - the UI can present strategy logic, prediction rationale, backtests, revisions,

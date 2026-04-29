@@ -7,6 +7,7 @@ from forecast_loop.locked_evaluation import lock_evaluation_protocol
 from forecast_loop.models import CostModelSnapshot, ExperimentTrial, PaperShadowOutcome, SplitManifest, StrategyCard
 from forecast_loop.storage import ArtifactRepository
 from forecast_loop.strategy_evolution import REVISION_DECISION_BASIS
+from forecast_loop.strategy_research import REVISION_REQUIRED_ACTIONS
 
 
 RETEST_PROTOCOL_VERSION = "pr14-v1"
@@ -180,7 +181,7 @@ def _source_outcome(
         raise ValueError(f"source paper shadow outcome symbol mismatch: {outcome_id}")
     if outcome.strategy_card_id != card.parent_card_id:
         raise ValueError(f"source paper shadow outcome does not match revision parent: {outcome_id}")
-    if outcome.recommended_strategy_action not in {"RETIRE", "REVISE"}:
+    if outcome.recommended_strategy_action not in REVISION_REQUIRED_ACTIONS:
         raise ValueError(f"source paper shadow outcome does not require revision: {outcome_id}")
     return outcome
 

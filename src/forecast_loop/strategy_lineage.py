@@ -19,10 +19,22 @@ class StrategyLineageRevisionNode:
 
 
 @dataclass(frozen=True, slots=True)
+class StrategyLineageOutcomeNode:
+    outcome_id: str
+    strategy_card_id: str
+    excess_return_after_costs: float | None
+    delta_vs_previous_excess: float | None
+    change_label: str
+    recommended_strategy_action: str
+    failure_attributions: list[str]
+
+
+@dataclass(frozen=True, slots=True)
 class StrategyLineageSummary:
     root_card_id: str
     revision_card_ids: list[str]
     revision_nodes: list[StrategyLineageRevisionNode]
+    outcome_nodes: list[StrategyLineageOutcomeNode]
     revision_count: int
     outcome_count: int
     action_counts: dict[str, int]
@@ -48,6 +60,7 @@ def build_strategy_lineage_summary(
         [outcome for outcome in paper_shadow_outcomes if outcome.strategy_card_id in lineage_card_ids],
         key=lambda outcome: (outcome.created_at, outcome.outcome_id),
     )
+    outcome_nodes = _lineage_outcome_nodes(lineage_outcomes)
     excess_returns = [
         outcome.excess_return_after_costs
         for outcome in lineage_outcomes
@@ -58,6 +71,7 @@ def build_strategy_lineage_summary(
         root_card_id=root_card.card_id,
         revision_card_ids=[card.card_id for card in revision_cards],
         revision_nodes=revision_nodes,
+        outcome_nodes=outcome_nodes,
         revision_count=len(revision_cards),
         outcome_count=len(lineage_outcomes),
         action_counts=dict(sorted(Counter(outcome.recommended_strategy_action for outcome in lineage_outcomes).items())),
@@ -144,3 +158,43 @@ def _string_list_parameter(card: StrategyCard, key: str) -> list[str]:
     if isinstance(value, str) and value:
         return [value]
     return []
+
+
+def _lineage_outcome_nodes(paper_shadow_outcomes: list[PaperShadowOutcome]) -> list[StrategyLineageOutcomeNode]:
+    nodes: list[StrategyLineageOutcomeNode] = []
+    previous_excess: float | None = None
+    for outcome in paper_shadow_outcomes:
+        current_excess = outcome.excess_return_after_costs
+        delta = _delta(current_excess, previous_excess)
+        nodes.append(
+            StrategyLineageOutcomeNode(
+                outcome_id=outcome.outcome_id,
+                strategy_card_id=outcome.strategy_card_id,
+                excess_return_after_costs=current_excess,
+                delta_vs_previous_excess=delta,
+                change_label=_change_label(delta, baseline=current_excess is not None and previous_excess is None),
+                recommended_strategy_action=outcome.recommended_strategy_action,
+                failure_attributions=list(outcome.failure_attributions),
+            )
+        )
+        if current_excess is not None:
+            previous_excess = current_excess
+    return nodes
+
+
+def _delta(current: float | None, previous: float | None) -> float | None:
+    if current is None or previous is None:
+        return None
+    return round(current - previous, 10)
+
+
+def _change_label(delta: float | None, *, baseline: bool) -> str:
+    if baseline:
+        return "基準"
+    if delta is None:
+        return "未知"
+    if delta > 0:
+        return "改善"
+    if delta < 0:
+        return "惡化"
+    return "持平"

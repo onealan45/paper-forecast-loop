@@ -1369,6 +1369,12 @@ def test_dashboard_strategy_lineage_includes_multi_generation_revisions(tmp_path
     assert "Hypothesis Second revision should inherit the original strategy lineage." in html
     assert "Source paper-shadow-outcome:dashboard-revision-quarantine" in html
     assert "Fixes drawdown_breach；weak_baseline_edge" in html
+    assert "表現軌跡" in html
+    assert "Outcome paper-shadow-outcome:dashboard-second-revision-quarantine" in html
+    assert "Card strategy-card:dashboard-second-revision" in html
+    assert "Excess -0.1100" in html
+    assert "Delta -0.0300" in html
+    assert "惡化" in html
     assert "weak_baseline_edge" in html
     assert "paper-shadow-outcome:dashboard-second-revision-quarantine" in html
     assert "-0.1100" in html

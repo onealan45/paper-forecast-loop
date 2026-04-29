@@ -999,6 +999,7 @@ def _render_strategy_lineage_summary(summary: StrategyLineageSummary | None) -> 
           <dt>Revision Count</dt><dd>{summary.revision_count}</dd>
           <dt>Revision Cards</dt><dd>{_dashboard_list_inline(summary.revision_card_ids)}</dd>
           <dt>Revision Tree</dt><dd>{_dashboard_revision_tree(summary)}</dd>
+          <dt>表現軌跡</dt><dd>{_dashboard_performance_trajectory(summary)}</dd>
           <dt>Shadow Outcomes</dt><dd>{summary.outcome_count}</dd>
           <dt>Actions</dt><dd>{_dashboard_dict_inline(summary.action_counts)}</dd>
           <dt>Failure Attribution</dt><dd>{_dashboard_dict_inline(summary.failure_attribution_counts)}</dd>
@@ -1019,6 +1020,20 @@ def _dashboard_revision_tree(summary: StrategyLineageSummary) -> str:
         f" / Source {escape(node.source_outcome_id or 'none')}"
         f" / Fixes {escape('；'.join(node.failure_attributions) if node.failure_attributions else 'none')}"
         for node in summary.revision_nodes
+    )
+
+
+def _dashboard_performance_trajectory(summary: StrategyLineageSummary) -> str:
+    if not summary.outcome_nodes:
+        return "none"
+    return "<br>".join(
+        f"Outcome {escape(node.outcome_id)} / Card {escape(node.strategy_card_id)}"
+        f" / Excess {_format_optional_number(node.excess_return_after_costs)}"
+        f" / Delta {_format_optional_number(node.delta_vs_previous_excess)}"
+        f" / {escape(node.change_label)}"
+        f" / Action {escape(node.recommended_strategy_action)}"
+        f" / Failures {escape('；'.join(node.failure_attributions) if node.failure_attributions else 'none')}"
+        for node in summary.outcome_nodes
     )
 
 

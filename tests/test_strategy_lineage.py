@@ -260,6 +260,22 @@ def test_strategy_lineage_summary_includes_multi_generation_revisions():
     ]
     assert summary.revision_count == 2
     assert summary.outcome_count == 3
+    assert [
+        (
+            node.outcome_id,
+            node.strategy_card_id,
+            node.excess_return_after_costs,
+            node.delta_vs_previous_excess,
+            node.change_label,
+            node.recommended_strategy_action,
+            node.failure_attributions,
+        )
+        for node in summary.outcome_nodes
+    ] == [
+        ("parent-fail", parent.card_id, -0.03, None, "基準", "REVISE_STRATEGY", ["negative_excess_return"]),
+        ("revision-fail", revision.card_id, -0.05, -0.02, "惡化", "REVISE_STRATEGY", ["negative_excess_return"]),
+        ("second-revision-fail", second_revision.card_id, -0.09, -0.04, "惡化", "QUARANTINE_STRATEGY", ["drawdown_breach"]),
+    ]
     assert summary.action_counts == {"QUARANTINE_STRATEGY": 1, "REVISE_STRATEGY": 2}
     assert summary.failure_attribution_counts == {"drawdown_breach": 1, "negative_excess_return": 2}
     assert summary.best_excess_return_after_costs == -0.03
@@ -290,6 +306,53 @@ def test_strategy_lineage_summary_preserves_branching_revision_tree_order():
         first_revision.card_id,
         nested_revision.card_id,
         second_revision.card_id,
+    ]
+
+
+def test_strategy_lineage_outcome_nodes_do_not_treat_missing_excess_as_baseline():
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    parent = _card("strategy-card:parent")
+    revision = _card("strategy-card:revision", parent_card_id=parent.card_id, status="DRAFT")
+
+    summary = build_strategy_lineage_summary(
+        root_card=parent,
+        strategy_cards=[parent, revision],
+        paper_shadow_outcomes=[
+            _outcome(
+                "missing-excess",
+                card_id=parent.card_id,
+                created_at=now,
+                action="REVISE_STRATEGY",
+                excess=None,
+                attributions=["missing_outcome_metric"],
+            ),
+            _outcome(
+                "first-known-excess",
+                card_id=revision.card_id,
+                created_at=now + timedelta(hours=1),
+                action="REVISE_STRATEGY",
+                excess=-0.01,
+                attributions=["negative_excess_return"],
+            ),
+            _outcome(
+                "second-known-excess",
+                card_id=revision.card_id,
+                created_at=now + timedelta(hours=2),
+                action="QUARANTINE_STRATEGY",
+                excess=-0.04,
+                attributions=["drawdown_breach"],
+            ),
+        ],
+    )
+
+    assert summary is not None
+    assert [
+        (node.outcome_id, node.excess_return_after_costs, node.delta_vs_previous_excess, node.change_label)
+        for node in summary.outcome_nodes
+    ] == [
+        ("missing-excess", None, None, "未知"),
+        ("first-known-excess", -0.01, None, "基準"),
+        ("second-known-excess", -0.04, -0.03, "惡化"),
     ]
 
 

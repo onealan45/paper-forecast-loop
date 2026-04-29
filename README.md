@@ -125,8 +125,10 @@ factory:
   `lock_evaluation_protocol` task directly through domain code, write a cost
   model, record an execution `AutomationRun`, and return before/after plans.
 - PR21 extends the same executor to `generate_baseline_evaluation`, allowing
-  the retest chain to advance from protocol locking to baseline evidence while
-  still rejecting backtest and later tasks.
+  the retest chain to advance from protocol locking to baseline evidence.
+- PR22 extends the same executor to `run_backtest`, allowing the retest chain
+  to produce holdout backtest evidence from the locked split window while still
+  rejecting walk-forward and later tasks.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -246,6 +248,7 @@ This version intentionally includes:
   - `create-revision-retest-scaffold`
   - `revision-retest-plan`
   - `record-revision-retest-task-run`
+  - `execute-revision-retest-next-task`
 
 This version intentionally excludes:
 
@@ -1392,9 +1395,12 @@ Execute the next whitelisted retest task:
 python run_forecast_loop.py execute-revision-retest-next-task --storage-dir .\paper_storage\manual-research --revision-card-id strategy-card:example-revision --symbol BTC-USD --now 2026-04-29T10:00:00+00:00
 ```
 
-Currently this supports `lock_evaluation_protocol` and
-`generate_baseline_evaluation`. It writes the created artifact plus an execution
-`AutomationRun`, then returns before/after task plans.
+Currently this supports `lock_evaluation_protocol`,
+`generate_baseline_evaluation`, and `run_backtest`. The backtest step uses the
+locked split manifest holdout window and stored candles in the same storage
+directory. It writes the created artifact plus an execution `AutomationRun`,
+then returns before/after task plans. `run_walk_forward` and later retest tasks
+remain blocked until they receive their own narrow executor support.
 
 Generate a Markdown research report from existing artifacts:
 

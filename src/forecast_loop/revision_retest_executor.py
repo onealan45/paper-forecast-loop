@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from forecast_loop.baselines import build_baseline_evaluation
 from forecast_loop.locked_evaluation import lock_evaluation_protocol
 from forecast_loop.models import AutomationRun
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
@@ -50,14 +51,20 @@ def execute_revision_retest_next_task(
     task = before_plan.task_by_id(before_plan.next_task_id)
     if task.status != "ready":
         raise ValueError(f"revision_retest_next_task_not_ready:{task.task_id}:{task.blocked_reason or task.status}")
-    if task.task_id != "lock_evaluation_protocol":
+    if task.task_id == "lock_evaluation_protocol":
+        created_artifact_ids = _execute_lock_evaluation_protocol(
+            repository=repository,
+            plan=before_plan,
+            created_at=created_at,
+        )
+    elif task.task_id == "generate_baseline_evaluation":
+        created_artifact_ids = _execute_generate_baseline_evaluation(
+            repository=repository,
+            plan=before_plan,
+            created_at=created_at,
+        )
+    else:
         raise ValueError(f"unsupported_revision_retest_task_execution:{task.task_id}")
-
-    created_artifact_ids = _execute_lock_evaluation_protocol(
-        repository=repository,
-        plan=before_plan,
-        created_at=created_at,
-    )
     after_plan = build_revision_retest_task_plan(
         repository=repository,
         storage_dir=storage_path,
@@ -109,6 +116,23 @@ def execute_revision_retest_next_task(
         automation_run=run,
         created_artifact_ids=created_artifact_ids,
     )
+
+
+def _execute_generate_baseline_evaluation(
+    *,
+    repository: ArtifactRepository,
+    plan: RevisionRetestTaskPlan,
+    created_at: datetime,
+) -> list[str]:
+    forecasts = [forecast for forecast in repository.load_forecasts() if forecast.symbol == plan.symbol]
+    baseline = build_baseline_evaluation(
+        symbol=plan.symbol,
+        generated_at=created_at,
+        forecasts=forecasts,
+        scores=repository.load_scores(),
+    )
+    repository.save_baseline_evaluation(baseline)
+    return [baseline.baseline_id]
 
 
 def _execute_lock_evaluation_protocol(

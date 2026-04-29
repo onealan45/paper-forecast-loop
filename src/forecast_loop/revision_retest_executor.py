@@ -10,6 +10,7 @@ from forecast_loop.locked_evaluation import lock_evaluation_protocol
 from forecast_loop.models import AutomationRun
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.storage import ArtifactRepository
+from forecast_loop.walk_forward import run_walk_forward_validation
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +67,13 @@ def execute_revision_retest_next_task(
         )
     elif task.task_id == "run_backtest":
         created_artifact_ids = _execute_run_backtest(
+            repository=repository,
+            storage_dir=storage_path,
+            plan=before_plan,
+            created_at=created_at,
+        )
+    elif task.task_id == "run_walk_forward":
+        created_artifact_ids = _execute_run_walk_forward(
             repository=repository,
             storage_dir=storage_path,
             plan=before_plan,
@@ -166,6 +174,31 @@ def _execute_run_backtest(
         created_at=created_at,
     )
     return [result.result.result_id]
+
+
+def _execute_run_walk_forward(
+    *,
+    repository: ArtifactRepository,
+    storage_dir: Path,
+    plan: RevisionRetestTaskPlan,
+    created_at: datetime,
+) -> list[str]:
+    if plan.split_manifest_id is None:
+        raise ValueError("revision_retest_split_manifest_missing")
+    split = next(
+        (item for item in repository.load_split_manifests() if item.manifest_id == plan.split_manifest_id),
+        None,
+    )
+    if split is None:
+        raise ValueError(f"missing_split_manifest:{plan.split_manifest_id}")
+    result = run_walk_forward_validation(
+        storage_dir=storage_dir,
+        symbol=plan.symbol,
+        start=split.train_start,
+        end=split.holdout_end,
+        created_at=created_at,
+    )
+    return [result.validation.validation_id]
 
 
 def _execute_lock_evaluation_protocol(

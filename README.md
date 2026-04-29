@@ -129,6 +129,9 @@ factory:
 - PR22 extends the same executor to `run_backtest`, allowing the retest chain
   to produce holdout backtest evidence from the locked split window while still
   rejecting walk-forward and later tasks.
+- PR23 extends the same executor to `run_walk_forward`, allowing the retest
+  chain to produce rolling validation evidence from the locked full split window
+  while still rejecting passed-trial recording and later tasks.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -1396,11 +1399,13 @@ python run_forecast_loop.py execute-revision-retest-next-task --storage-dir .\pa
 ```
 
 Currently this supports `lock_evaluation_protocol`,
-`generate_baseline_evaluation`, and `run_backtest`. The backtest step uses the
-locked split manifest holdout window and stored candles in the same storage
-directory. It writes the created artifact plus an execution `AutomationRun`,
-then returns before/after task plans. `run_walk_forward` and later retest tasks
-remain blocked until they receive their own narrow executor support.
+`generate_baseline_evaluation`, `run_backtest`, and `run_walk_forward`. The
+backtest step uses the locked split manifest holdout window and stored candles
+in the same storage directory. The walk-forward step uses the locked full split
+window from `train_start` through `holdout_end`. It writes the created artifact
+plus an execution `AutomationRun`, then returns before/after task plans.
+`record_passed_retest_trial` and later retest tasks remain blocked until they
+receive their own narrow executor support.
 
 Generate a Markdown research report from existing artifacts:
 

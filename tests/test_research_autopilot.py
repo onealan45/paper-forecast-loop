@@ -2372,6 +2372,201 @@ def test_cli_execute_revision_retest_leaderboard_gate_next_task_outputs_json(tmp
     ]
 
 
+def _seed_revision_retest_through_leaderboard(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 1, 4, tzinfo=UTC),
+        validation_start=datetime(2026, 1, 5, tzinfo=UTC),
+        validation_end=datetime(2026, 1, 7, tzinfo=UTC),
+        holdout_start=datetime(2026, 1, 8, tzinfo=UTC),
+        holdout_end=datetime(2026, 1, 10, tzinfo=UTC),
+    )
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 10, 30, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+    _seed_retest_full_window_candles(repository)
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 11, 0, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 11, 30, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 12, 0, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+    leaderboard_result = execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 12, 30, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+    assert leaderboard_result.after_plan.next_task_id == "record_paper_shadow_outcome"
+    return repository, revision, leaderboard_result
+
+
+def test_execute_revision_retest_shadow_outcome_requires_observation_inputs(tmp_path):
+    repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+
+    with pytest.raises(ValueError, match="revision_retest_next_task_not_ready:record_paper_shadow_outcome"):
+        execute_revision_retest_next_task(
+            repository=repository,
+            storage_dir=tmp_path,
+            symbol="BTC-USD",
+            created_at=datetime(2026, 4, 29, 13, 0, tzinfo=UTC),
+            revision_card_id=revision.card_id,
+        )
+
+    revision_outcomes = [
+        outcome for outcome in repository.load_paper_shadow_outcomes() if outcome.strategy_card_id == revision.card_id
+    ]
+    assert revision_outcomes == []
+
+
+def test_execute_revision_retest_shadow_outcome_rejects_unfinished_window(tmp_path):
+    repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+
+    with pytest.raises(ValueError, match="revision_retest_shadow_window_not_complete"):
+        execute_revision_retest_next_task(
+            repository=repository,
+            storage_dir=tmp_path,
+            symbol="BTC-USD",
+            created_at=datetime(2026, 4, 29, 13, 0, tzinfo=UTC),
+            revision_card_id=revision.card_id,
+            shadow_window_start=datetime(2026, 4, 29, 12, 30, tzinfo=UTC),
+            shadow_window_end=datetime(2026, 4, 30, 12, 30, tzinfo=UTC),
+            shadow_observed_return=0.04,
+            shadow_benchmark_return=0.01,
+        )
+
+    revision_outcomes = [
+        outcome for outcome in repository.load_paper_shadow_outcomes() if outcome.strategy_card_id == revision.card_id
+    ]
+    assert revision_outcomes == []
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+    assert plan.next_task_id == "record_paper_shadow_outcome"
+    assert plan.task_by_id("record_paper_shadow_outcome").blocked_reason == "shadow_window_observation_required"
+
+
+def test_execute_revision_retest_shadow_outcome_next_task_records_observed_window(tmp_path):
+    repository, revision, leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+
+    result = execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 30, 13, 0, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+        shadow_window_start=datetime(2026, 4, 29, 12, 30, tzinfo=UTC),
+        shadow_window_end=datetime(2026, 4, 30, 12, 30, tzinfo=UTC),
+        shadow_observed_return=0.04,
+        shadow_benchmark_return=0.01,
+        shadow_max_adverse_excursion=0.02,
+        shadow_turnover=1.5,
+        shadow_note="explicit PR26 shadow observation",
+    )
+    revision_outcomes = [
+        outcome for outcome in repository.load_paper_shadow_outcomes() if outcome.strategy_card_id == revision.card_id
+    ]
+
+    assert result.executed_task_id == "record_paper_shadow_outcome"
+    assert result.before_plan.next_task_id == "record_paper_shadow_outcome"
+    assert result.after_plan.next_task_id is None
+    assert len(revision_outcomes) == 1
+    outcome = revision_outcomes[0]
+    assert outcome.leaderboard_entry_id == leaderboard_result.after_plan.leaderboard_entry_id
+    assert outcome.window_start == datetime(2026, 4, 29, 12, 30, tzinfo=UTC)
+    assert outcome.window_end == datetime(2026, 4, 30, 12, 30, tzinfo=UTC)
+    assert outcome.observed_return == 0.04
+    assert outcome.benchmark_return == 0.01
+    assert outcome.excess_return_after_costs == 0.03
+    assert outcome.max_adverse_excursion == 0.02
+    assert outcome.turnover == 1.5
+    assert outcome.notes == ["explicit PR26 shadow observation"]
+    assert result.created_artifact_ids == [outcome.outcome_id]
+    assert len(repository.load_automation_runs()) == 6
+
+
+def test_cli_execute_revision_retest_shadow_outcome_next_task_outputs_json(tmp_path, capsys):
+    repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+
+    assert main(
+        [
+            "execute-revision-retest-next-task",
+            "--storage-dir",
+            str(tmp_path),
+            "--revision-card-id",
+            revision.card_id,
+            "--symbol",
+            "BTC-USD",
+            "--now",
+            "2026-04-30T13:00:00+00:00",
+            "--shadow-window-start",
+            "2026-04-29T12:30:00+00:00",
+            "--shadow-window-end",
+            "2026-04-30T12:30:00+00:00",
+            "--shadow-observed-return",
+            "0.04",
+            "--shadow-benchmark-return",
+            "0.01",
+            "--shadow-max-adverse-excursion",
+            "0.02",
+            "--shadow-turnover",
+            "1.5",
+            "--shadow-note",
+            "explicit PR26 CLI shadow observation",
+        ]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+    saved_repository = JsonFileRepository(tmp_path)
+    revision_outcomes = [
+        outcome for outcome in saved_repository.load_paper_shadow_outcomes() if outcome.strategy_card_id == revision.card_id
+    ]
+
+    assert payload["executed_task_id"] == "record_paper_shadow_outcome"
+    assert payload["before_plan"]["next_task_id"] == "record_paper_shadow_outcome"
+    assert payload["after_plan"]["next_task_id"] is None
+    assert len(revision_outcomes) == 1
+    assert payload["created_artifact_ids"] == [revision_outcomes[0].outcome_id]
+
+
 def test_cli_creates_research_agenda_and_autopilot_run(tmp_path, capsys):
     _repository, card, trial, evaluation, entry, decision, outcome = _seed_repository(tmp_path)
 

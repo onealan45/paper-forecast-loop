@@ -140,6 +140,9 @@ factory:
   retest chain to write locked evaluation and leaderboard-entry evidence from a
   PASSED trial while still rejecting paper-shadow outcome recording and later
   tasks.
+- PR26 extends the same executor to `record_paper_shadow_outcome` only when
+  explicit shadow-window observation inputs are supplied, allowing the retest
+  chain to close without fabricating future returns.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -1408,17 +1411,20 @@ python run_forecast_loop.py execute-revision-retest-next-task --storage-dir .\pa
 
 Currently this supports `lock_evaluation_protocol`,
 `generate_baseline_evaluation`, `run_backtest`, `run_walk_forward`,
-`record_passed_retest_trial`, and `evaluate_leaderboard_gate`. The backtest step
-uses the locked split manifest holdout window and stored candles in the same
-storage directory. The walk-forward step uses the locked full split window from
-`train_start` through `holdout_end`. The passed-trial step links the pending
-retest trial to the current dataset, backtest, walk-forward validation, and
-source paper-shadow outcome. The leaderboard-gate step writes a locked
-evaluation result plus a leaderboard entry from the plan-linked PASSED trial
-evidence. Each executed task writes the created artifact ids plus an execution
-`AutomationRun`, then returns before/after task plans. `record_paper_shadow_outcome`
-and later retest tasks remain blocked until they receive their own narrow
-executor support.
+`record_passed_retest_trial`, `evaluate_leaderboard_gate`, and explicit
+`record_paper_shadow_outcome`. The backtest step uses the locked split manifest
+holdout window and stored candles in the same storage directory. The
+walk-forward step uses the locked full split window from `train_start` through
+`holdout_end`. The passed-trial step links the pending retest trial to the
+current dataset, backtest, walk-forward validation, and source paper-shadow
+outcome. The leaderboard-gate step writes a locked evaluation result plus a
+leaderboard entry from the plan-linked PASSED trial evidence. The shadow-outcome
+step remains blocked unless the caller supplies `--shadow-window-start`,
+`--shadow-window-end`, `--shadow-observed-return`, and
+`--shadow-benchmark-return`; optional `--shadow-max-adverse-excursion`,
+`--shadow-turnover`, and `--shadow-note` are passed through when available. Each
+executed task writes the created artifact ids plus an execution `AutomationRun`,
+then returns before/after task plans.
 
 Generate a Markdown research report from existing artifacts:
 

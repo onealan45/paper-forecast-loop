@@ -32,6 +32,7 @@ from forecast_loop.execution_safety import evaluate_execution_safety_gate
 from forecast_loop.event_reliability import build_event_reliability
 from forecast_loop.experiment_registry import record_experiment_trial, register_strategy_card
 from forecast_loop.health import run_health_check
+from forecast_loop.lineage_agenda import create_lineage_research_agenda
 from forecast_loop.locked_evaluation import evaluate_leaderboard_gate, lock_evaluation_protocol
 from forecast_loop.macro_events import import_macro_events, macro_calendar
 from forecast_loop.market_reaction import build_market_reactions
@@ -117,6 +118,11 @@ def main(argv: list[str] | None = None) -> int:
     strategy_lineage = subparsers.add_parser("strategy-lineage")
     strategy_lineage.add_argument("--storage-dir", required=True)
     strategy_lineage.add_argument("--symbol", default="BTC-USD")
+
+    lineage_agenda_cmd = subparsers.add_parser("create-lineage-research-agenda")
+    lineage_agenda_cmd.add_argument("--storage-dir", required=True)
+    lineage_agenda_cmd.add_argument("--symbol", default="BTC-USD")
+    lineage_agenda_cmd.add_argument("--created-at")
 
     operator_control = subparsers.add_parser("operator-control")
     operator_control.add_argument("--storage-dir", required=True)
@@ -532,6 +538,8 @@ def main(argv: list[str] | None = None) -> int:
             return _operator_console(args)
         if args.command == "strategy-lineage":
             return _strategy_lineage(args)
+        if args.command == "create-lineage-research-agenda":
+            return _create_lineage_research_agenda(args)
         if args.command == "operator-control":
             return _operator_control(args)
         if args.command == "repair-storage":
@@ -989,6 +997,22 @@ def _strategy_lineage(args) -> int:
             ensure_ascii=False,
         )
     )
+    return 0
+
+
+def _create_lineage_research_agenda(args) -> int:
+    storage_dir = Path(args.storage_dir)
+    if not storage_dir.exists():
+        raise ValueError(f"storage directory does not exist: {storage_dir}")
+    if not storage_dir.is_dir():
+        raise ValueError(f"storage path is not a directory: {storage_dir}")
+    created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
+    result = create_lineage_research_agenda(
+        repository=JsonFileRepository(storage_dir),
+        created_at=created_at,
+        symbol=args.symbol,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0
 
 

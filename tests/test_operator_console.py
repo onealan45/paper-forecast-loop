@@ -1257,6 +1257,72 @@ def test_strategy_lineage_cli_rejects_missing_storage_without_creating_directory
     assert "Traceback" not in captured.err
 
 
+def test_create_lineage_research_agenda_cli_persists_focus_agenda(tmp_path, capsys):
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_visible_strategy_research(repository, now)
+    _seed_visible_revision_candidate(repository, now + timedelta(minutes=10))
+    _seed_visible_strategy_lineage(repository, now + timedelta(minutes=20))
+    _seed_visible_second_generation_strategy_lineage(repository, now + timedelta(minutes=30))
+
+    assert main(
+        [
+            "create-lineage-research-agenda",
+            "--storage-dir",
+            str(tmp_path),
+            "--symbol",
+            "BTC-USD",
+            "--created-at",
+            "2026-04-29T10:00:00+00:00",
+        ]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    agenda = payload["research_agenda"]
+    assert agenda["symbol"] == "BTC-USD"
+    assert agenda["decision_basis"] == "strategy_lineage_research_agenda"
+    assert agenda["priority"] == "HIGH"
+    assert agenda["strategy_card_ids"] == [
+        "strategy-card:visible",
+        "strategy-card:visible-revision",
+        "strategy-card:visible-second-revision",
+    ]
+    assert "停止加碼此 lineage" in agenda["hypothesis"]
+    assert "drawdown_breach" in agenda["hypothesis"]
+    assert (
+        payload["strategy_lineage"]["next_research_focus"]
+        == "停止加碼此 lineage，優先研究 drawdown_breach 的修正或新策略。"
+    )
+    assert main(
+        [
+            "create-lineage-research-agenda",
+            "--storage-dir",
+            str(tmp_path),
+            "--symbol",
+            "BTC-USD",
+            "--created-at",
+            "2026-04-29T11:00:00+00:00",
+        ]
+    ) == 0
+    second_payload = json.loads(capsys.readouterr().out)
+    assert second_payload["research_agenda"]["agenda_id"] == agenda["agenda_id"]
+    lineage_agendas = [
+        item for item in repository.load_research_agendas() if item.decision_basis == "strategy_lineage_research_agenda"
+    ]
+    assert len(lineage_agendas) == 1
+    assert lineage_agendas[0].agenda_id == agenda["agenda_id"]
+
+
+def test_create_lineage_research_agenda_cli_rejects_missing_lineage(tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["create-lineage-research-agenda", "--storage-dir", str(tmp_path), "--symbol", "BTC-USD"])
+
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr()
+    assert "strategy lineage not found for symbol: BTC-USD" in captured.err
+    assert "Traceback" not in captured.err
+
+
 def test_operator_console_strategy_lineage_escapes_revision_change_summary(tmp_path):
     now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
     repository = JsonFileRepository(tmp_path)

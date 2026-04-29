@@ -186,6 +186,9 @@ factory:
 - PR40 adds a read-only `strategy-lineage` CLI so automation and research
   loops can consume the latest lineage summary JSON, including performance
   verdict and next research focus, without scraping dashboard HTML.
+- PR41 adds `create-lineage-research-agenda`, which turns the latest lineage
+  next research focus into an idempotent research agenda artifact for the next
+  self-evolution loop.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -264,6 +267,7 @@ This version intentionally includes:
   - `render-dashboard`
   - `operator-console`
   - `strategy-lineage`
+  - `create-lineage-research-agenda`
   - `operator-control`
   - `repair-storage`
   - `decide`
@@ -1205,6 +1209,18 @@ python run_forecast_loop.py strategy-lineage --storage-dir .\paper_storage\manua
 tree, paper-shadow outcome trajectory, performance verdict, and next research
 focus used by the dashboard/operator console so automation can route research
 without parsing HTML.
+
+Persist the latest strategy lineage focus as a research agenda:
+
+```powershell
+python run_forecast_loop.py create-lineage-research-agenda --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD
+```
+
+`create-lineage-research-agenda` writes an idempotent
+`strategy_lineage_research_agenda` entry to `research_agendas.jsonl`. It uses
+the latest lineage verdict and next research focus to seed the next research
+loop; it does not create a decision, mutate a strategy card, or submit any
+order.
 
 Create a local paper order from the latest strategy decision:
 

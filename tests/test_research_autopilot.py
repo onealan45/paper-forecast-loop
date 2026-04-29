@@ -22,6 +22,7 @@ from forecast_loop.sqlite_repository import SQLiteRepository, export_sqlite_to_j
 from forecast_loop.storage import JsonFileRepository
 from forecast_loop.revision_retest import create_revision_retest_scaffold
 from forecast_loop.revision_retest_plan import build_revision_retest_task_plan
+from forecast_loop.revision_retest_run_log import record_revision_retest_task_run
 from forecast_loop.strategy_evolution import propose_strategy_revision
 
 
@@ -202,6 +203,14 @@ def _jsonl_snapshot(tmp_path):
     return {
         path.name: path.read_text(encoding="utf-8")
         for path in sorted(tmp_path.glob("*.jsonl"))
+    }
+
+
+def _changed_jsonl_files(before: dict[str, str], after: dict[str, str]) -> set[str]:
+    return {
+        name
+        for name in set(before) | set(after)
+        if before.get(name) != after.get(name)
     }
 
 
@@ -1270,6 +1279,127 @@ def test_cli_revision_retest_plan_rejects_missing_storage_without_creating_direc
     assert exc_info.value.code == 2
     assert not missing_storage.exists()
     assert "storage directory does not exist" in capsys.readouterr().err
+
+
+def test_record_revision_retest_task_run_logs_blocked_task_plan(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+    )
+
+    result = record_revision_retest_task_run(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 9, 30, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+
+    run = result.automation_run
+    assert run.status == "RETEST_TASK_BLOCKED"
+    assert run.command == "revision-retest-plan"
+    assert run.provider == "research"
+    assert result.task_plan.next_task_id == "lock_evaluation_protocol"
+    assert any(
+        step["name"] == "lock_evaluation_protocol" and step["status"] == "blocked"
+        for step in run.steps
+    )
+    assert JsonFileRepository(tmp_path).load_automation_runs() == [run]
+
+
+def test_record_revision_retest_task_run_writes_only_automation_log_for_ready_plan(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 2, 1, tzinfo=UTC),
+        validation_start=datetime(2026, 2, 2, tzinfo=UTC),
+        validation_end=datetime(2026, 3, 1, tzinfo=UTC),
+        holdout_start=datetime(2026, 3, 2, tzinfo=UTC),
+        holdout_end=datetime(2026, 4, 1, tzinfo=UTC),
+    )
+    before = _jsonl_snapshot(tmp_path)
+
+    result = record_revision_retest_task_run(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 9, 30, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+    after = _jsonl_snapshot(tmp_path)
+
+    assert result.automation_run.status == "RETEST_TASK_READY"
+    assert result.task_plan.next_task_id == "generate_baseline_evaluation"
+    assert _changed_jsonl_files(before, after) == {"automation_runs.jsonl"}
+
+
+def test_cli_record_revision_retest_task_run_outputs_json_and_persists(tmp_path, capsys):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+    )
+
+    assert main(
+        [
+            "record-revision-retest-task-run",
+            "--storage-dir",
+            str(tmp_path),
+            "--revision-card-id",
+            revision.card_id,
+            "--symbol",
+            "BTC-USD",
+            "--now",
+            "2026-04-29T09:30:00+00:00",
+        ]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["automation_run"]["status"] == "RETEST_TASK_BLOCKED"
+    assert payload["revision_retest_task_plan"]["next_task_id"] == "lock_evaluation_protocol"
+    assert len(JsonFileRepository(tmp_path).load_automation_runs()) == 1
 
 
 def test_cli_creates_research_agenda_and_autopilot_run(tmp_path, capsys):

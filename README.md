@@ -115,6 +115,9 @@ factory:
 - PR17 surfaces that retest task plan in the dashboard and operator console so
   the UX shows the next concrete research task, status, missing inputs, blocked
   reason, and command args.
+- PR18 records the current retest task plan as a research `AutomationRun`, so
+  the system can audit when a retest task was inspected and whether it was
+  ready or blocked without executing it.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -233,6 +236,7 @@ This version intentionally includes:
   - `propose-strategy-revision`
   - `create-revision-retest-scaffold`
   - `revision-retest-plan`
+  - `record-revision-retest-task-run`
 
 This version intentionally excludes:
 
@@ -751,6 +755,14 @@ PR17 makes the task plan visible:
 - the operator console overview and research page show the same task status,
   missing inputs, blocked reason, and command args;
 - the UX still does not execute any command or create downstream evidence.
+
+PR18 makes the task plan auditable:
+
+- `record-revision-retest-task-run` builds the same read-only task plan and
+  writes one `automation_runs.jsonl` row with provider `research`.
+- The run status records whether the next retest task is ready, blocked,
+  complete, or in progress.
+- It does not execute command args or create retest evidence.
 
 ### Strategy-Visible UX
 
@@ -1333,6 +1345,16 @@ python run_forecast_loop.py revision-retest-plan --storage-dir .\paper_storage\m
 `revision-retest-plan` prints JSON with `next_task_id`, task status, missing
 inputs, linked artifact IDs, and command arguments for runnable steps. It is a
 research planner, not a retest executor.
+
+Record the current retest task plan as an audit-visible run log without
+executing it:
+
+```powershell
+python run_forecast_loop.py record-revision-retest-task-run --storage-dir .\paper_storage\manual-research --revision-card-id strategy-card:example-revision --symbol BTC-USD --now 2026-04-29T09:30:00+00:00
+```
+
+`record-revision-retest-task-run` writes only `automation_runs.jsonl`. It does
+not run the displayed command args.
 
 Generate a Markdown research report from existing artifacts:
 

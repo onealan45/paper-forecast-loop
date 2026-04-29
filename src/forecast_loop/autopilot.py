@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
 from forecast_loop.models import (
     LeaderboardEntry,
@@ -9,8 +11,21 @@ from forecast_loop.models import (
     ResearchAgenda,
     ResearchAutopilotRun,
 )
+from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.storage import ArtifactRepository
 from forecast_loop.strategy_research import REVISION_CARD_BASIS
+
+
+@dataclass(frozen=True, slots=True)
+class RevisionRetestAutopilotRunResult:
+    revision_retest_task_plan: RevisionRetestTaskPlan
+    research_autopilot_run: ResearchAutopilotRun
+
+    def to_dict(self) -> dict:
+        return {
+            "revision_retest_task_plan": self.revision_retest_task_plan.to_dict(),
+            "research_autopilot_run": self.research_autopilot_run.to_dict(),
+        }
 
 
 def create_research_agenda(
@@ -144,6 +159,74 @@ def record_research_autopilot_run(
     )
     repository.save_research_autopilot_run(run)
     return run
+
+
+def record_revision_retest_autopilot_run(
+    *,
+    repository: ArtifactRepository,
+    storage_dir: Path | str | None,
+    created_at: datetime,
+    symbol: str,
+    revision_card_id: str | None = None,
+) -> RevisionRetestAutopilotRunResult:
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=storage_dir,
+        symbol=symbol,
+        revision_card_id=revision_card_id,
+    )
+    missing = _missing_revision_retest_autopilot_inputs(plan)
+    if missing:
+        raise ValueError(f"revision_retest_autopilot_run_not_ready:{','.join(missing)}")
+    agenda = _revision_retest_agenda(repository.load_research_agendas(), plan.strategy_card_id, plan.source_outcome_id)
+    run = record_research_autopilot_run(
+        repository=repository,
+        created_at=created_at,
+        agenda_id=agenda.agenda_id,
+        strategy_card_id=plan.strategy_card_id,
+        experiment_trial_id=plan.passed_trial_id,
+        locked_evaluation_id=plan.locked_evaluation_id,
+        leaderboard_entry_id=plan.leaderboard_entry_id,
+        paper_shadow_outcome_id=plan.paper_shadow_outcome_id,
+    )
+    return RevisionRetestAutopilotRunResult(plan, run)
+
+
+def _missing_revision_retest_autopilot_inputs(plan: RevisionRetestTaskPlan) -> list[str]:
+    missing: list[str] = []
+    if plan.next_task_id is not None:
+        missing.append(f"next_task:{plan.next_task_id}")
+    if plan.passed_trial_id is None:
+        missing.append("passed_trial_id")
+    if plan.locked_evaluation_id is None:
+        missing.append("locked_evaluation_id")
+    if plan.leaderboard_entry_id is None:
+        missing.append("leaderboard_entry_id")
+    if plan.paper_shadow_outcome_id is None:
+        missing.append("paper_shadow_outcome_id")
+    return missing
+
+
+def _revision_retest_agenda(
+    agendas: list[ResearchAgenda],
+    strategy_card_id: str,
+    source_outcome_id: str,
+) -> ResearchAgenda:
+    candidates = [
+        agenda
+        for agenda in agendas
+        if strategy_card_id in agenda.strategy_card_ids
+        and agenda.decision_basis == "paper_shadow_strategy_revision_agenda"
+    ]
+    if not candidates:
+        raise ValueError(f"missing revision retest agenda for strategy card: {strategy_card_id}")
+    candidates_with_source = [
+        agenda
+        for agenda in candidates
+        if source_outcome_id in agenda.hypothesis
+        or source_outcome_id in " ".join(agenda.acceptance_criteria)
+    ]
+    return _latest(candidates_with_source or candidates)
 
 
 def _find(items: list[object], attr: str, value: str | None) -> object | None:
@@ -304,3 +387,7 @@ def _unique(items: list[str]) -> list[str]:
             ordered.append(item)
             seen.add(item)
     return ordered
+
+
+def _latest(items):
+    return max(items, key=lambda item: item.created_at)

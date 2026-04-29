@@ -4,6 +4,7 @@ import json
 import pytest
 
 from forecast_loop.autopilot import create_research_agenda, record_research_autopilot_run
+from forecast_loop.autopilot import record_revision_retest_autopilot_run
 from forecast_loop.cli import main
 from forecast_loop.experiment_registry import record_experiment_trial
 from forecast_loop.health import run_health_check
@@ -2697,6 +2698,94 @@ def test_sqlite_repository_preserves_revision_retest_autopilot_run_without_decis
     assert loaded_run.strategy_decision_id is None
     assert loaded_run.paper_shadow_outcome_id == plan.paper_shadow_outcome_id
     assert loaded_run.blocked_reasons == run.blocked_reasons
+
+
+def test_revision_retest_autopilot_helper_records_latest_completed_chain(tmp_path):
+    repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 30, 13, 0, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+        shadow_window_start=datetime(2026, 4, 29, 12, 30, tzinfo=UTC),
+        shadow_window_end=datetime(2026, 4, 30, 12, 30, tzinfo=UTC),
+        shadow_observed_return=0.04,
+        shadow_benchmark_return=0.01,
+        shadow_max_adverse_excursion=0.02,
+        shadow_turnover=1.5,
+    )
+
+    result = record_revision_retest_autopilot_run(
+        repository=repository,
+        storage_dir=tmp_path,
+        created_at=datetime(2026, 4, 30, 13, 30, tzinfo=UTC),
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+    saved_runs = [run for run in repository.load_research_autopilot_runs() if run.strategy_card_id == revision.card_id]
+
+    assert result.revision_retest_task_plan.next_task_id is None
+    assert result.research_autopilot_run.strategy_card_id == revision.card_id
+    assert result.research_autopilot_run.experiment_trial_id == result.revision_retest_task_plan.passed_trial_id
+    assert result.research_autopilot_run.locked_evaluation_id == result.revision_retest_task_plan.locked_evaluation_id
+    assert result.research_autopilot_run.leaderboard_entry_id == result.revision_retest_task_plan.leaderboard_entry_id
+    assert result.research_autopilot_run.paper_shadow_outcome_id == result.revision_retest_task_plan.paper_shadow_outcome_id
+    assert result.research_autopilot_run.strategy_decision_id is None
+    assert saved_runs[-1] == result.research_autopilot_run
+
+
+def test_cli_record_revision_retest_autopilot_run_outputs_json(tmp_path, capsys):
+    repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 30, 13, 0, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+        shadow_window_start=datetime(2026, 4, 29, 12, 30, tzinfo=UTC),
+        shadow_window_end=datetime(2026, 4, 30, 12, 30, tzinfo=UTC),
+        shadow_observed_return=0.04,
+        shadow_benchmark_return=0.01,
+        shadow_max_adverse_excursion=0.02,
+        shadow_turnover=1.5,
+    )
+
+    assert main(
+        [
+            "record-revision-retest-autopilot-run",
+            "--storage-dir",
+            str(tmp_path),
+            "--revision-card-id",
+            revision.card_id,
+            "--symbol",
+            "BTC-USD",
+            "--now",
+            "2026-04-30T13:30:00+00:00",
+        ]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["revision_retest_task_plan"]["next_task_id"] is None
+    assert payload["research_autopilot_run"]["strategy_card_id"] == revision.card_id
+    assert payload["research_autopilot_run"]["strategy_decision_id"] is None
+    assert payload["research_autopilot_run"]["paper_shadow_outcome_id"] == payload["revision_retest_task_plan"]["paper_shadow_outcome_id"]
+
+
+def test_revision_retest_autopilot_helper_rejects_incomplete_chain(tmp_path):
+    repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+
+    with pytest.raises(ValueError, match="revision_retest_autopilot_run_not_ready:next_task:record_paper_shadow_outcome"):
+        record_revision_retest_autopilot_run(
+            repository=repository,
+            storage_dir=tmp_path,
+            created_at=datetime(2026, 4, 29, 13, 0, tzinfo=UTC),
+            symbol="BTC-USD",
+            revision_card_id=revision.card_id,
+        )
+
+    saved_runs = [run for run in repository.load_research_autopilot_runs() if run.strategy_card_id == revision.card_id]
+    assert saved_runs == []
 
 
 def test_cli_creates_research_agenda_and_autopilot_run(tmp_path, capsys):

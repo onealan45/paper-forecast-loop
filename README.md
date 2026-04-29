@@ -149,6 +149,9 @@ factory:
 - PR28 lets completed DRAFT revision retests be recorded as research autopilot
   runs without inventing an unrelated strategy decision artifact; weak evidence
   still blocks on the real evaluation / leaderboard reasons.
+- PR29 adds a direct `record-revision-retest-autopilot-run` command that
+  resolves the completed revision retest plan and records the research autopilot
+  loop without manually copying every evidence ID.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -268,6 +271,7 @@ This version intentionally includes:
   - `create-revision-retest-scaffold`
   - `revision-retest-plan`
   - `record-revision-retest-task-run`
+  - `record-revision-retest-autopilot-run`
   - `execute-revision-retest-next-task`
 
 This version intentionally excludes:
@@ -1442,6 +1446,15 @@ The completed revision retest can also be recorded with
 applies only to DRAFT revision cards with a linked paper-shadow outcome; normal
 strategy autopilot runs still require a strategy decision.
 
+Record a completed revision retest chain as a research autopilot run without
+manually copying every evidence ID:
+
+```powershell
+python run_forecast_loop.py record-revision-retest-autopilot-run --storage-dir .\paper_storage\manual-research --revision-card-id strategy-card:example-revision --symbol BTC-USD --now 2026-04-30T13:30:00+00:00
+```
+
+The command refuses incomplete chains and writes no fake strategy decision.
+
 Generate a Markdown research report from existing artifacts:
 
 ```powershell
@@ -1531,6 +1544,7 @@ This milestone improves correctness and auditability, but it does not yet solve 
   docs exist, PR12 can produce evidence-linked DRAFT revision candidates, and
   PR13 makes those candidates visible in the dashboard and operator console,
   PR27 keeps completed chains visible as completed revision evidence, and PR28
-  records completed revision retests without fake decision artifacts, but full
+  records completed revision retests without fake decision artifacts. PR29 adds
+  a one-command autopilot run recorder for completed revision retests, but full
   scheduling, autonomous strategy generation, automatic promotion, and deeper
   CPCV/PBO/DSR/bootstrap statistics remain deferred

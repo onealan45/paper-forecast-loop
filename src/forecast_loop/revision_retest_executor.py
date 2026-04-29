@@ -7,7 +7,7 @@ from pathlib import Path
 from forecast_loop.backtest import run_backtest
 from forecast_loop.baselines import build_baseline_evaluation
 from forecast_loop.experiment_registry import record_experiment_trial
-from forecast_loop.locked_evaluation import lock_evaluation_protocol
+from forecast_loop.locked_evaluation import evaluate_leaderboard_gate, lock_evaluation_protocol
 from forecast_loop.models import AutomationRun
 from forecast_loop.revision_retest import RETEST_PROTOCOL_VERSION
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
@@ -83,6 +83,12 @@ def execute_revision_retest_next_task(
         )
     elif task.task_id == "record_passed_retest_trial":
         created_artifact_ids = _execute_record_passed_retest_trial(
+            repository=repository,
+            plan=before_plan,
+            created_at=created_at,
+        )
+    elif task.task_id == "evaluate_leaderboard_gate":
+        created_artifact_ids = _execute_evaluate_leaderboard_gate(
             repository=repository,
             plan=before_plan,
             created_at=created_at,
@@ -285,6 +291,48 @@ def _ensure_trial_budget_available(
         consumed_indexes.add(trial.trial_index)
     if trial_index not in consumed_indexes and len(consumed_indexes) >= max_trials:
         raise ValueError("revision_retest_trial_budget_exhausted")
+
+
+def _execute_evaluate_leaderboard_gate(
+    *,
+    repository: ArtifactRepository,
+    plan: RevisionRetestTaskPlan,
+    created_at: datetime,
+) -> list[str]:
+    missing = []
+    if plan.passed_trial_id is None:
+        missing.append("passed_retest_trial")
+    if plan.split_manifest_id is None:
+        missing.append("split_manifest")
+    if plan.cost_model_id is None:
+        missing.append("cost_model_snapshot")
+    if plan.baseline_id is None:
+        missing.append("baseline_evaluation")
+    if plan.backtest_result_id is None:
+        missing.append("backtest_result")
+    if plan.walk_forward_validation_id is None:
+        missing.append("walk_forward_validation")
+    if missing:
+        raise ValueError(f"revision_retest_leaderboard_gate_inputs_missing:{','.join(missing)}")
+    assert plan.passed_trial_id is not None
+    assert plan.split_manifest_id is not None
+    assert plan.cost_model_id is not None
+    assert plan.baseline_id is not None
+    assert plan.backtest_result_id is not None
+    assert plan.walk_forward_validation_id is not None
+    evaluation, entry = evaluate_leaderboard_gate(
+        repository=repository,
+        created_at=created_at,
+        strategy_card_id=plan.strategy_card_id,
+        trial_id=plan.passed_trial_id,
+        split_manifest_id=plan.split_manifest_id,
+        cost_model_id=plan.cost_model_id,
+        baseline_id=plan.baseline_id,
+        backtest_result_id=plan.backtest_result_id,
+        walk_forward_validation_id=plan.walk_forward_validation_id,
+        event_edge_evaluation_id=None,
+    )
+    return [evaluation.evaluation_id, entry.entry_id]
 
 
 def _execute_lock_evaluation_protocol(

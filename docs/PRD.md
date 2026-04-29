@@ -100,6 +100,9 @@ The PRD follows that decision:
 - PR14 adds Strategy Revision Retest Scaffold: a DRAFT revision candidate can
   produce an idempotent `PENDING` experiment trial and optional locked
   split/cost protocol without fabricating evaluation or promotion evidence.
+- PR15 adds Revision Retest Visibility: the dashboard and operator console show
+  the pending retest trial, dataset, locked split manifest, and remaining
+  required evidence artifacts for the latest DRAFT revision.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -136,6 +139,9 @@ Product implications:
   have to be produced by later research steps.
 - Revision candidates must be visible in the UX so the user can inspect what
   the AI is trying to fix next, not only whether the loop is healthy.
+- Revision retest scaffolds must also be visible so the user can inspect
+  whether a self-evolving idea has a concrete pending trial or is still missing
+  dataset, split, backtest, walk-forward, and leaderboard evidence.
 - The evaluation path must be deterministic, versioned, and auditable.
 - Failed experiments must be retained as evidence, not discarded.
 - Promotion inside the research loop must depend on research evidence, not on

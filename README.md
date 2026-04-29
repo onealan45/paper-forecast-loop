@@ -106,6 +106,9 @@ factory:
 - PR14 adds a retest scaffold for DRAFT revision candidates: it creates an
   idempotent `PENDING` experiment trial and can lock split/cost protocol
   artifacts without fabricating evaluation results.
+- PR15 makes those retest scaffolds visible in the dashboard and operator
+  console, including pending trial, dataset, locked split, and remaining
+  required evidence artifacts.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -709,6 +712,16 @@ PR14 adds the retest scaffold:
 
 This gives the next research worker a concrete starting point without claiming
 the revised strategy has already been validated.
+
+PR15 makes the scaffold visible:
+
+- the dashboard revision panel shows the pending retest trial, dataset, locked
+  split manifest, and next required artifacts;
+- the operator console research page shows the same scaffold details;
+- the operator console overview preview includes the retest scaffold summary.
+
+This is read-only visibility. It does not run the retest or create downstream
+research evidence.
 
 ### Strategy-Visible UX
 

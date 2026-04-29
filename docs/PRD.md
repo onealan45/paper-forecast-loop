@@ -164,6 +164,9 @@ The PRD follows that decision:
 - PR34 adds Strategy Lineage Edge Regressions: branching trees, missing parents,
   and parent cycles are now committed regression cases instead of reviewer-only
   smoke checks.
+- PR35 adds Strategy Revision Change Summary: lineage nodes now expose the
+  revision's name, status, hypothesis, source outcome, and intended failure
+  attributions so strategy self-evolution is readable without raw JSON.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -235,6 +238,8 @@ Product implications:
 - Corrupt lineage metadata should fail conservatively: missing parents should
   keep the current card as root, and cycles should terminate without switching
   the UX anchor to an arbitrary cycle member.
+- Revision lineage should explain what changed: each visible revision should
+  show the hypothesis and failure mode it was intended to repair.
 - The evaluation path must be deterministic, versioned, and auditable.
 - Failed experiments must be retained as evidence, not discarded.
 - Promotion inside the research loop must depend on research evidence, not on
@@ -652,6 +657,8 @@ V1 MVP should include:
   multi-generation revision count, revision parent/depth tree rows, shadow
   action counts, failure attribution counts, best/worst excess return, and
   latest shadow outcome
+- strategy lineage revision-change rows showing name, status, hypothesis,
+  source outcome, and intended failure attributions
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,
@@ -738,7 +745,8 @@ correctness defects:
   dashboard and operator console. PR31 adds strategy lineage summaries for
   parent/revision shadow evidence, PR32 makes those summaries recursive across
   multi-generation revision trees, PR33 exposes revision parent/depth rows in
-  the UX, and PR34 hardens branching/missing-parent/cycle edge cases, but
+  the UX, PR34 hardens branching/missing-parent/cycle edge cases, and PR35
+  exposes revision hypothesis/source/fix summaries, but
   strong strategy generation, model training, deeper self-evolving skill loops,
   and optimizers are not included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved

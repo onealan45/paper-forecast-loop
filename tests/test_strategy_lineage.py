@@ -30,6 +30,43 @@ def _card(card_id: str, *, parent_card_id: str | None = None, status: str = "ACT
     )
 
 
+def _revision_card(
+    card_id: str,
+    *,
+    parent_card_id: str,
+    source_outcome_id: str,
+    failure_attributions: list[str],
+    hypothesis: str,
+) -> StrategyCard:
+    card = _card(card_id, parent_card_id=parent_card_id, status="DRAFT")
+    return StrategyCard(
+        card_id=card.card_id,
+        created_at=card.created_at,
+        strategy_name=card.strategy_name,
+        strategy_family=card.strategy_family,
+        version=card.version,
+        status=card.status,
+        symbols=card.symbols,
+        hypothesis=hypothesis,
+        signal_description=card.signal_description,
+        entry_rules=card.entry_rules,
+        exit_rules=card.exit_rules,
+        risk_rules=card.risk_rules,
+        parameters={
+            "revision_source_outcome_id": source_outcome_id,
+            "revision_failure_attributions": failure_attributions,
+        },
+        data_requirements=card.data_requirements,
+        feature_snapshot_ids=card.feature_snapshot_ids,
+        backtest_result_ids=card.backtest_result_ids,
+        walk_forward_validation_ids=card.walk_forward_validation_ids,
+        event_edge_evaluation_ids=card.event_edge_evaluation_ids,
+        parent_card_id=card.parent_card_id,
+        author=card.author,
+        decision_basis=card.decision_basis,
+    )
+
+
 def _outcome(
     outcome_id: str,
     *,
@@ -143,8 +180,20 @@ def test_strategy_lineage_summary_resolves_parent_when_current_card_is_revision(
 def test_strategy_lineage_summary_includes_multi_generation_revisions():
     now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
     parent = _card("strategy-card:parent")
-    revision = _card("strategy-card:revision", parent_card_id=parent.card_id, status="DRAFT")
-    second_revision = _card("strategy-card:second-revision", parent_card_id=revision.card_id, status="DRAFT")
+    revision = _revision_card(
+        "strategy-card:revision",
+        parent_card_id=parent.card_id,
+        source_outcome_id="parent-fail",
+        failure_attributions=["negative_excess_return"],
+        hypothesis="Add baseline-edge confirmation after parent failed.",
+    )
+    second_revision = _revision_card(
+        "strategy-card:second-revision",
+        parent_card_id=revision.card_id,
+        source_outcome_id="revision-fail",
+        failure_attributions=["drawdown_breach"],
+        hypothesis="Tighten risk after revision drawdown failed.",
+    )
 
     summary = build_strategy_lineage_summary(
         root_card=second_revision,
@@ -183,6 +232,31 @@ def test_strategy_lineage_summary_includes_multi_generation_revisions():
     assert [(node.card_id, node.parent_card_id, node.depth) for node in summary.revision_nodes] == [
         (revision.card_id, parent.card_id, 1),
         (second_revision.card_id, revision.card_id, 2),
+    ]
+    assert [
+        (
+            node.strategy_name,
+            node.status,
+            node.hypothesis,
+            node.source_outcome_id,
+            node.failure_attributions,
+        )
+        for node in summary.revision_nodes
+    ] == [
+        (
+            revision.strategy_name,
+            "DRAFT",
+            "Add baseline-edge confirmation after parent failed.",
+            "parent-fail",
+            ["negative_excess_return"],
+        ),
+        (
+            second_revision.strategy_name,
+            "DRAFT",
+            "Tighten risk after revision drawdown failed.",
+            "revision-fail",
+            ["drawdown_breach"],
+        ),
     ]
     assert summary.revision_count == 2
     assert summary.outcome_count == 3

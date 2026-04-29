@@ -155,6 +155,10 @@ factory:
 - PR30 makes those completed revision retest autopilot runs visible in the
   dashboard and operator console, so a closed self-evolution loop is visible
   from the strategy UX rather than only from `research_autopilot_runs.jsonl`.
+- PR31 adds strategy lineage visibility: the read-only UX now summarizes a
+  parent strategy, DRAFT revisions, paper-shadow action counts, failure
+  attribution concentration, best/worst after-cost excess return, and latest
+  shadow outcome.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -1553,6 +1557,8 @@ This milestone improves correctness and auditability, but it does not yet solve 
   PR27 keeps completed chains visible as completed revision evidence, and PR28
   records completed revision retests without fake decision artifacts. PR29 adds
   a one-command autopilot run recorder for completed revision retests, and PR30
-  exposes those revision-scoped autopilot runs in the strategy UX, but full
+  exposes those revision-scoped autopilot runs in the strategy UX. PR31 adds
+  strategy lineage summaries for parent/revision outcomes and demotion or
+  quarantine signals, but full
   scheduling, autonomous strategy generation, automatic promotion, and deeper
   CPCV/PBO/DSR/bootstrap statistics remain deferred

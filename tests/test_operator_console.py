@@ -528,6 +528,34 @@ def _seed_visible_revision_retest_autopilot_run(repository: JsonFileRepository, 
     )
 
 
+def _seed_visible_strategy_lineage(repository: JsonFileRepository, now: datetime) -> None:
+    repository.save_paper_shadow_outcome(
+        PaperShadowOutcome(
+            outcome_id="paper-shadow-outcome:visible-revision-quarantine",
+            created_at=now,
+            leaderboard_entry_id="leaderboard-entry:visible-revision-retest",
+            evaluation_id="locked-evaluation:visible-revision-retest",
+            strategy_card_id="strategy-card:visible-revision",
+            trial_id="experiment-trial:visible-revision-retest",
+            symbol="BTC-USD",
+            window_start=now - timedelta(hours=24),
+            window_end=now,
+            observed_return=-0.05,
+            benchmark_return=0.01,
+            excess_return_after_costs=-0.08,
+            max_adverse_excursion=0.12,
+            turnover=1.9,
+            outcome_grade="FAIL",
+            failure_attributions=["negative_excess_return", "drawdown_breach"],
+            recommended_promotion_stage="PAPER_SHADOW_FAILED",
+            recommended_strategy_action="QUARANTINE_STRATEGY",
+            blocked_reasons=["paper_shadow_failed", "drawdown_breach"],
+            notes=["Revision failed the second shadow window."],
+            decision_basis="test",
+        )
+    )
+
+
 def _seed_distractor_strategy_research_without_run(repository: JsonFileRepository, now: datetime) -> None:
     card = replace(
         _visible_strategy_card(now),
@@ -976,6 +1004,49 @@ def test_operator_console_shows_revision_retest_autopilot_run(tmp_path):
         assert "REPAIR_EVIDENCE_CHAIN" in html
         assert "locked_evaluation_not_rankable" in html
         assert "paper-shadow-outcome:visible-revision-retest" in html
+
+
+def test_operator_console_shows_strategy_lineage_summary(tmp_path):
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_visible_strategy_research(repository, now)
+    _seed_visible_revision_candidate(repository, now + timedelta(minutes=10))
+    _seed_visible_strategy_lineage(repository, now + timedelta(minutes=20))
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    research_html = render_operator_console_page(snapshot, page="research")
+    overview_html = render_operator_console_page(snapshot, page="overview")
+
+    assert snapshot.latest_strategy_lineage_summary is not None
+    assert snapshot.latest_strategy_lineage_summary.revision_count == 1
+    for html in (research_html, overview_html):
+        assert "策略 lineage" in html
+        assert "REVISE_STRATEGY" in html
+        assert "QUARANTINE_STRATEGY" in html
+        assert "negative_excess_return" in html
+        assert "drawdown_breach" in html
+        assert "-0.0250" in html
+        assert "-0.0800" in html
+        assert "paper-shadow-outcome:visible-revision-quarantine" in html
+
+
+def test_operator_console_lineage_uses_parent_root_when_latest_chain_is_revision(tmp_path):
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_visible_strategy_research(repository, now)
+    _seed_visible_revision_candidate(repository, now + timedelta(minutes=10))
+    _seed_visible_revision_retest_scaffold(repository, now + timedelta(minutes=20))
+    _seed_visible_revision_retest_autopilot_run(repository, now + timedelta(minutes=30))
+    _seed_visible_strategy_lineage(repository, now + timedelta(minutes=40))
+
+    summary = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now).latest_strategy_lineage_summary
+
+    assert summary is not None
+    assert summary.root_card_id == "strategy-card:visible"
+    assert summary.revision_card_ids == ["strategy-card:visible-revision"]
+    assert summary.outcome_count == 2
+    assert summary.action_counts == {"QUARANTINE_STRATEGY": 1, "REVISE_STRATEGY": 1}
+    assert summary.best_excess_return_after_costs == -0.025
 
 
 def test_operator_console_revision_retest_task_plan_falls_back_when_source_missing(tmp_path):

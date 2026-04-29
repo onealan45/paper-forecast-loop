@@ -1,0 +1,72 @@
+from __future__ import annotations
+
+from collections import Counter
+from dataclasses import dataclass
+
+from forecast_loop.models import PaperShadowOutcome, StrategyCard
+
+
+@dataclass(frozen=True, slots=True)
+class StrategyLineageSummary:
+    root_card_id: str
+    revision_card_ids: list[str]
+    revision_count: int
+    outcome_count: int
+    action_counts: dict[str, int]
+    failure_attribution_counts: dict[str, int]
+    best_excess_return_after_costs: float | None
+    worst_excess_return_after_costs: float | None
+    latest_outcome_id: str | None
+
+
+def build_strategy_lineage_summary(
+    *,
+    root_card: StrategyCard | None,
+    strategy_cards: list[StrategyCard],
+    paper_shadow_outcomes: list[PaperShadowOutcome],
+) -> StrategyLineageSummary | None:
+    if root_card is None:
+        return None
+
+    root_card = _lineage_root_card(root_card, strategy_cards)
+    revision_cards = sorted(
+        [card for card in strategy_cards if card.parent_card_id == root_card.card_id],
+        key=lambda card: (card.created_at, card.card_id),
+    )
+    lineage_card_ids = {root_card.card_id, *(card.card_id for card in revision_cards)}
+    lineage_outcomes = sorted(
+        [outcome for outcome in paper_shadow_outcomes if outcome.strategy_card_id in lineage_card_ids],
+        key=lambda outcome: (outcome.created_at, outcome.outcome_id),
+    )
+    excess_returns = [
+        outcome.excess_return_after_costs
+        for outcome in lineage_outcomes
+        if outcome.excess_return_after_costs is not None
+    ]
+
+    return StrategyLineageSummary(
+        root_card_id=root_card.card_id,
+        revision_card_ids=[card.card_id for card in revision_cards],
+        revision_count=len(revision_cards),
+        outcome_count=len(lineage_outcomes),
+        action_counts=dict(sorted(Counter(outcome.recommended_strategy_action for outcome in lineage_outcomes).items())),
+        failure_attribution_counts=dict(
+            sorted(
+                Counter(
+                    attribution
+                    for outcome in lineage_outcomes
+                    for attribution in outcome.failure_attributions
+                ).items()
+            )
+        ),
+        best_excess_return_after_costs=max(excess_returns) if excess_returns else None,
+        worst_excess_return_after_costs=min(excess_returns) if excess_returns else None,
+        latest_outcome_id=lineage_outcomes[-1].outcome_id if lineage_outcomes else None,
+    )
+
+
+def _lineage_root_card(card: StrategyCard, strategy_cards: list[StrategyCard]) -> StrategyCard:
+    if card.parent_card_id is None:
+        return card
+    parent_by_id = {candidate.card_id: candidate for candidate in strategy_cards}
+    return parent_by_id.get(card.parent_card_id, card)

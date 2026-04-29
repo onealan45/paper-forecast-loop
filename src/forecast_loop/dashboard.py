@@ -38,6 +38,7 @@ from forecast_loop.models import (
 )
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.revision_retest_run_log import automation_run_matches_revision_retest_plan
+from forecast_loop.strategy_lineage import StrategyLineageSummary, build_strategy_lineage_summary
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.storage import JsonFileRepository
 
@@ -63,6 +64,7 @@ class DashboardSnapshot:
     latest_paper_shadow_outcome: PaperShadowOutcome | None
     latest_research_agenda: ResearchAgenda | None
     latest_research_autopilot_run: ResearchAutopilotRun | None
+    latest_strategy_lineage_summary: StrategyLineageSummary | None
     latest_strategy_revision_card: StrategyCard | None
     latest_strategy_revision_agenda: ResearchAgenda | None
     latest_strategy_revision_source_outcome: PaperShadowOutcome | None
@@ -170,6 +172,11 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         revision_card=revision_card,
     )
     revision_autopilot_run = _latest_revision_retest_autopilot_run(research_autopilot_runs, revision_card)
+    lineage_summary = build_strategy_lineage_summary(
+        root_card=research_chain.strategy_card,
+        strategy_cards=strategy_cards,
+        paper_shadow_outcomes=paper_shadow_outcomes,
+    )
 
     return DashboardSnapshot(
         storage_dir=storage_dir,
@@ -191,6 +198,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         latest_paper_shadow_outcome=research_chain.paper_shadow_outcome,
         latest_research_agenda=research_chain.research_agenda,
         latest_research_autopilot_run=research_chain.research_autopilot_run,
+        latest_strategy_lineage_summary=lineage_summary,
         latest_strategy_revision_card=revision_card,
         latest_strategy_revision_agenda=(
             research_chain.revision_candidate.research_agenda if research_chain.revision_candidate else None
@@ -867,6 +875,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
     agenda = snapshot.latest_research_agenda
     autopilot = snapshot.latest_research_autopilot_run
     revision_block = _render_strategy_revision_candidate(snapshot)
+    lineage_block = _render_strategy_lineage_summary(snapshot.latest_strategy_lineage_summary)
     if (
         card is None
         and evaluation is None
@@ -893,6 +902,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
         <span class="tag">下一步 {escape(autopilot.next_research_action if autopilot else "n/a")}</span>
       </div>
       {revision_block}
+      {lineage_block}
       <div class="evidence-grid">
         <div class="evidence-block">
           <h3>目前策略假設</h3>
@@ -970,6 +980,31 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
           </dl>
         </div>
       </details>
+    """
+
+
+def _render_strategy_lineage_summary(summary: StrategyLineageSummary | None) -> str:
+    if summary is None:
+        return """
+      <div class="evidence-block">
+        <h3>策略 lineage</h3>
+        <p class="micro-copy">目前沒有可彙整的策略 lineage。</p>
+      </div>
+    """
+    return f"""
+      <div class="evidence-block">
+        <h3>策略 lineage</h3>
+        <dl>
+          <dt>Root Strategy</dt><dd><code>{escape(summary.root_card_id)}</code></dd>
+          <dt>Revision Count</dt><dd>{summary.revision_count}</dd>
+          <dt>Revision Cards</dt><dd>{_dashboard_list_inline(summary.revision_card_ids)}</dd>
+          <dt>Shadow Outcomes</dt><dd>{summary.outcome_count}</dd>
+          <dt>Actions</dt><dd>{_dashboard_dict_inline(summary.action_counts)}</dd>
+          <dt>Failure Attribution</dt><dd>{_dashboard_dict_inline(summary.failure_attribution_counts)}</dd>
+          <dt>Best / Worst Excess</dt><dd>{_format_optional_number(summary.best_excess_return_after_costs)} / {_format_optional_number(summary.worst_excess_return_after_costs)}</dd>
+          <dt>Latest Outcome</dt><dd><code>{escape(summary.latest_outcome_id or "none")}</code></dd>
+        </dl>
+      </div>
     """
 
 

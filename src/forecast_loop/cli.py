@@ -60,6 +60,7 @@ from forecast_loop.stock_data import (
 from forecast_loop.strategy_evolution import propose_strategy_revision
 from forecast_loop.revision_retest import create_revision_retest_scaffold
 from forecast_loop.revision_retest_plan import build_revision_retest_task_plan
+from forecast_loop.revision_retest_run_log import record_revision_retest_task_run
 from forecast_loop.sqlite_repository import (
     export_sqlite_to_jsonl,
     initialize_sqlite_database,
@@ -482,6 +483,12 @@ def main(argv: list[str] | None = None) -> int:
     revision_retest_plan_cmd.add_argument("--revision-card-id")
     revision_retest_plan_cmd.add_argument("--symbol", default="BTC-USD")
 
+    record_retest_task_run_cmd = subparsers.add_parser("record-revision-retest-task-run")
+    record_retest_task_run_cmd.add_argument("--storage-dir", required=True)
+    record_retest_task_run_cmd.add_argument("--revision-card-id")
+    record_retest_task_run_cmd.add_argument("--symbol", default="BTC-USD")
+    record_retest_task_run_cmd.add_argument("--now")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -580,6 +587,8 @@ def main(argv: list[str] | None = None) -> int:
             return _create_revision_retest_scaffold(args)
         if args.command == "revision-retest-plan":
             return _revision_retest_plan(args)
+        if args.command == "record-revision-retest-task-run":
+            return _record_revision_retest_task_run(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -1692,6 +1701,24 @@ def _revision_retest_plan(args) -> int:
         revision_card_id=args.revision_card_id,
     )
     print(json.dumps({"revision_retest_task_plan": plan.to_dict()}, ensure_ascii=False))
+    return 0
+
+
+def _record_revision_retest_task_run(args) -> int:
+    storage_dir = Path(args.storage_dir)
+    if not storage_dir.exists():
+        raise ValueError(f"storage directory does not exist: {storage_dir}")
+    if not storage_dir.is_dir():
+        raise ValueError(f"storage path is not a directory: {storage_dir}")
+    created_at = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    result = record_revision_retest_task_run(
+        repository=JsonFileRepository(storage_dir),
+        storage_dir=storage_dir,
+        symbol=args.symbol.upper(),
+        created_at=created_at,
+        revision_card_id=args.revision_card_id,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0
 
 

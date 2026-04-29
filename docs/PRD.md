@@ -710,6 +710,9 @@ V1 MVP should include:
   agenda into a concrete next task for a strategy research worker, including
   runnable revision commands when appropriate and explicit new-strategy
   research prompts when a lineage is quarantined
+- dashboard and operator console visibility for the lineage research task plan,
+  so the UX shows the next strategy work item, required artifact, command args,
+  worker prompt, and rationale
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

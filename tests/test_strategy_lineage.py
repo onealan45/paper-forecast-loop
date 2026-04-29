@@ -289,6 +289,7 @@ def test_strategy_lineage_summary_includes_multi_generation_revisions():
     assert summary.latest_delta_vs_previous_excess == -0.04
     assert summary.primary_failure_attribution == "drawdown_breach"
     assert summary.latest_recommended_strategy_action == "QUARANTINE_STRATEGY"
+    assert summary.next_research_focus == "停止加碼此 lineage，優先研究 drawdown_breach 的修正或新策略。"
 
 
 def test_strategy_lineage_summary_preserves_branching_revision_tree_order():
@@ -393,6 +394,7 @@ def test_strategy_lineage_verdict_reports_insufficient_evidence_when_all_outcome
     assert summary.latest_delta_vs_previous_excess is None
     assert summary.primary_failure_attribution == "missing_outcome_metric"
     assert summary.latest_recommended_strategy_action == "REVISE_STRATEGY"
+    assert summary.next_research_focus == "先補齊 paper-shadow outcome 證據，再判斷修正方向。"
 
 
 def test_strategy_lineage_summary_falls_back_to_current_card_when_parent_missing():

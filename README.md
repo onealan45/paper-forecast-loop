@@ -180,6 +180,9 @@ factory:
 - PR38 adds a strategy lineage performance verdict: the UX now summarizes
   whether the latest revision path is improving, worsening, stalled, or missing
   evidence before showing the raw trajectory rows.
+- PR39 adds a strategy lineage next research focus: the UX now turns the
+  verdict into a concrete next study direction, such as repairing drawdown
+  breach or starting a new strategy hypothesis.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

@@ -882,6 +882,8 @@ def _strategy_lineage_panel(summary: StrategyLineageSummary | None) -> str:
     {_strategy_lineage_tree(summary)}
     <h4>表現結論</h4>
     <p>{_strategy_lineage_performance_verdict(summary)}</p>
+    <h4>下一步研究焦點</h4>
+    <p>{escape(summary.next_research_focus)}</p>
     <h4>表現軌跡</h4>
     {_strategy_lineage_performance_trajectory(summary)}
     <p>Shadow outcomes：{summary.outcome_count}</p>
@@ -1351,6 +1353,8 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
 {_strategy_lineage_tree(lineage)}
 <p>表現結論</p>
 <p>{_strategy_lineage_performance_verdict(lineage)}</p>
+<p>下一步研究焦點</p>
+<p>{escape(lineage.next_research_focus if lineage else "目前沒有 lineage 下一步研究焦點。")}</p>
 <p>表現軌跡</p>
 {_strategy_lineage_performance_trajectory(lineage)}
 {_plain_list(list(lineage.action_counts.keys()) if lineage else [], empty="目前沒有 lineage action")}

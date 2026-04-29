@@ -1373,6 +1373,8 @@ def test_dashboard_strategy_lineage_includes_multi_generation_revisions(tmp_path
     assert "改善 0 / 惡化 2 / 未知 0" in html
     assert "主要失敗 drawdown_breach" in html
     assert "最新動作 QUARANTINE_STRATEGY" in html
+    assert "下一步研究焦點" in html
+    assert "停止加碼此 lineage，優先研究 drawdown_breach 的修正或新策略。" in html
     assert "表現軌跡" in html
     assert "Outcome paper-shadow-outcome:dashboard-second-revision-quarantine" in html
     assert "Card strategy-card:dashboard-second-revision" in html

@@ -32,6 +32,7 @@ from forecast_loop.models import (
     StrategyDecision,
     WalkForwardValidation,
 )
+from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.storage import JsonFileRepository
 
@@ -66,6 +67,7 @@ class OperatorConsoleSnapshot:
     latest_strategy_revision_retest_trial: ExperimentTrial | None
     latest_strategy_revision_split_manifest: SplitManifest | None
     latest_strategy_revision_next_required_artifacts: list[str]
+    latest_strategy_revision_retest_task_plan: RevisionRetestTaskPlan | None
     repair_requests: list[RepairRequest]
     control_events: list[PaperControlEvent]
     control_state: PaperControlState
@@ -135,6 +137,13 @@ def build_operator_console_snapshot(
     control_state = current_control_state(control_events, symbol=symbol)
     automation_runs = [item for item in _safe_load(repository.load_automation_runs) if item.symbol == symbol]
     notifications = [item for item in _safe_load(repository.load_notification_artifacts) if item.symbol == symbol]
+    revision_card = research_chain.revision_candidate.strategy_card if research_chain.revision_candidate else None
+    revision_task_plan = _safe_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=storage_path,
+        symbol=symbol,
+        revision_card=revision_card,
+    )
 
     return OperatorConsoleSnapshot(
         storage_dir=storage_path,
@@ -155,9 +164,7 @@ def build_operator_console_snapshot(
         latest_paper_shadow_outcome=research_chain.paper_shadow_outcome,
         latest_research_agenda=research_chain.research_agenda,
         latest_research_autopilot_run=research_chain.research_autopilot_run,
-        latest_strategy_revision_card=(
-            research_chain.revision_candidate.strategy_card if research_chain.revision_candidate else None
-        ),
+        latest_strategy_revision_card=revision_card,
         latest_strategy_revision_agenda=(
             research_chain.revision_candidate.research_agenda if research_chain.revision_candidate else None
         ),
@@ -175,6 +182,7 @@ def build_operator_console_snapshot(
             if research_chain.revision_candidate
             else []
         ),
+        latest_strategy_revision_retest_task_plan=revision_task_plan,
         repair_requests=repair_requests,
         control_events=control_events,
         control_state=control_state,
@@ -204,6 +212,26 @@ def build_operator_console_snapshot(
             "research_autopilot_runs": len(research_autopilot_runs),
         },
     )
+
+
+def _safe_revision_retest_task_plan(
+    *,
+    repository: JsonFileRepository,
+    storage_dir: Path,
+    symbol: str,
+    revision_card: StrategyCard | None,
+) -> RevisionRetestTaskPlan | None:
+    if revision_card is None:
+        return None
+    try:
+        return build_revision_retest_task_plan(
+            repository=repository,
+            storage_dir=storage_dir,
+            symbol=symbol,
+            revision_card_id=revision_card.card_id,
+        )
+    except ValueError:
+        return None
 
 
 def render_operator_console_page(
@@ -1110,7 +1138,28 @@ def _revision_candidate_panel(snapshot: OperatorConsoleSnapshot, *, wide: bool) 
     <p>Locked split：{_artifact_id(retest_split, "manifest_id")} / {escape(retest_split.status if retest_split else "尚未鎖定")}</p>
     <p>Next required：</p>
     {_plain_list(snapshot.latest_strategy_revision_next_required_artifacts)}
+    {_revision_retest_task_plan_panel(snapshot.latest_strategy_revision_retest_task_plan)}
   </article>
+"""
+
+
+def _revision_retest_task_plan_panel(plan: RevisionRetestTaskPlan | None) -> str:
+    if plan is None:
+        return """
+    <h4>下一個 retest 研究任務</h4>
+    <p class="muted">目前沒有可解析的 retest task plan。</p>
+"""
+    next_task = plan.task_by_id(plan.next_task_id) if plan.next_task_id else None
+    command = " ".join(next_task.command_args) if next_task and next_task.command_args else "無"
+    return f"""
+    <h4>下一個 retest 研究任務</h4>
+    <p>Task：<code>{escape(next_task.task_id if next_task else "none")}</code> / {escape(next_task.status if next_task else "completed")}</p>
+    <p>Required artifact：<code>{escape(next_task.required_artifact if next_task else "none")}</code></p>
+    <p>Blocked reason：{escape(next_task.blocked_reason if next_task and next_task.blocked_reason else "none")}</p>
+    <p>Missing inputs：</p>
+    {_plain_list(next_task.missing_inputs if next_task else [])}
+    <p>Command args：<code>{escape(command)}</code></p>
+    <p class="muted">只顯示，不執行。</p>
 """
 
 
@@ -1132,6 +1181,7 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
 <p>下一步：{escape(autopilot.next_research_action if autopilot else "n/a")} / Run {_artifact_id(autopilot, "run_id")}</p>
 <p>策略修正候選：{_artifact_id(revision, "card_id")} / 來源 {_artifact_id(revision_source, "outcome_id")} / Agenda {_artifact_id(revision_agenda, "agenda_id")}</p>
 <p>Revision Retest Scaffold：{_artifact_id(retest_trial, "trial_id")} / Dataset <code>{escape(retest_trial.dataset_id if retest_trial and retest_trial.dataset_id else "n/a")}</code> / Split {_artifact_id(retest_split, "manifest_id")}</p>
+{_revision_retest_task_plan_panel(snapshot.latest_strategy_revision_retest_task_plan)}
 {_plain_list(snapshot.latest_strategy_revision_next_required_artifacts, empty="目前沒有 pending retest scaffold")}
 {_plain_list(revision.entry_rules + revision.exit_rules + revision.risk_rules if revision else [], empty="目前沒有 DRAFT 修正候選")}
 """

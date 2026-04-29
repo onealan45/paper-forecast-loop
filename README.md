@@ -112,6 +112,9 @@ factory:
 - PR16 adds a read-only revision retest task planner: it turns the latest DRAFT
   revision and retest scaffold into ordered research tasks, missing inputs, and
   runnable command arguments when prerequisites exist.
+- PR17 surfaces that retest task plan in the dashboard and operator console so
+  the UX shows the next concrete research task, status, missing inputs, blocked
+  reason, and command args.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -740,6 +743,14 @@ PR16 makes the next retest step explicit:
 
 This is still read-only planning. It helps the self-evolving loop know what to
 study next, but it does not execute a retest or promote a revised strategy.
+
+PR17 makes the task plan visible:
+
+- the static dashboard shows the next retest research task in the strategy
+  revision panel;
+- the operator console overview and research page show the same task status,
+  missing inputs, blocked reason, and command args;
+- the UX still does not execute any command or create downstream evidence.
 
 ### Strategy-Visible UX
 

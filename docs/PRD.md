@@ -106,6 +106,9 @@ The PRD follows that decision:
 - PR16 adds Revision Retest Task Plan: the system can inspect the current DRAFT
   revision retest chain and emit ordered next research tasks, missing inputs,
   and runnable command arguments without writing artifacts.
+- PR17 adds Revision Retest Task Plan UX: the dashboard and operator console
+  show the next retest task, status, blocked reason, missing inputs, and command
+  args without executing them.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -148,6 +151,9 @@ Product implications:
 - Revision retest planning must make the next research action explicit. If the
   next step needs human or agent-supplied split windows or future shadow returns,
   the system should report that as blocked rather than inventing evidence.
+- Revision retest planning must also be visible in the UX so strategy
+  self-evolution is inspectable from the operator surfaces, not only from CLI
+  JSON.
 - The evaluation path must be deterministic, versioned, and auditable.
 - Failed experiments must be retained as evidence, not discarded.
 - Promotion inside the research loop must depend on research evidence, not on
@@ -556,6 +562,7 @@ V1 MVP should include:
   state, paper-shadow attribution, and autopilot next research action
 - read-only revision retest task planning that exposes next research tasks,
   missing inputs, linked artifacts, and runnable command arguments when safe
+- dashboard and operator console visibility for the latest retest task plan
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

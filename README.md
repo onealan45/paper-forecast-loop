@@ -177,6 +177,9 @@ factory:
   lineage paper-shadow outcome's after-cost excess return, delta versus the
   previous outcome, improvement/worsening label, action, and failure
   attribution.
+- PR38 adds a strategy lineage performance verdict: the UX now summarizes
+  whether the latest revision path is improving, worsening, stalled, or missing
+  evidence before showing the raw trajectory rows.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

@@ -174,6 +174,10 @@ The PRD follows that decision:
   outcome now exposes after-cost excess return, delta versus the previous
   outcome, improvement/worsening label, action, and failure attribution in the
   dashboard and operator console.
+- PR38 adds Strategy Lineage Performance Verdict: dashboard and operator
+  console now show a concise verdict, improvement/worsening/unknown counts,
+  latest delta, latest strategy action, and latest failure focus before the raw
+  trajectory rows.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -251,6 +255,9 @@ Product implications:
   because user- or agent-authored hypotheses may contain arbitrary text.
 - Strategy lineage should show whether each revision improved or worsened
   paper-shadow evidence, not only that a revision exists.
+- Strategy lineage should summarize the trajectory in human terms before raw
+  rows so the user can see whether self-evolution is currently improving,
+  worsening, stalled, or missing evidence.
 - The evaluation path must be deterministic, versioned, and auditable.
 - Failed experiments must be retained as evidence, not discarded.
 - Promotion inside the research loop must depend on research evidence, not on
@@ -675,6 +682,8 @@ V1 MVP should include:
 - strategy lineage performance trajectory showing after-cost excess, delta,
   improvement/worsening label, action, and failure attributions per shadow
   outcome
+- strategy lineage performance verdict summarizing latest trend, counts,
+  latest action, and latest failure focus before the raw trajectory rows
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,
@@ -764,7 +773,7 @@ correctness defects:
   the UX, PR34 hardens branching/missing-parent/cycle edge cases, and PR35
   exposes revision hypothesis/source/fix summaries, and PR36 adds malicious HTML
   escaping regressions for those fields. PR37 exposes lineage performance
-  trajectory, but
+  trajectory and PR38 adds the human-readable lineage verdict, but
   strong strategy generation, model training, deeper self-evolving skill loops,
   and optimizers are not included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved

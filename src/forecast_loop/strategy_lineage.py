@@ -42,6 +42,14 @@ class StrategyLineageSummary:
     best_excess_return_after_costs: float | None
     worst_excess_return_after_costs: float | None
     latest_outcome_id: str | None
+    performance_verdict: str
+    improved_outcome_count: int
+    worsened_outcome_count: int
+    unknown_outcome_count: int
+    latest_change_label: str
+    latest_delta_vs_previous_excess: float | None
+    primary_failure_attribution: str | None
+    latest_recommended_strategy_action: str | None
 
 
 def build_strategy_lineage_summary(
@@ -66,6 +74,17 @@ def build_strategy_lineage_summary(
         for outcome in lineage_outcomes
         if outcome.excess_return_after_costs is not None
     ]
+    action_counts = dict(sorted(Counter(outcome.recommended_strategy_action for outcome in lineage_outcomes).items()))
+    failure_attribution_counts = dict(
+        sorted(
+            Counter(
+                attribution
+                for outcome in lineage_outcomes
+                for attribution in outcome.failure_attributions
+            ).items()
+        )
+    )
+    verdict = _lineage_performance_verdict(outcome_nodes, failure_attribution_counts)
 
     return StrategyLineageSummary(
         root_card_id=root_card.card_id,
@@ -74,19 +93,19 @@ def build_strategy_lineage_summary(
         outcome_nodes=outcome_nodes,
         revision_count=len(revision_cards),
         outcome_count=len(lineage_outcomes),
-        action_counts=dict(sorted(Counter(outcome.recommended_strategy_action for outcome in lineage_outcomes).items())),
-        failure_attribution_counts=dict(
-            sorted(
-                Counter(
-                    attribution
-                    for outcome in lineage_outcomes
-                    for attribution in outcome.failure_attributions
-                ).items()
-            )
-        ),
+        action_counts=action_counts,
+        failure_attribution_counts=failure_attribution_counts,
         best_excess_return_after_costs=max(excess_returns) if excess_returns else None,
         worst_excess_return_after_costs=min(excess_returns) if excess_returns else None,
         latest_outcome_id=lineage_outcomes[-1].outcome_id if lineage_outcomes else None,
+        performance_verdict=verdict["performance_verdict"],
+        improved_outcome_count=verdict["improved_outcome_count"],
+        worsened_outcome_count=verdict["worsened_outcome_count"],
+        unknown_outcome_count=verdict["unknown_outcome_count"],
+        latest_change_label=verdict["latest_change_label"],
+        latest_delta_vs_previous_excess=verdict["latest_delta_vs_previous_excess"],
+        primary_failure_attribution=verdict["primary_failure_attribution"],
+        latest_recommended_strategy_action=verdict["latest_recommended_strategy_action"],
     )
 
 
@@ -180,6 +199,56 @@ def _lineage_outcome_nodes(paper_shadow_outcomes: list[PaperShadowOutcome]) -> l
         if current_excess is not None:
             previous_excess = current_excess
     return nodes
+
+
+def _lineage_performance_verdict(
+    outcome_nodes: list[StrategyLineageOutcomeNode],
+    failure_attribution_counts: dict[str, int],
+) -> dict[str, object]:
+    improved = sum(1 for node in outcome_nodes if node.change_label == "改善")
+    worsened = sum(1 for node in outcome_nodes if node.change_label == "惡化")
+    unknown = sum(1 for node in outcome_nodes if node.change_label == "未知")
+    latest = outcome_nodes[-1] if outcome_nodes else None
+    primary_failure = _latest_or_primary_failure_attribution(latest, failure_attribution_counts)
+    return {
+        "performance_verdict": _performance_verdict_label(outcome_nodes, improved, worsened, unknown, latest),
+        "improved_outcome_count": improved,
+        "worsened_outcome_count": worsened,
+        "unknown_outcome_count": unknown,
+        "latest_change_label": latest.change_label if latest else "證據不足",
+        "latest_delta_vs_previous_excess": latest.delta_vs_previous_excess if latest else None,
+        "primary_failure_attribution": primary_failure,
+        "latest_recommended_strategy_action": latest.recommended_strategy_action if latest else None,
+    }
+
+
+def _performance_verdict_label(
+    outcome_nodes: list[StrategyLineageOutcomeNode],
+    improved: int,
+    worsened: int,
+    unknown: int,
+    latest: StrategyLineageOutcomeNode | None,
+) -> str:
+    if not outcome_nodes or unknown == len(outcome_nodes):
+        return "證據不足"
+    if latest and latest.change_label in {"改善", "惡化", "持平"}:
+        return latest.change_label
+    if worsened > improved:
+        return "偏弱"
+    if improved > worsened:
+        return "偏強"
+    return "觀察中"
+
+
+def _latest_or_primary_failure_attribution(
+    latest: StrategyLineageOutcomeNode | None,
+    failure_attribution_counts: dict[str, int],
+) -> str | None:
+    if latest and latest.failure_attributions:
+        return latest.failure_attributions[0]
+    if failure_attribution_counts:
+        return max(failure_attribution_counts.items(), key=lambda item: (item[1], item[0]))[0]
+    return None
 
 
 def _delta(current: float | None, previous: float | None) -> float | None:

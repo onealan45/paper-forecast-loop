@@ -880,6 +880,8 @@ def _strategy_lineage_panel(summary: StrategyLineageSummary | None) -> str:
     {_plain_list(summary.revision_card_ids)}
     <h4>Revision Tree</h4>
     {_strategy_lineage_tree(summary)}
+    <h4>表現結論</h4>
+    <p>{_strategy_lineage_performance_verdict(summary)}</p>
     <h4>表現軌跡</h4>
     {_strategy_lineage_performance_trajectory(summary)}
     <p>Shadow outcomes：{summary.outcome_count}</p>
@@ -905,6 +907,21 @@ def _strategy_lineage_tree(summary: StrategyLineageSummary | None) -> str:
             f" / Fixes {', '.join(node.failure_attributions) if node.failure_attributions else 'none'}"
             for node in summary.revision_nodes
         ]
+    )
+
+
+def _strategy_lineage_performance_verdict(summary: StrategyLineageSummary | None) -> str:
+    if summary is None:
+        return "目前沒有 lineage 表現結論。"
+    return (
+        f"{escape(summary.performance_verdict)}"
+        f" / 改善 {summary.improved_outcome_count}"
+        f" / 惡化 {summary.worsened_outcome_count}"
+        f" / 未知 {summary.unknown_outcome_count}"
+        f" / 最新 {escape(summary.latest_change_label)}"
+        f" / Delta {_format_number(summary.latest_delta_vs_previous_excess)}"
+        f" / 主要失敗 {escape(summary.primary_failure_attribution or 'none')}"
+        f" / 最新動作 {escape(summary.latest_recommended_strategy_action or 'none')}"
     )
 
 
@@ -1332,6 +1349,8 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
 <p>Lineage best/worst：{_format_number(lineage.best_excess_return_after_costs if lineage else None)} / {_format_number(lineage.worst_excess_return_after_costs if lineage else None)} / Latest <code>{escape(lineage.latest_outcome_id if lineage and lineage.latest_outcome_id else "none")}</code></p>
 <p>Revision Tree</p>
 {_strategy_lineage_tree(lineage)}
+<p>表現結論</p>
+<p>{_strategy_lineage_performance_verdict(lineage)}</p>
 <p>表現軌跡</p>
 {_strategy_lineage_performance_trajectory(lineage)}
 {_plain_list(list(lineage.action_counts.keys()) if lineage else [], empty="目前沒有 lineage action")}

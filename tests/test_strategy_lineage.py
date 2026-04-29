@@ -281,6 +281,14 @@ def test_strategy_lineage_summary_includes_multi_generation_revisions():
     assert summary.best_excess_return_after_costs == -0.03
     assert summary.worst_excess_return_after_costs == -0.09
     assert summary.latest_outcome_id == "second-revision-fail"
+    assert summary.performance_verdict == "惡化"
+    assert summary.improved_outcome_count == 0
+    assert summary.worsened_outcome_count == 2
+    assert summary.unknown_outcome_count == 0
+    assert summary.latest_change_label == "惡化"
+    assert summary.latest_delta_vs_previous_excess == -0.04
+    assert summary.primary_failure_attribution == "drawdown_breach"
+    assert summary.latest_recommended_strategy_action == "QUARANTINE_STRATEGY"
 
 
 def test_strategy_lineage_summary_preserves_branching_revision_tree_order():
@@ -354,6 +362,37 @@ def test_strategy_lineage_outcome_nodes_do_not_treat_missing_excess_as_baseline(
         ("first-known-excess", -0.01, None, "基準"),
         ("second-known-excess", -0.04, -0.03, "惡化"),
     ]
+    assert summary.unknown_outcome_count == 1
+
+
+def test_strategy_lineage_verdict_reports_insufficient_evidence_when_all_outcomes_lack_excess():
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    parent = _card("strategy-card:parent")
+
+    summary = build_strategy_lineage_summary(
+        root_card=parent,
+        strategy_cards=[parent],
+        paper_shadow_outcomes=[
+            _outcome(
+                "missing-excess",
+                card_id=parent.card_id,
+                created_at=now,
+                action="REVISE_STRATEGY",
+                excess=None,
+                attributions=["missing_outcome_metric"],
+            ),
+        ],
+    )
+
+    assert summary is not None
+    assert summary.performance_verdict == "證據不足"
+    assert summary.improved_outcome_count == 0
+    assert summary.worsened_outcome_count == 0
+    assert summary.unknown_outcome_count == 1
+    assert summary.latest_change_label == "未知"
+    assert summary.latest_delta_vs_previous_excess is None
+    assert summary.primary_failure_attribution == "missing_outcome_metric"
+    assert summary.latest_recommended_strategy_action == "REVISE_STRATEGY"
 
 
 def test_strategy_lineage_summary_falls_back_to_current_card_when_parent_missing():

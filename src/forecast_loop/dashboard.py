@@ -999,6 +999,7 @@ def _render_strategy_lineage_summary(summary: StrategyLineageSummary | None) -> 
           <dt>Revision Count</dt><dd>{summary.revision_count}</dd>
           <dt>Revision Cards</dt><dd>{_dashboard_list_inline(summary.revision_card_ids)}</dd>
           <dt>Revision Tree</dt><dd>{_dashboard_revision_tree(summary)}</dd>
+          <dt>表現結論</dt><dd>{_dashboard_performance_verdict(summary)}</dd>
           <dt>表現軌跡</dt><dd>{_dashboard_performance_trajectory(summary)}</dd>
           <dt>Shadow Outcomes</dt><dd>{summary.outcome_count}</dd>
           <dt>Actions</dt><dd>{_dashboard_dict_inline(summary.action_counts)}</dd>
@@ -1020,6 +1021,19 @@ def _dashboard_revision_tree(summary: StrategyLineageSummary) -> str:
         f" / Source {escape(node.source_outcome_id or 'none')}"
         f" / Fixes {escape('；'.join(node.failure_attributions) if node.failure_attributions else 'none')}"
         for node in summary.revision_nodes
+    )
+
+
+def _dashboard_performance_verdict(summary: StrategyLineageSummary) -> str:
+    return (
+        f"{escape(summary.performance_verdict)}"
+        f" / 改善 {summary.improved_outcome_count}"
+        f" / 惡化 {summary.worsened_outcome_count}"
+        f" / 未知 {summary.unknown_outcome_count}"
+        f" / 最新 {escape(summary.latest_change_label)}"
+        f" / Delta {_format_optional_number(summary.latest_delta_vs_previous_excess)}"
+        f" / 主要失敗 {escape(summary.primary_failure_attribution or 'none')}"
+        f" / 最新動作 {escape(summary.latest_recommended_strategy_action or 'none')}"
     )
 
 

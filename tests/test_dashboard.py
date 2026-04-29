@@ -300,6 +300,31 @@ def _seed_dashboard_revision_retest_scaffold(repository: JsonFileRepository, now
     repository.save_split_manifest(split)
 
 
+def _seed_dashboard_revision_retest_autopilot_run(repository: JsonFileRepository, now: datetime) -> None:
+    repository.save_research_autopilot_run(
+        ResearchAutopilotRun(
+            run_id="research-autopilot-run:dashboard-revision-retest",
+            created_at=now,
+            symbol="BTC-USD",
+            agenda_id="research-agenda:dashboard-revision",
+            strategy_card_id="strategy-card:dashboard-revision",
+            experiment_trial_id="experiment-trial:dashboard-revision-retest",
+            locked_evaluation_id="locked-evaluation:dashboard-revision-retest",
+            leaderboard_entry_id="leaderboard-entry:dashboard-revision-retest",
+            strategy_decision_id=None,
+            paper_shadow_outcome_id="paper-shadow-outcome:dashboard-revision-retest",
+            steps=[
+                {"name": "revision_card", "status": "completed", "artifact_id": "strategy-card:dashboard-revision"},
+                {"name": "paper_shadow_outcome", "status": "completed", "artifact_id": "paper-shadow-outcome:dashboard-revision-retest"},
+            ],
+            loop_status="BLOCKED",
+            next_research_action="REPAIR_EVIDENCE_CHAIN",
+            blocked_reasons=["locked_evaluation_not_rankable"],
+            decision_basis="research_paper_autopilot_loop",
+        )
+    )
+
+
 def _seed_dashboard_distractor_strategy_research_without_run(
     repository: JsonFileRepository,
     now: datetime,
@@ -1109,6 +1134,47 @@ def test_dashboard_shows_revision_retest_task_run_log(tmp_path):
     assert "lock_evaluation_protocol" in html
     assert "automation-run:dashboard-wrong-revision-newer" not in html
     assert "automation-run:dashboard-unrelated-newer" not in html
+
+
+def test_dashboard_shows_revision_retest_autopilot_run(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    _seed_dashboard_strategy_research(repository, now)
+    _seed_dashboard_revision_candidate(repository, now + timedelta(minutes=10))
+    _seed_dashboard_revision_retest_scaffold(repository, now + timedelta(minutes=20))
+    _seed_dashboard_revision_retest_autopilot_run(repository, now + timedelta(minutes=30))
+    repository.save_research_autopilot_run(
+        ResearchAutopilotRun(
+            run_id="research-autopilot-run:dashboard-parent-newer",
+            created_at=now + timedelta(minutes=40),
+            symbol="BTC-USD",
+            agenda_id="research-agenda:dashboard-visible",
+            strategy_card_id="strategy-card:dashboard-visible",
+            experiment_trial_id="experiment-trial:dashboard-visible",
+            locked_evaluation_id="locked-evaluation:dashboard-visible",
+            leaderboard_entry_id="leaderboard-entry:dashboard-visible",
+            strategy_decision_id=None,
+            paper_shadow_outcome_id="paper-shadow-outcome:dashboard-visible",
+            steps=[{"name": "parent_strategy", "status": "completed", "artifact_id": "strategy-card:dashboard-visible"}],
+            loop_status="REVISION_REQUIRED",
+            next_research_action="PARENT_SHOULD_NOT_RENDER_AS_REVISION_RETEST",
+            blocked_reasons=["parent_strategy_failure"],
+            decision_basis="research_paper_autopilot_loop",
+        )
+    )
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+    html = render_dashboard_html(snapshot)
+
+    assert snapshot.latest_strategy_revision_retest_autopilot_run is not None
+    assert snapshot.latest_strategy_revision_retest_autopilot_run.run_id == "research-autopilot-run:dashboard-revision-retest"
+    assert "最新 revision retest autopilot run" in html
+    assert "research-autopilot-run:dashboard-revision-retest" in html
+    assert "REPAIR_EVIDENCE_CHAIN" in html
+    assert "locked_evaluation_not_rankable" in html
+    assert "paper-shadow-outcome:dashboard-revision-retest" in html
 
 
 def test_dashboard_revision_retest_task_plan_falls_back_when_source_missing(tmp_path):

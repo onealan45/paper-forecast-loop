@@ -495,6 +495,39 @@ def _seed_visible_revision_retest_scaffold(repository: JsonFileRepository, now: 
     repository.save_split_manifest(split)
 
 
+def _seed_visible_revision_retest_autopilot_run(repository: JsonFileRepository, now: datetime) -> None:
+    repository.save_research_autopilot_run(
+        ResearchAutopilotRun(
+            run_id="research-autopilot-run:visible-revision-retest",
+            created_at=now,
+            symbol="BTC-USD",
+            agenda_id="research-agenda:visible-revision",
+            strategy_card_id="strategy-card:visible-revision",
+            experiment_trial_id="experiment-trial:visible-revision-retest",
+            locked_evaluation_id="locked-evaluation:visible-revision-retest",
+            leaderboard_entry_id="leaderboard-entry:visible-revision-retest",
+            strategy_decision_id=None,
+            paper_shadow_outcome_id="paper-shadow-outcome:visible-revision-retest",
+            steps=[
+                {
+                    "name": "revision_card",
+                    "status": "completed",
+                    "artifact_id": "strategy-card:visible-revision",
+                },
+                {
+                    "name": "paper_shadow_outcome",
+                    "status": "completed",
+                    "artifact_id": "paper-shadow-outcome:visible-revision-retest",
+                },
+            ],
+            loop_status="BLOCKED",
+            next_research_action="REPAIR_EVIDENCE_CHAIN",
+            blocked_reasons=["locked_evaluation_not_rankable"],
+            decision_basis="research_paper_autopilot_loop",
+        )
+    )
+
+
 def _seed_distractor_strategy_research_without_run(repository: JsonFileRepository, now: datetime) -> None:
     card = replace(
         _visible_strategy_card(now),
@@ -902,6 +935,47 @@ def test_operator_console_shows_revision_retest_task_run_log(tmp_path):
         assert "lock_evaluation_protocol" in html
         assert "automation-run:visible-wrong-revision-newer" not in html
     assert "automation-run:visible-unrelated-newer" not in research_html
+
+
+def test_operator_console_shows_revision_retest_autopilot_run(tmp_path):
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_visible_strategy_research(repository, now)
+    _seed_visible_revision_candidate(repository, now + timedelta(minutes=10))
+    _seed_visible_revision_retest_scaffold(repository, now + timedelta(minutes=20))
+    _seed_visible_revision_retest_autopilot_run(repository, now + timedelta(minutes=30))
+    repository.save_research_autopilot_run(
+        ResearchAutopilotRun(
+            run_id="research-autopilot-run:visible-parent-newer",
+            created_at=now + timedelta(minutes=40),
+            symbol="BTC-USD",
+            agenda_id="research-agenda:visible",
+            strategy_card_id="strategy-card:visible",
+            experiment_trial_id="experiment-trial:visible",
+            locked_evaluation_id="locked-evaluation:visible",
+            leaderboard_entry_id="leaderboard-entry:visible",
+            strategy_decision_id=None,
+            paper_shadow_outcome_id="paper-shadow-outcome:visible",
+            steps=[{"name": "parent_strategy", "status": "completed", "artifact_id": "strategy-card:visible"}],
+            loop_status="REVISION_REQUIRED",
+            next_research_action="PARENT_SHOULD_NOT_RENDER_AS_REVISION_RETEST",
+            blocked_reasons=["parent_strategy_failure"],
+            decision_basis="research_paper_autopilot_loop",
+        )
+    )
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    research_html = render_operator_console_page(snapshot, page="research")
+    overview_html = render_operator_console_page(snapshot, page="overview")
+
+    assert snapshot.latest_strategy_revision_retest_autopilot_run is not None
+    assert snapshot.latest_strategy_revision_retest_autopilot_run.run_id == "research-autopilot-run:visible-revision-retest"
+    for html in (research_html, overview_html):
+        assert "最新 revision retest autopilot run" in html
+        assert "research-autopilot-run:visible-revision-retest" in html
+        assert "REPAIR_EVIDENCE_CHAIN" in html
+        assert "locked_evaluation_not_rankable" in html
+        assert "paper-shadow-outcome:visible-revision-retest" in html
 
 
 def test_operator_console_revision_retest_task_plan_falls_back_when_source_missing(tmp_path):

@@ -70,6 +70,7 @@ class OperatorConsoleSnapshot:
     latest_strategy_revision_next_required_artifacts: list[str]
     latest_strategy_revision_retest_task_plan: RevisionRetestTaskPlan | None
     latest_strategy_revision_retest_task_run: AutomationRun | None
+    latest_strategy_revision_retest_autopilot_run: ResearchAutopilotRun | None
     repair_requests: list[RepairRequest]
     control_events: list[PaperControlEvent]
     control_state: PaperControlState
@@ -146,6 +147,7 @@ def build_operator_console_snapshot(
         symbol=symbol,
         revision_card=revision_card,
     )
+    revision_autopilot_run = _latest_revision_retest_autopilot_run(research_autopilot_runs, revision_card)
 
     return OperatorConsoleSnapshot(
         storage_dir=storage_path,
@@ -186,6 +188,7 @@ def build_operator_console_snapshot(
         ),
         latest_strategy_revision_retest_task_plan=revision_task_plan,
         latest_strategy_revision_retest_task_run=_latest_revision_retest_task_run(automation_runs, revision_task_plan),
+        latest_strategy_revision_retest_autopilot_run=revision_autopilot_run,
         repair_requests=repair_requests,
         control_events=control_events,
         control_state=control_state,
@@ -249,6 +252,23 @@ def _latest_revision_retest_task_run(
         if automation_run_matches_revision_retest_plan(run, task_plan)
     ]
     return max(matches, key=lambda run: run.completed_at) if matches else None
+
+
+def _latest_revision_retest_autopilot_run(
+    runs: list[ResearchAutopilotRun],
+    revision_card: StrategyCard | None,
+) -> ResearchAutopilotRun | None:
+    if revision_card is None:
+        return None
+    matches = [
+        run
+        for run in runs
+        if run.strategy_card_id == revision_card.card_id
+        and run.decision_basis == "research_paper_autopilot_loop"
+        and run.strategy_decision_id is None
+        and run.paper_shadow_outcome_id is not None
+    ]
+    return max(matches, key=lambda run: run.created_at) if matches else None
 
 
 def render_operator_console_page(
@@ -1157,6 +1177,7 @@ def _revision_candidate_panel(snapshot: OperatorConsoleSnapshot, *, wide: bool) 
     {_plain_list(snapshot.latest_strategy_revision_next_required_artifacts)}
     {_revision_retest_task_plan_panel(snapshot.latest_strategy_revision_retest_task_plan)}
     {_revision_retest_task_run_panel(snapshot.latest_strategy_revision_retest_task_run)}
+    {_revision_retest_autopilot_run_panel(snapshot.latest_strategy_revision_retest_autopilot_run)}
   </article>
 """
 
@@ -1198,6 +1219,25 @@ def _revision_retest_task_run_panel(run: AutomationRun | None) -> str:
 """
 
 
+def _revision_retest_autopilot_run_panel(run: ResearchAutopilotRun | None) -> str:
+    if run is None:
+        return """
+    <h4>最新 revision retest autopilot run</h4>
+    <p class="muted">尚未記錄 completed revision retest chain 的 research autopilot run；可用 <code>record-revision-retest-autopilot-run</code> 寫入閉環證據。</p>
+"""
+    return f"""
+    <h4>最新 revision retest autopilot run</h4>
+    <p>Status：<span class="{_automation_status_class(run.loop_status)}">{escape(run.loop_status)}</span></p>
+    <p>Run ID：<code>{escape(run.run_id)}</code></p>
+    <p>Next action：{escape(run.next_research_action)}</p>
+    <p>Paper-shadow outcome：<code>{escape(run.paper_shadow_outcome_id or "none")}</code></p>
+    <p>Blocked：</p>
+    {_plain_list(run.blocked_reasons)}
+    {_autopilot_steps(run)}
+    <p class="muted">這是 revision retest 完整閉環的 research autopilot 紀錄；只顯示，不執行。</p>
+"""
+
+
 def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
     card = snapshot.latest_strategy_card
     leaderboard = snapshot.latest_leaderboard_entry
@@ -1218,6 +1258,7 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
 <p>Revision Retest Scaffold：{_artifact_id(retest_trial, "trial_id")} / Dataset <code>{escape(retest_trial.dataset_id if retest_trial and retest_trial.dataset_id else "n/a")}</code> / Split {_artifact_id(retest_split, "manifest_id")}</p>
 {_revision_retest_task_plan_panel(snapshot.latest_strategy_revision_retest_task_plan)}
 {_revision_retest_task_run_panel(snapshot.latest_strategy_revision_retest_task_run)}
+{_revision_retest_autopilot_run_panel(snapshot.latest_strategy_revision_retest_autopilot_run)}
 {_plain_list(snapshot.latest_strategy_revision_next_required_artifacts, empty="目前沒有 pending retest scaffold")}
 {_plain_list(revision.entry_rules + revision.exit_rules + revision.risk_rules if revision else [], empty="目前沒有 DRAFT 修正候選")}
 """
@@ -1314,7 +1355,7 @@ def _automation_steps(run: AutomationRun) -> str:
 
 
 def _automation_status_class(status: str) -> str:
-    if status in {"RETEST_TASK_BLOCKED", "failed", "repair_required"}:
+    if status in {"BLOCKED", "RETEST_TASK_BLOCKED", "failed", "repair_required"}:
         return "status alert"
     return "status"
 

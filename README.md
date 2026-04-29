@@ -152,6 +152,9 @@ factory:
 - PR29 adds a direct `record-revision-retest-autopilot-run` command that
   resolves the completed revision retest plan and records the research autopilot
   loop without manually copying every evidence ID.
+- PR30 makes those completed revision retest autopilot runs visible in the
+  dashboard and operator console, so a closed self-evolution loop is visible
+  from the strategy UX rather than only from `research_autopilot_runs.jsonl`.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -1454,6 +1457,10 @@ python run_forecast_loop.py record-revision-retest-autopilot-run --storage-dir .
 ```
 
 The command refuses incomplete chains and writes no fake strategy decision.
+After it is recorded, the dashboard and operator console show the latest
+revision-scoped autopilot run beside the retest task plan and task-run log,
+including loop status, next research action, blocked reasons,
+paper-shadow outcome, and recorded steps.
 
 Generate a Markdown research report from existing artifacts:
 
@@ -1545,6 +1552,7 @@ This milestone improves correctness and auditability, but it does not yet solve 
   PR13 makes those candidates visible in the dashboard and operator console,
   PR27 keeps completed chains visible as completed revision evidence, and PR28
   records completed revision retests without fake decision artifacts. PR29 adds
-  a one-command autopilot run recorder for completed revision retests, but full
+  a one-command autopilot run recorder for completed revision retests, and PR30
+  exposes those revision-scoped autopilot runs in the strategy UX, but full
   scheduling, autonomous strategy generation, automatic promotion, and deeper
   CPCV/PBO/DSR/bootstrap statistics remain deferred

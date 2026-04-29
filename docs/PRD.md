@@ -148,6 +148,9 @@ The PRD follows that decision:
 - PR29 adds Revision Retest Autopilot Run CLI: completed revision retest chains
   can now be recorded as research autopilot runs from one command that resolves
   plan evidence automatically.
+- PR30 adds Revision Retest Autopilot Run UX: dashboard and operator console
+  now show the latest revision-scoped research autopilot run next to the retest
+  task plan and task-run log.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -206,6 +209,9 @@ Product implications:
 - Completed revision retest chains should be easy to record from the CLI; the
   operator should not need to manually copy every evidence ID after the plan is
   complete.
+- Completed revision retest autopilot runs should be visible in strategy UX
+  surfaces, including loop status, next research action, blocked reasons,
+  paper-shadow outcome, and recorded steps.
 - The evaluation path must be deterministic, versioned, and auditable.
 - Failed experiments must be retained as evidence, not discarded.
 - Promotion inside the research loop must depend on research evidence, not on
@@ -616,6 +622,9 @@ V1 MVP should include:
   missing inputs, linked artifacts, and runnable command arguments when safe
 - dashboard and operator console visibility for the latest retest task plan
 - audit-visible retest task run logs using existing automation run artifacts
+- dashboard and operator console visibility for completed revision retest
+  autopilot runs, including loop status, next action, blocked reasons,
+  paper-shadow outcome, and steps
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,
@@ -697,7 +706,9 @@ correctness defects:
   shadow-outcome execution when real observation inputs are supplied, and PR27
   keeps completed chains visible as completed revision evidence, and PR28
   records revision retest autopilot runs without fake decision artifacts. PR29
-  adds one-command recording for completed revision retest autopilot runs, but
+  adds one-command recording for completed revision retest autopilot runs, and
+  PR30 makes those completed revision retest autopilot runs visible in the
+  dashboard and operator console, but
   strong strategy generation, model training, deeper self-evolving skill loops,
   and optimizers are not included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved

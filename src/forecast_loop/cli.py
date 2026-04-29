@@ -59,6 +59,7 @@ from forecast_loop.stock_data import (
 )
 from forecast_loop.strategy_evolution import propose_strategy_revision
 from forecast_loop.revision_retest import create_revision_retest_scaffold
+from forecast_loop.revision_retest_executor import execute_revision_retest_next_task
 from forecast_loop.revision_retest_plan import build_revision_retest_task_plan
 from forecast_loop.revision_retest_run_log import record_revision_retest_task_run
 from forecast_loop.sqlite_repository import (
@@ -489,6 +490,12 @@ def main(argv: list[str] | None = None) -> int:
     record_retest_task_run_cmd.add_argument("--symbol", default="BTC-USD")
     record_retest_task_run_cmd.add_argument("--now")
 
+    execute_retest_task_cmd = subparsers.add_parser("execute-revision-retest-next-task")
+    execute_retest_task_cmd.add_argument("--storage-dir", required=True)
+    execute_retest_task_cmd.add_argument("--revision-card-id")
+    execute_retest_task_cmd.add_argument("--symbol", default="BTC-USD")
+    execute_retest_task_cmd.add_argument("--now")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -589,6 +596,8 @@ def main(argv: list[str] | None = None) -> int:
             return _revision_retest_plan(args)
         if args.command == "record-revision-retest-task-run":
             return _record_revision_retest_task_run(args)
+        if args.command == "execute-revision-retest-next-task":
+            return _execute_revision_retest_next_task(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -1712,6 +1721,24 @@ def _record_revision_retest_task_run(args) -> int:
         raise ValueError(f"storage path is not a directory: {storage_dir}")
     created_at = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
     result = record_revision_retest_task_run(
+        repository=JsonFileRepository(storage_dir),
+        storage_dir=storage_dir,
+        symbol=args.symbol.upper(),
+        created_at=created_at,
+        revision_card_id=args.revision_card_id,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _execute_revision_retest_next_task(args) -> int:
+    storage_dir = Path(args.storage_dir)
+    if not storage_dir.exists():
+        raise ValueError(f"storage directory does not exist: {storage_dir}")
+    if not storage_dir.is_dir():
+        raise ValueError(f"storage path is not a directory: {storage_dir}")
+    created_at = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    result = execute_revision_retest_next_task(
         repository=JsonFileRepository(storage_dir),
         storage_dir=storage_dir,
         symbol=args.symbol.upper(),

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -62,6 +63,8 @@ from forecast_loop.stock_data import (
     run_stock_candle_health,
 )
 from forecast_loop.strategy_evolution import propose_strategy_revision
+from forecast_loop.strategy_lineage import build_strategy_lineage_summary
+from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.revision_retest import create_revision_retest_scaffold
 from forecast_loop.revision_retest_executor import execute_revision_retest_next_task
 from forecast_loop.revision_retest_plan import build_revision_retest_task_plan
@@ -110,6 +113,10 @@ def main(argv: list[str] | None = None) -> int:
     operator_console.add_argument("--page", choices=OPERATOR_CONSOLE_PAGES, default="overview")
     operator_console.add_argument("--output")
     operator_console.add_argument("--now")
+
+    strategy_lineage = subparsers.add_parser("strategy-lineage")
+    strategy_lineage.add_argument("--storage-dir", required=True)
+    strategy_lineage.add_argument("--symbol", default="BTC-USD")
 
     operator_control = subparsers.add_parser("operator-control")
     operator_control.add_argument("--storage-dir", required=True)
@@ -523,6 +530,8 @@ def main(argv: list[str] | None = None) -> int:
             return _render_dashboard(args)
         if args.command == "operator-console":
             return _operator_console(args)
+        if args.command == "strategy-lineage":
+            return _strategy_lineage(args)
         if args.command == "operator-control":
             return _operator_control(args)
         if args.command == "repair-storage":
@@ -940,6 +949,45 @@ def _operator_console(args) -> int:
         port=args.port,
         symbol=args.symbol,
         now=now,
+    )
+    return 0
+
+
+def _strategy_lineage(args) -> int:
+    storage_dir = Path(args.storage_dir)
+    if not storage_dir.exists():
+        raise ValueError(f"storage directory does not exist: {storage_dir}")
+    if not storage_dir.is_dir():
+        raise ValueError(f"storage path is not a directory: {storage_dir}")
+    repository = JsonFileRepository(storage_dir)
+    symbol = args.symbol.upper()
+    strategy_cards = [item for item in repository.load_strategy_cards() if symbol in item.symbols]
+    paper_shadow_outcomes = [item for item in repository.load_paper_shadow_outcomes() if item.symbol == symbol]
+    research_chain = resolve_latest_strategy_research_chain(
+        symbol=symbol,
+        strategy_cards=strategy_cards,
+        experiment_trials=repository.load_experiment_trials(),
+        locked_evaluations=repository.load_locked_evaluation_results(),
+        split_manifests=repository.load_split_manifests(),
+        leaderboard_entries=repository.load_leaderboard_entries(),
+        paper_shadow_outcomes=paper_shadow_outcomes,
+        research_agendas=repository.load_research_agendas(),
+        research_autopilot_runs=repository.load_research_autopilot_runs(),
+    )
+    summary = build_strategy_lineage_summary(
+        root_card=research_chain.strategy_card,
+        strategy_cards=strategy_cards,
+        paper_shadow_outcomes=paper_shadow_outcomes,
+    )
+    print(
+        json.dumps(
+            {
+                "storage_dir": str(storage_dir.resolve()),
+                "symbol": symbol,
+                "strategy_lineage": asdict(summary) if summary else None,
+            },
+            ensure_ascii=False,
+        )
     )
     return 0
 

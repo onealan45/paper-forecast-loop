@@ -181,6 +181,9 @@ The PRD follows that decision:
 - PR39 adds Strategy Lineage Next Research Focus: dashboard and operator
   console now translate the lineage verdict into a concrete next study
   direction for the self-evolving strategy loop.
+- PR40 adds Strategy Lineage CLI: the same lineage summary is available as
+  read-only JSON for automation and research consumers, including performance
+  verdict and next research focus.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -691,6 +694,8 @@ V1 MVP should include:
   latest action, and latest failure focus before the raw trajectory rows
 - strategy lineage next research focus translating the verdict into an
   inspectable next study direction
+- read-only `strategy-lineage` CLI output exposing the latest lineage summary
+  as JSON for non-HTML automation consumers
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,
@@ -781,7 +786,8 @@ correctness defects:
   exposes revision hypothesis/source/fix summaries, and PR36 adds malicious HTML
   escaping regressions for those fields. PR37 exposes lineage performance
   trajectory, PR38 adds the human-readable lineage verdict, and PR39 adds the
-  next research focus, but
+  next research focus, and PR40 exposes the same summary through a read-only
+  CLI, but
   strong strategy generation, model training, deeper self-evolving skill loops,
   and optimizers are not included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved

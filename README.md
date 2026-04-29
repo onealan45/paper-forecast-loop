@@ -183,6 +183,9 @@ factory:
 - PR39 adds a strategy lineage next research focus: the UX now turns the
   verdict into a concrete next study direction, such as repairing drawdown
   breach or starting a new strategy hypothesis.
+- PR40 adds a read-only `strategy-lineage` CLI so automation and research
+  loops can consume the latest lineage summary JSON, including performance
+  verdict and next research focus, without scraping dashboard HTML.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -260,6 +263,7 @@ This version intentionally includes:
   - `replay-range`
   - `render-dashboard`
   - `operator-console`
+  - `strategy-lineage`
   - `operator-control`
   - `repair-storage`
   - `decide`
@@ -1190,6 +1194,17 @@ python run_forecast_loop.py decide-all --storage-dir .\paper_storage\manual-mult
 
 `decide-all` evaluates each symbol independently. It does not optimize
 cross-asset allocation or rebalance a portfolio.
+
+Inspect the latest strategy lineage summary as machine-readable JSON:
+
+```powershell
+python run_forecast_loop.py strategy-lineage --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD
+```
+
+`strategy-lineage` is read-only. It exposes the same root strategy, revision
+tree, paper-shadow outcome trajectory, performance verdict, and next research
+focus used by the dashboard/operator console so automation can route research
+without parsing HTML.
 
 Create a local paper order from the latest strategy decision:
 

@@ -33,6 +33,7 @@ from forecast_loop.models import (
     WalkForwardValidation,
 )
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
+from forecast_loop.revision_retest_run_log import automation_run_matches_revision_retest_plan
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.storage import JsonFileRepository
 
@@ -68,6 +69,7 @@ class OperatorConsoleSnapshot:
     latest_strategy_revision_split_manifest: SplitManifest | None
     latest_strategy_revision_next_required_artifacts: list[str]
     latest_strategy_revision_retest_task_plan: RevisionRetestTaskPlan | None
+    latest_strategy_revision_retest_task_run: AutomationRun | None
     repair_requests: list[RepairRequest]
     control_events: list[PaperControlEvent]
     control_state: PaperControlState
@@ -183,6 +185,7 @@ def build_operator_console_snapshot(
             else []
         ),
         latest_strategy_revision_retest_task_plan=revision_task_plan,
+        latest_strategy_revision_retest_task_run=_latest_revision_retest_task_run(automation_runs, revision_task_plan),
         repair_requests=repair_requests,
         control_events=control_events,
         control_state=control_state,
@@ -232,6 +235,20 @@ def _safe_revision_retest_task_plan(
         )
     except ValueError:
         return None
+
+
+def _latest_revision_retest_task_run(
+    runs: list[AutomationRun],
+    task_plan: RevisionRetestTaskPlan | None,
+) -> AutomationRun | None:
+    if task_plan is None:
+        return None
+    matches = [
+        run
+        for run in runs
+        if automation_run_matches_revision_retest_plan(run, task_plan)
+    ]
+    return max(matches, key=lambda run: run.completed_at) if matches else None
 
 
 def render_operator_console_page(
@@ -1139,6 +1156,7 @@ def _revision_candidate_panel(snapshot: OperatorConsoleSnapshot, *, wide: bool) 
     <p>Next required：</p>
     {_plain_list(snapshot.latest_strategy_revision_next_required_artifacts)}
     {_revision_retest_task_plan_panel(snapshot.latest_strategy_revision_retest_task_plan)}
+    {_revision_retest_task_run_panel(snapshot.latest_strategy_revision_retest_task_run)}
   </article>
 """
 
@@ -1163,6 +1181,23 @@ def _revision_retest_task_plan_panel(plan: RevisionRetestTaskPlan | None) -> str
 """
 
 
+def _revision_retest_task_run_panel(run: AutomationRun | None) -> str:
+    if run is None:
+        return """
+    <h4>最新 retest task run log</h4>
+    <p class="muted">尚未記錄 retest task run log；可用 <code>record-revision-retest-task-run</code> 寫入唯讀稽核紀錄。</p>
+"""
+    return f"""
+    <h4>最新 retest task run log</h4>
+    <p>Status：<span class="{_automation_status_class(run.status)}">{escape(run.status)}</span></p>
+    <p>Run ID：<code>{escape(run.automation_run_id)}</code></p>
+    <p>Command：<code>{escape(run.command)}</code></p>
+    <p>Completed：{escape(run.completed_at.isoformat())}</p>
+    {_automation_steps(run)}
+    <p class="muted">這是 PR18 寫入的稽核紀錄；只顯示，不執行。</p>
+"""
+
+
 def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
     card = snapshot.latest_strategy_card
     leaderboard = snapshot.latest_leaderboard_entry
@@ -1182,6 +1217,7 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
 <p>策略修正候選：{_artifact_id(revision, "card_id")} / 來源 {_artifact_id(revision_source, "outcome_id")} / Agenda {_artifact_id(revision_agenda, "agenda_id")}</p>
 <p>Revision Retest Scaffold：{_artifact_id(retest_trial, "trial_id")} / Dataset <code>{escape(retest_trial.dataset_id if retest_trial and retest_trial.dataset_id else "n/a")}</code> / Split {_artifact_id(retest_split, "manifest_id")}</p>
 {_revision_retest_task_plan_panel(snapshot.latest_strategy_revision_retest_task_plan)}
+{_revision_retest_task_run_panel(snapshot.latest_strategy_revision_retest_task_run)}
 {_plain_list(snapshot.latest_strategy_revision_next_required_artifacts, empty="目前沒有 pending retest scaffold")}
 {_plain_list(revision.entry_rules + revision.exit_rules + revision.risk_rules if revision else [], empty="目前沒有 DRAFT 修正候選")}
 """
@@ -1278,7 +1314,7 @@ def _automation_steps(run: AutomationRun) -> str:
 
 
 def _automation_status_class(status: str) -> str:
-    if status in {"failed", "repair_required"}:
+    if status in {"RETEST_TASK_BLOCKED", "failed", "repair_required"}:
         return "status alert"
     return "status"
 

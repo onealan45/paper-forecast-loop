@@ -7,6 +7,7 @@ import pytest
 from forecast_loop.cli import main
 from forecast_loop.evaluation import build_evaluation_summary
 from forecast_loop.models import (
+    AutomationRun,
     BaselineEvaluation,
     BrokerOrder,
     BrokerReconciliation,
@@ -1013,6 +1014,101 @@ def test_dashboard_shows_revision_retest_task_plan(tmp_path):
     assert "cost_model_snapshot" in html
     assert "lock-evaluation-protocol" in html
     assert "--train-start" in html
+
+
+def test_dashboard_shows_revision_retest_task_run_log(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    _seed_dashboard_strategy_research(repository, now)
+    _seed_dashboard_revision_candidate(repository, now + timedelta(minutes=10))
+    _seed_dashboard_revision_retest_scaffold(repository, now + timedelta(minutes=20))
+    repository.save_automation_run(
+        AutomationRun(
+            automation_run_id="automation-run:dashboard-retest-task",
+            started_at=now + timedelta(minutes=30),
+            completed_at=now + timedelta(minutes=30),
+            status="RETEST_TASK_BLOCKED",
+            symbol="BTC-USD",
+            provider="research",
+            command="revision-retest-plan",
+            steps=[
+                {
+                    "name": "revision_card",
+                    "status": "completed",
+                    "artifact_id": "strategy-card:dashboard-revision",
+                },
+                {
+                    "name": "source_outcome",
+                    "status": "completed",
+                    "artifact_id": "paper-shadow-outcome:dashboard-visible",
+                },
+                {
+                    "name": "lock_evaluation_protocol",
+                    "status": "blocked",
+                    "artifact_id": None,
+                }
+            ],
+            health_check_id=None,
+            decision_id=None,
+            repair_request_id=None,
+            decision_basis="revision_retest_task_plan_run_log",
+        )
+    )
+    repository.save_automation_run(
+        AutomationRun(
+            automation_run_id="automation-run:dashboard-wrong-revision-newer",
+            started_at=now + timedelta(minutes=35),
+            completed_at=now + timedelta(minutes=35),
+            status="RETEST_TASK_READY",
+            symbol="BTC-USD",
+            provider="research",
+            command="revision-retest-plan",
+            steps=[
+                {
+                    "name": "revision_card",
+                    "status": "completed",
+                    "artifact_id": "strategy-card:other-revision",
+                },
+                {
+                    "name": "source_outcome",
+                    "status": "completed",
+                    "artifact_id": "paper-shadow-outcome:other",
+                },
+            ],
+            health_check_id=None,
+            decision_id=None,
+            repair_request_id=None,
+            decision_basis="revision_retest_task_plan_run_log",
+        )
+    )
+    repository.save_automation_run(
+        AutomationRun(
+            automation_run_id="automation-run:dashboard-unrelated-newer",
+            started_at=now + timedelta(minutes=40),
+            completed_at=now + timedelta(minutes=40),
+            status="SUCCESS",
+            symbol="BTC-USD",
+            provider="coingecko",
+            command="run-once",
+            steps=[],
+            health_check_id=None,
+            decision_id=None,
+            repair_request_id=None,
+            decision_basis="hourly_cycle",
+        )
+    )
+
+    html = render_dashboard_html(build_dashboard_snapshot(tmp_path))
+
+    assert "最新 retest task run log" in html
+    assert "automation-run:dashboard-retest-task" in html
+    assert "RETEST_TASK_BLOCKED" in html
+    assert "revision-retest-plan" in html
+    assert "lock_evaluation_protocol" in html
+    assert "automation-run:dashboard-wrong-revision-newer" not in html
+    assert "automation-run:dashboard-unrelated-newer" not in html
 
 
 def test_dashboard_revision_retest_task_plan_falls_back_when_source_missing(tmp_path):

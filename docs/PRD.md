@@ -112,6 +112,9 @@ The PRD follows that decision:
 - PR18 adds Revision Retest Task Run Log: the system can record the inspected
   retest task plan as an `AutomationRun` so ready/blocked task state is
   auditable without executing the task.
+- PR19 adds Revision Retest Run Log UX: the dashboard and operator console show
+  the latest retest task run log next to the task plan, including run id,
+  status, command, completed time, and task steps.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -642,7 +645,7 @@ correctness defects:
   paper-shadow-to-DRAFT-revision primitive, PR13 makes it visible, PR14/PR15 add
   visible retest scaffolds, PR16 adds read-only retest task planning, PR17
   exposes the task plan in UX, and PR18 records task-plan inspections as run
-  logs, but
+  logs, PR19 exposes those run logs in UX, but
   strong strategy generation, model training, deeper self-evolving skill loops,
   and optimizers are not included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved

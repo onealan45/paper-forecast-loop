@@ -59,6 +59,7 @@ from forecast_loop.stock_data import (
 )
 from forecast_loop.strategy_evolution import propose_strategy_revision
 from forecast_loop.revision_retest import create_revision_retest_scaffold
+from forecast_loop.revision_retest_plan import build_revision_retest_task_plan
 from forecast_loop.sqlite_repository import (
     export_sqlite_to_jsonl,
     initialize_sqlite_database,
@@ -476,6 +477,11 @@ def main(argv: list[str] | None = None) -> int:
     revision_retest_cmd.add_argument("--locked-by", default="codex")
     revision_retest_cmd.add_argument("--created-at")
 
+    revision_retest_plan_cmd = subparsers.add_parser("revision-retest-plan")
+    revision_retest_plan_cmd.add_argument("--storage-dir", required=True)
+    revision_retest_plan_cmd.add_argument("--revision-card-id")
+    revision_retest_plan_cmd.add_argument("--symbol", default="BTC-USD")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -572,6 +578,8 @@ def main(argv: list[str] | None = None) -> int:
             return _propose_strategy_revision(args)
         if args.command == "create-revision-retest-scaffold":
             return _create_revision_retest_scaffold(args)
+        if args.command == "revision-retest-plan":
+            return _revision_retest_plan(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -1668,6 +1676,22 @@ def _record_research_autopilot_run(args) -> int:
         paper_shadow_outcome_id=args.paper_shadow_outcome_id,
     )
     print(json.dumps({"research_autopilot_run": run.to_dict()}, ensure_ascii=False))
+    return 0
+
+
+def _revision_retest_plan(args) -> int:
+    storage_dir = Path(args.storage_dir)
+    if not storage_dir.exists():
+        raise ValueError(f"storage directory does not exist: {storage_dir}")
+    if not storage_dir.is_dir():
+        raise ValueError(f"storage path is not a directory: {storage_dir}")
+    plan = build_revision_retest_task_plan(
+        repository=JsonFileRepository(storage_dir),
+        storage_dir=storage_dir,
+        symbol=args.symbol.upper(),
+        revision_card_id=args.revision_card_id,
+    )
+    print(json.dumps({"revision_retest_task_plan": plan.to_dict()}, ensure_ascii=False))
     return 0
 
 

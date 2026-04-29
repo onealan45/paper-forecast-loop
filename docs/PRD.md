@@ -103,6 +103,9 @@ The PRD follows that decision:
 - PR15 adds Revision Retest Visibility: the dashboard and operator console show
   the pending retest trial, dataset, locked split manifest, and remaining
   required evidence artifacts for the latest DRAFT revision.
+- PR16 adds Revision Retest Task Plan: the system can inspect the current DRAFT
+  revision retest chain and emit ordered next research tasks, missing inputs,
+  and runnable command arguments without writing artifacts.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -142,6 +145,9 @@ Product implications:
 - Revision retest scaffolds must also be visible so the user can inspect
   whether a self-evolving idea has a concrete pending trial or is still missing
   dataset, split, backtest, walk-forward, and leaderboard evidence.
+- Revision retest planning must make the next research action explicit. If the
+  next step needs human or agent-supplied split windows or future shadow returns,
+  the system should report that as blocked rather than inventing evidence.
 - The evaluation path must be deterministic, versioned, and auditable.
 - Failed experiments must be retained as evidence, not discarded.
 - Promotion inside the research loop must depend on research evidence, not on
@@ -548,6 +554,8 @@ V1 MVP should include:
 - strategy-visible dashboard and operator console surfaces exposing the current
   strategy hypothesis, strategy rules, locked evidence gates, leaderboard
   state, paper-shadow attribution, and autopilot next research action
+- read-only revision retest task planning that exposes next research tasks,
+  missing inputs, linked artifacts, and runnable command arguments when safe
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,
@@ -617,7 +625,8 @@ correctness defects:
 - macro events are visible as imported calendar artifacts, but do not yet drive research features or strategy decisions
 - per-symbol multi-asset decisions do not yet perform portfolio optimization or cross-asset allocation
 - research datasets are generated artifacts only; PR12 adds a first
-  paper-shadow-to-DRAFT-revision primitive and PR13 makes it visible, but
+  paper-shadow-to-DRAFT-revision primitive, PR13 makes it visible, PR14/PR15 add
+  visible retest scaffolds, and PR16 adds read-only retest task planning, but
   strong strategy generation, model training, deeper self-evolving skill loops,
   and optimizers are not included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved

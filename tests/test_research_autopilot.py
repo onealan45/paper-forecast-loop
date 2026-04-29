@@ -1,6 +1,8 @@
 from datetime import UTC, datetime, timedelta
 import json
 
+import pytest
+
 from forecast_loop.autopilot import create_research_agenda, record_research_autopilot_run
 from forecast_loop.cli import main
 from forecast_loop.health import run_health_check
@@ -11,12 +13,15 @@ from forecast_loop.models import (
     PaperShadowOutcome,
     ResearchAgenda,
     ResearchAutopilotRun,
+    BacktestResult,
     StrategyCard,
     StrategyDecision,
+    WalkForwardValidation,
 )
 from forecast_loop.sqlite_repository import SQLiteRepository, export_sqlite_to_jsonl, migrate_jsonl_to_sqlite
 from forecast_loop.storage import JsonFileRepository
 from forecast_loop.revision_retest import create_revision_retest_scaffold
+from forecast_loop.revision_retest_plan import build_revision_retest_task_plan
 from forecast_loop.strategy_evolution import propose_strategy_revision
 
 
@@ -191,6 +196,13 @@ def _seed_repository(tmp_path, *, rankable: bool = True, shadow_action: str = "P
     repository.save_strategy_decision(decision)
     repository.save_paper_shadow_outcome(outcome)
     return repository, card, trial, evaluation, entry, decision, outcome
+
+
+def _jsonl_snapshot(tmp_path):
+    return {
+        path.name: path.read_text(encoding="utf-8")
+        for path in sorted(tmp_path.glob("*.jsonl"))
+    }
 
 
 def test_json_repository_round_trips_research_autopilot_artifacts(tmp_path):
@@ -875,6 +887,389 @@ def test_cli_create_revision_retest_scaffold_outputs_json_and_persists(tmp_path,
     assert payload["revision_retest_scaffold"]["experiment_trial"]["status"] == "PENDING"
     assert payload["revision_retest_scaffold"]["split_manifest"] is None
     assert len([trial for trial in repository.load_experiment_trials() if trial.strategy_card_id == revision.card_id]) == 1
+
+
+def test_revision_retest_task_plan_is_read_only_and_blocks_missing_split_inputs(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    scaffold = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+    )
+    before_files = _jsonl_snapshot(tmp_path)
+
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+    after_files = _jsonl_snapshot(tmp_path)
+
+    assert plan.strategy_card_id == revision.card_id
+    assert plan.source_outcome_id == outcome.outcome_id
+    assert plan.pending_trial_id == scaffold.experiment_trial.trial_id
+    assert plan.next_task_id == "lock_evaluation_protocol"
+    assert plan.task_by_id("create_revision_retest_scaffold").status == "completed"
+    lock_task = plan.task_by_id("lock_evaluation_protocol")
+    assert lock_task.status == "blocked"
+    assert lock_task.command_args is None
+    assert lock_task.blocked_reason == "split_window_inputs_required"
+    assert "train_start" in lock_task.missing_inputs
+    assert before_files == after_files
+
+
+def test_revision_retest_task_plan_emits_backtest_and_walk_forward_commands_after_split_lock(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    scaffold = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 2, 1, tzinfo=UTC),
+        validation_start=datetime(2026, 2, 2, tzinfo=UTC),
+        validation_end=datetime(2026, 3, 1, tzinfo=UTC),
+        holdout_start=datetime(2026, 3, 2, tzinfo=UTC),
+        holdout_end=datetime(2026, 4, 1, tzinfo=UTC),
+    )
+
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+
+    assert scaffold.split_manifest is not None
+    assert scaffold.cost_model_snapshot is not None
+    assert plan.split_manifest_id == scaffold.split_manifest.manifest_id
+    assert plan.cost_model_id == scaffold.cost_model_snapshot.cost_model_id
+    assert plan.task_by_id("lock_evaluation_protocol").status == "completed"
+    backtest_task = plan.task_by_id("run_backtest")
+    assert backtest_task.status == "ready"
+    assert "--start" in backtest_task.command_args
+    assert "2026-03-02T00:00:00+00:00" in backtest_task.command_args
+    assert "--end" in backtest_task.command_args
+    assert "2026-04-01T00:00:00+00:00" in backtest_task.command_args
+    walk_forward_task = plan.task_by_id("run_walk_forward")
+    assert walk_forward_task.status == "ready"
+    assert "2026-01-01T00:00:00+00:00" in walk_forward_task.command_args
+    assert "2026-04-01T00:00:00+00:00" in walk_forward_task.command_args
+    gate_task = plan.task_by_id("evaluate_leaderboard_gate")
+    assert gate_task.status == "blocked"
+    assert gate_task.blocked_reason == "missing_locked_evaluation_inputs"
+
+
+def test_cli_revision_retest_plan_outputs_json(tmp_path, capsys):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+    )
+
+    assert main(
+        [
+            "revision-retest-plan",
+            "--storage-dir",
+            str(tmp_path),
+            "--revision-card-id",
+            revision.card_id,
+            "--symbol",
+            "BTC-USD",
+        ]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    plan = payload["revision_retest_task_plan"]
+    assert plan["strategy_card_id"] == revision.card_id
+    assert plan["source_outcome_id"] == outcome.outcome_id
+    assert plan["next_task_id"] == "lock_evaluation_protocol"
+    assert [task["task_id"] for task in plan["tasks"]][0] == "create_revision_retest_scaffold"
+
+
+def test_revision_retest_task_plan_does_not_complete_malformed_passed_trial(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    pending = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+    ).experiment_trial
+    malformed_passed = ExperimentTrial.from_dict(
+        {
+            **pending.to_dict(),
+            "trial_id": "experiment-trial:malformed-passed-retest",
+            "status": "PASSED",
+            "backtest_result_id": None,
+            "walk_forward_validation_id": None,
+            "completed_at": _now().isoformat(),
+        }
+    )
+    repository.save_experiment_trial(malformed_passed)
+
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+
+    assert plan.passed_trial_id is None
+    passed_trial_task = plan.task_by_id("record_passed_retest_trial")
+    assert passed_trial_task.status == "blocked"
+    assert "backtest_result" in passed_trial_task.missing_inputs
+    assert "walk_forward_validation" in passed_trial_task.missing_inputs
+
+
+def test_revision_retest_task_plan_rejects_passed_trial_linked_to_wrong_split(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    pending = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 2, 1, tzinfo=UTC),
+        validation_start=datetime(2026, 2, 2, tzinfo=UTC),
+        validation_end=datetime(2026, 3, 1, tzinfo=UTC),
+        holdout_start=datetime(2026, 3, 2, tzinfo=UTC),
+        holdout_end=datetime(2026, 4, 1, tzinfo=UTC),
+    ).experiment_trial
+    wrong_backtest = BacktestResult(
+        result_id="backtest-result:wrong-window",
+        backtest_id="backtest:wrong-window",
+        created_at=_now(),
+        symbol="BTC-USD",
+        start=datetime(2025, 10, 1, tzinfo=UTC),
+        end=datetime(2025, 11, 1, tzinfo=UTC),
+        initial_cash=10_000.0,
+        final_equity=10_500.0,
+        strategy_return=0.05,
+        benchmark_return=0.01,
+        max_drawdown=0.02,
+        sharpe=1.2,
+        turnover=1.0,
+        win_rate=0.6,
+        trade_count=3,
+        equity_curve=[],
+        decision_basis="test-wrong-window",
+    )
+    wrong_walk_forward = WalkForwardValidation(
+        validation_id="walk-forward:wrong-window",
+        created_at=_now(),
+        symbol="BTC-USD",
+        start=datetime(2025, 8, 1, tzinfo=UTC),
+        end=datetime(2025, 11, 1, tzinfo=UTC),
+        strategy_name="moving_average_trend",
+        train_size=4,
+        validation_size=3,
+        test_size=3,
+        step_size=1,
+        initial_cash=10_000.0,
+        fee_bps=5.0,
+        slippage_bps=10.0,
+        moving_average_window=3,
+        window_count=1,
+        average_validation_return=0.03,
+        average_test_return=0.04,
+        average_benchmark_return=0.01,
+        average_excess_return=0.03,
+        test_win_rate=1.0,
+        overfit_window_count=0,
+        overfit_risk_flags=[],
+        backtest_result_ids=[wrong_backtest.result_id],
+        windows=[],
+        decision_basis="test-wrong-window",
+    )
+    repository.save_backtest_result(wrong_backtest)
+    repository.save_walk_forward_validation(wrong_walk_forward)
+    malformed_passed = ExperimentTrial.from_dict(
+        {
+            **pending.to_dict(),
+            "trial_id": "experiment-trial:wrong-split-passed-retest",
+            "status": "PASSED",
+            "backtest_result_id": wrong_backtest.result_id,
+            "walk_forward_validation_id": wrong_walk_forward.validation_id,
+            "completed_at": _now().isoformat(),
+        }
+    )
+    repository.save_experiment_trial(malformed_passed)
+
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+
+    assert plan.passed_trial_id is None
+    assert plan.task_by_id("run_backtest").status == "ready"
+    assert plan.task_by_id("run_walk_forward").status == "ready"
+    assert plan.task_by_id("record_passed_retest_trial").status == "blocked"
+
+
+def test_revision_retest_task_plan_does_not_record_passed_trial_from_unlinked_evidence(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 2, 1, tzinfo=UTC),
+        validation_start=datetime(2026, 2, 2, tzinfo=UTC),
+        validation_end=datetime(2026, 3, 1, tzinfo=UTC),
+        holdout_start=datetime(2026, 3, 2, tzinfo=UTC),
+        holdout_end=datetime(2026, 4, 1, tzinfo=UTC),
+    )
+    backtest = BacktestResult(
+        result_id="backtest-result:split-aligned",
+        backtest_id="backtest:split-aligned",
+        created_at=_now(),
+        symbol="BTC-USD",
+        start=datetime(2026, 3, 2, tzinfo=UTC),
+        end=datetime(2026, 4, 1, tzinfo=UTC),
+        initial_cash=10_000.0,
+        final_equity=10_500.0,
+        strategy_return=0.05,
+        benchmark_return=0.01,
+        max_drawdown=0.02,
+        sharpe=1.2,
+        turnover=1.0,
+        win_rate=0.6,
+        trade_count=3,
+        equity_curve=[],
+        decision_basis="test-split-aligned",
+    )
+    unlinked_walk_forward = WalkForwardValidation(
+        validation_id="walk-forward:split-aligned-unlinked",
+        created_at=_now(),
+        symbol="BTC-USD",
+        start=datetime(2026, 1, 1, tzinfo=UTC),
+        end=datetime(2026, 4, 1, tzinfo=UTC),
+        strategy_name="moving_average_trend",
+        train_size=4,
+        validation_size=3,
+        test_size=3,
+        step_size=1,
+        initial_cash=10_000.0,
+        fee_bps=5.0,
+        slippage_bps=10.0,
+        moving_average_window=3,
+        window_count=1,
+        average_validation_return=0.03,
+        average_test_return=0.04,
+        average_benchmark_return=0.01,
+        average_excess_return=0.03,
+        test_win_rate=1.0,
+        overfit_window_count=0,
+        overfit_risk_flags=[],
+        backtest_result_ids=["backtest-result:different-holdout"],
+        windows=[],
+        decision_basis="test-split-aligned-unlinked",
+    )
+    repository.save_backtest_result(backtest)
+    repository.save_walk_forward_validation(unlinked_walk_forward)
+
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+
+    passed_trial_task = plan.task_by_id("record_passed_retest_trial")
+    assert passed_trial_task.status == "blocked"
+    assert passed_trial_task.blocked_reason == "missing_retest_results"
+    assert "linked_backtest_walk_forward_pair" in passed_trial_task.missing_inputs
+
+
+def test_cli_revision_retest_plan_rejects_missing_storage_without_creating_directory(tmp_path, capsys):
+    missing_storage = tmp_path / "typo-storage"
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "revision-retest-plan",
+                "--storage-dir",
+                str(missing_storage),
+                "--symbol",
+                "BTC-USD",
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    assert not missing_storage.exists()
+    assert "storage directory does not exist" in capsys.readouterr().err
 
 
 def test_cli_creates_research_agenda_and_autopilot_run(tmp_path, capsys):

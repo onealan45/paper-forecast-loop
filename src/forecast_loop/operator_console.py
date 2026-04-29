@@ -32,6 +32,7 @@ from forecast_loop.models import (
     StrategyDecision,
     WalkForwardValidation,
 )
+from forecast_loop.lineage_research_plan import LineageResearchTaskPlan, build_lineage_research_task_plan
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.revision_retest_run_log import automation_run_matches_revision_retest_plan
 from forecast_loop.strategy_lineage import StrategyLineageSummary, build_strategy_lineage_summary
@@ -65,6 +66,7 @@ class OperatorConsoleSnapshot:
     latest_research_autopilot_run: ResearchAutopilotRun | None
     latest_strategy_lineage_summary: StrategyLineageSummary | None
     latest_lineage_research_agenda: ResearchAgenda | None
+    latest_lineage_research_task_plan: LineageResearchTaskPlan | None
     latest_strategy_revision_card: StrategyCard | None
     latest_strategy_revision_agenda: ResearchAgenda | None
     latest_strategy_revision_source_outcome: PaperShadowOutcome | None
@@ -157,6 +159,12 @@ def build_operator_console_snapshot(
         paper_shadow_outcomes=paper_shadow_outcomes,
     )
     lineage_research_agenda = _latest_lineage_research_agenda(research_agendas, lineage_summary)
+    lineage_research_task_plan = _safe_lineage_research_task_plan(
+        repository=repository,
+        storage_dir=storage_path,
+        symbol=symbol,
+        agenda=lineage_research_agenda,
+    )
 
     return OperatorConsoleSnapshot(
         storage_dir=storage_path,
@@ -179,6 +187,7 @@ def build_operator_console_snapshot(
         latest_research_autopilot_run=research_chain.research_autopilot_run,
         latest_strategy_lineage_summary=lineage_summary,
         latest_lineage_research_agenda=lineage_research_agenda,
+        latest_lineage_research_task_plan=lineage_research_task_plan,
         latest_strategy_revision_card=revision_card,
         latest_strategy_revision_agenda=(
             research_chain.revision_candidate.research_agenda if research_chain.revision_candidate else None
@@ -246,6 +255,25 @@ def _safe_revision_retest_task_plan(
             storage_dir=storage_dir,
             symbol=symbol,
             revision_card_id=revision_card.card_id,
+        )
+    except ValueError:
+        return None
+
+
+def _safe_lineage_research_task_plan(
+    *,
+    repository: JsonFileRepository,
+    storage_dir: Path,
+    symbol: str,
+    agenda: ResearchAgenda | None,
+) -> LineageResearchTaskPlan | None:
+    if agenda is None:
+        return None
+    try:
+        return build_lineage_research_task_plan(
+            repository=repository,
+            storage_dir=storage_dir,
+            symbol=symbol,
         )
     except ValueError:
         return None
@@ -794,6 +822,7 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
   {_revision_candidate_panel(snapshot, wide=False)}
   {_strategy_lineage_panel(lineage)}
   {_lineage_research_agenda_panel(snapshot.latest_lineage_research_agenda)}
+  {_lineage_research_task_plan_panel(snapshot.latest_lineage_research_task_plan)}
   <article class="panel">
     <h3>Leaderboard</h3>
     <p>ID：{_artifact_id(leaderboard, "entry_id")}</p>
@@ -890,6 +919,29 @@ def _lineage_research_agenda_panel(agenda: ResearchAgenda | None) -> str:
     <p>Hypothesis：{escape(agenda.hypothesis)}</p>
     <h4>Acceptance</h4>
     {_plain_list(agenda.acceptance_criteria)}
+  </article>
+"""
+
+
+def _lineage_research_task_plan_panel(plan: LineageResearchTaskPlan | None) -> str:
+    if plan is None:
+        return ""
+    next_task = plan.task_by_id(plan.next_task_id) if plan.next_task_id else None
+    command = " ".join(next_task.command_args) if next_task and next_task.command_args else "無"
+    return f"""
+  <article class="panel wide">
+    <h3>Lineage 下一個研究任務</h3>
+    <p>Task：<code>{escape(next_task.task_id if next_task else "none")}</code> / {escape(next_task.status if next_task else "completed")}</p>
+    <p>Required artifact：<code>{escape(next_task.required_artifact if next_task else "none")}</code></p>
+    <p>Blocked reason：{escape(next_task.blocked_reason if next_task and next_task.blocked_reason else "none")}</p>
+    <p>Missing inputs：</p>
+    {_plain_list(next_task.missing_inputs if next_task else [])}
+    <p>Command args：<code>{escape(command)}</code></p>
+    <h4>Worker Prompt</h4>
+    <p>{escape(next_task.worker_prompt if next_task else "none")}</p>
+    <h4>Rationale</h4>
+    <p>{escape(next_task.rationale if next_task else "none")}</p>
+    <p class="muted">只顯示，不執行。</p>
   </article>
 """
 

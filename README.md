@@ -196,6 +196,9 @@ factory:
   lineage agenda into an executable next-task plan: revise, quarantine into a
   replacement hypothesis, collect missing shadow evidence, or verify
   cross-sample persistence.
+- PR44 makes that lineage next-task plan visible in dashboard and operator
+  console strategy research pages, including task id, required artifact,
+  command args when available, worker prompt, and rationale.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

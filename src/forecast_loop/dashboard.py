@@ -36,6 +36,7 @@ from forecast_loop.models import (
     StrategyCard,
     StrategyDecision,
 )
+from forecast_loop.lineage_research_plan import LineageResearchTaskPlan, build_lineage_research_task_plan
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.revision_retest_run_log import automation_run_matches_revision_retest_plan
 from forecast_loop.strategy_lineage import StrategyLineageSummary, build_strategy_lineage_summary
@@ -66,6 +67,7 @@ class DashboardSnapshot:
     latest_research_autopilot_run: ResearchAutopilotRun | None
     latest_strategy_lineage_summary: StrategyLineageSummary | None
     latest_lineage_research_agenda: ResearchAgenda | None
+    latest_lineage_research_task_plan: LineageResearchTaskPlan | None
     latest_strategy_revision_card: StrategyCard | None
     latest_strategy_revision_agenda: ResearchAgenda | None
     latest_strategy_revision_source_outcome: PaperShadowOutcome | None
@@ -179,6 +181,12 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         paper_shadow_outcomes=paper_shadow_outcomes,
     )
     lineage_research_agenda = _latest_lineage_research_agenda(research_agendas, lineage_summary)
+    lineage_research_task_plan = _safe_lineage_research_task_plan(
+        repository=repository,
+        storage_dir=storage_dir,
+        symbol=dashboard_symbol,
+        agenda=lineage_research_agenda,
+    )
 
     return DashboardSnapshot(
         storage_dir=storage_dir,
@@ -202,6 +210,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         latest_research_autopilot_run=research_chain.research_autopilot_run,
         latest_strategy_lineage_summary=lineage_summary,
         latest_lineage_research_agenda=lineage_research_agenda,
+        latest_lineage_research_task_plan=lineage_research_task_plan,
         latest_strategy_revision_card=revision_card,
         latest_strategy_revision_agenda=(
             research_chain.revision_candidate.research_agenda if research_chain.revision_candidate else None
@@ -267,6 +276,25 @@ def _safe_revision_retest_task_plan(
             storage_dir=storage_dir,
             symbol=symbol,
             revision_card_id=revision_card.card_id,
+        )
+    except ValueError:
+        return None
+
+
+def _safe_lineage_research_task_plan(
+    *,
+    repository: JsonFileRepository,
+    storage_dir: Path,
+    symbol: str,
+    agenda: ResearchAgenda | None,
+) -> LineageResearchTaskPlan | None:
+    if agenda is None:
+        return None
+    try:
+        return build_lineage_research_task_plan(
+            repository=repository,
+            storage_dir=storage_dir,
+            symbol=symbol,
         )
     except ValueError:
         return None
@@ -891,6 +919,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
     revision_block = _render_strategy_revision_candidate(snapshot)
     lineage_block = _render_strategy_lineage_summary(snapshot.latest_strategy_lineage_summary)
     lineage_agenda_block = _render_lineage_research_agenda(snapshot.latest_lineage_research_agenda)
+    lineage_task_plan_block = _render_lineage_research_task_plan(snapshot.latest_lineage_research_task_plan)
     if (
         card is None
         and evaluation is None
@@ -919,6 +948,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
       {revision_block}
       {lineage_block}
       {lineage_agenda_block}
+      {lineage_task_plan_block}
       <div class="evidence-grid">
         <div class="evidence-block">
           <h3>目前策略假設</h3>
@@ -1011,6 +1041,27 @@ def _render_lineage_research_agenda(agenda: ResearchAgenda | None) -> str:
           <dt>Basis</dt><dd>{escape(agenda.decision_basis)}</dd>
           <dt>Hypothesis</dt><dd>{escape(agenda.hypothesis)}</dd>
           <dt>Acceptance</dt><dd>{_dashboard_list_inline(agenda.acceptance_criteria)}</dd>
+        </dl>
+      </div>
+    """
+
+
+def _render_lineage_research_task_plan(plan: LineageResearchTaskPlan | None) -> str:
+    if plan is None:
+        return ""
+    next_task = plan.task_by_id(plan.next_task_id) if plan.next_task_id else None
+    command = " ".join(next_task.command_args) if next_task and next_task.command_args else "無"
+    return f"""
+      <div class="evidence-block">
+        <h3>Lineage 下一個研究任務</h3>
+        <dl>
+          <dt>Task</dt><dd><code>{escape(next_task.task_id if next_task else "none")}</code> / {escape(next_task.status if next_task else "completed")}</dd>
+          <dt>Required Artifact</dt><dd><code>{escape(next_task.required_artifact if next_task else "none")}</code></dd>
+          <dt>Blocked Reason</dt><dd>{escape(next_task.blocked_reason if next_task and next_task.blocked_reason else "none")}</dd>
+          <dt>Missing Inputs</dt><dd>{_dashboard_list_inline(next_task.missing_inputs if next_task else [])}</dd>
+          <dt>Command Args</dt><dd><code>{escape(command)}</code><br><span class="micro-copy">只顯示，不執行。</span></dd>
+          <dt>Worker Prompt</dt><dd>{escape(next_task.worker_prompt if next_task else "none")}</dd>
+          <dt>Rationale</dt><dd>{escape(next_task.rationale if next_task else "none")}</dd>
         </dl>
       </div>
     """

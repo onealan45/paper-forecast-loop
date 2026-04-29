@@ -1204,7 +1204,12 @@ def test_operator_console_lineage_research_agenda_visibility(tmp_path):
     snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
     html = render_operator_console_page(snapshot, page="research")
 
+    assert snapshot.latest_lineage_research_task_plan is not None
+    assert snapshot.latest_lineage_research_task_plan.next_task_id == "draft_replacement_strategy_hypothesis"
     assert "Lineage 研究 agenda" in html
+    assert "Lineage 下一個研究任務" in html
+    assert "draft_replacement_strategy_hypothesis" in html
+    assert "新策略" in html
     assert "strategy_lineage_research_agenda" in html
     assert "停止加碼此 lineage" in html
     assert "drawdown_breach" in html

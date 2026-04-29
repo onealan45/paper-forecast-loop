@@ -131,6 +131,10 @@ The PRD follows that decision:
   `record_passed_retest_trial`, linking baseline, holdout backtest, and
   walk-forward evidence into a PASSED retest trial while still blocking
   leaderboard evaluation and later tasks.
+- PR25 extends Revision Retest Next Task Executor to
+  `evaluate_leaderboard_gate`, writing locked evaluation and leaderboard-entry
+  evidence from the PASSED retest trial while still blocking paper-shadow
+  outcome recording and later tasks.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -665,7 +669,8 @@ correctness defects:
   whitelisted retest protocol-locking task, PR21 adds baseline execution, PR22
   adds holdout backtest execution from locked split windows, PR23 adds
   walk-forward execution from the locked full split window, PR24 adds passed
-  retest trial recording from existing evidence, but strong strategy
+  retest trial recording from existing evidence, and PR25 adds leaderboard-gate
+  execution from plan-linked PASSED retest evidence, but strong strategy
   generation, model training, deeper self-evolving skill loops, and optimizers
   are not included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved

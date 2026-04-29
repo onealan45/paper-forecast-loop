@@ -240,7 +240,9 @@ def evaluate_leaderboard_gate(
 def _check_baseline(baseline: BaselineEvaluation, blocked: list[str]) -> None:
     if baseline.sample_size < 2:
         blocked.append("baseline_sample_too_low")
-    if baseline.model_edge <= 0:
+    if baseline.model_edge is None:
+        blocked.append("baseline_edge_missing")
+    elif baseline.model_edge <= 0:
         blocked.append("baseline_edge_not_positive")
     if baseline.evidence_grade in {"D", "INSUFFICIENT"}:
         blocked.append("baseline_evidence_grade_too_weak")

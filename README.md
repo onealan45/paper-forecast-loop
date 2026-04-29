@@ -136,6 +136,10 @@ factory:
   retest chain to link baseline, holdout backtest, and walk-forward evidence
   into a PASSED trial while still rejecting leaderboard evaluation and later
   tasks.
+- PR25 extends the same executor to `evaluate_leaderboard_gate`, allowing the
+  retest chain to write locked evaluation and leaderboard-entry evidence from a
+  PASSED trial while still rejecting paper-shadow outcome recording and later
+  tasks.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -1403,15 +1407,18 @@ python run_forecast_loop.py execute-revision-retest-next-task --storage-dir .\pa
 ```
 
 Currently this supports `lock_evaluation_protocol`,
-`generate_baseline_evaluation`, `run_backtest`, and `run_walk_forward`. The
-backtest step uses the locked split manifest holdout window and stored candles
-in the same storage directory. The walk-forward step uses the locked full split
-window from `train_start` through `holdout_end`. It writes the created artifact
-plus an execution `AutomationRun`, then returns before/after task plans.
-`record_passed_retest_trial`. The passed-trial step links the pending retest
-trial to the current dataset, backtest, walk-forward validation, and source
-paper-shadow outcome. `evaluate_leaderboard_gate` and later retest tasks remain
-blocked until they receive their own narrow executor support.
+`generate_baseline_evaluation`, `run_backtest`, `run_walk_forward`,
+`record_passed_retest_trial`, and `evaluate_leaderboard_gate`. The backtest step
+uses the locked split manifest holdout window and stored candles in the same
+storage directory. The walk-forward step uses the locked full split window from
+`train_start` through `holdout_end`. The passed-trial step links the pending
+retest trial to the current dataset, backtest, walk-forward validation, and
+source paper-shadow outcome. The leaderboard-gate step writes a locked
+evaluation result plus a leaderboard entry from the plan-linked PASSED trial
+evidence. Each executed task writes the created artifact ids plus an execution
+`AutomationRun`, then returns before/after task plans. `record_paper_shadow_outcome`
+and later retest tasks remain blocked until they receive their own narrow
+executor support.
 
 Generate a Markdown research report from existing artifacts:
 

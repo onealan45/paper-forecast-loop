@@ -124,6 +124,9 @@ The PRD follows that decision:
 - PR22 extends Revision Retest Next Task Executor to `run_backtest`, writing
   holdout backtest run/result evidence from the locked split window while still
   blocking walk-forward and later tasks.
+- PR23 extends Revision Retest Next Task Executor to `run_walk_forward`, writing
+  rolling validation evidence from the locked full split window while still
+  blocking passed-trial recording and later tasks.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -656,7 +659,8 @@ correctness defects:
   exposes the task plan in UX, and PR18 records task-plan inspections as run
   logs, PR19 exposes those run logs in UX, PR20 executes only the first
   whitelisted retest protocol-locking task, PR21 adds baseline execution, PR22
-  adds holdout backtest execution from locked split windows, but strong strategy
+  adds holdout backtest execution from locked split windows, PR23 adds
+  walk-forward execution from the locked full split window, but strong strategy
   generation, model training, deeper self-evolving skill loops, and optimizers
   are not included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved

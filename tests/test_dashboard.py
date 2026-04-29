@@ -10,6 +10,7 @@ from forecast_loop.models import (
     BaselineEvaluation,
     BrokerOrder,
     BrokerReconciliation,
+    SplitManifest,
     ExecutionSafetyGate,
     ExperimentTrial,
     Forecast,
@@ -248,6 +249,54 @@ def _seed_dashboard_revision_candidate(repository: JsonFileRepository, now: date
     )
     repository.save_strategy_card(revision)
     repository.save_research_agenda(agenda)
+
+
+def _seed_dashboard_revision_retest_scaffold(repository: JsonFileRepository, now: datetime) -> None:
+    trial = ExperimentTrial(
+        trial_id="experiment-trial:dashboard-revision-retest",
+        created_at=now,
+        strategy_card_id="strategy-card:dashboard-revision",
+        trial_index=1,
+        status="PENDING",
+        symbol="BTC-USD",
+        seed=7,
+        dataset_id="research-dataset:dashboard-revision-retest",
+        backtest_result_id=None,
+        walk_forward_validation_id=None,
+        event_edge_evaluation_id=None,
+        prompt_hash=None,
+        code_hash=None,
+        parameters={
+            "revision_retest_protocol": "pr14-v1",
+            "revision_retest_source_card_id": "strategy-card:dashboard-revision",
+            "revision_source_outcome_id": "paper-shadow-outcome:dashboard-visible",
+            "revision_parent_card_id": "strategy-card:dashboard-visible",
+        },
+        metric_summary={},
+        failure_reason=None,
+        started_at=now,
+        completed_at=None,
+        decision_basis="revision_retest_scaffold",
+    )
+    split = SplitManifest(
+        manifest_id="split-manifest:dashboard-revision-retest",
+        created_at=now,
+        symbol="BTC-USD",
+        strategy_card_id="strategy-card:dashboard-revision",
+        dataset_id="research-dataset:dashboard-revision-retest",
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 2, 1, tzinfo=UTC),
+        validation_start=datetime(2026, 2, 2, tzinfo=UTC),
+        validation_end=datetime(2026, 3, 1, tzinfo=UTC),
+        holdout_start=datetime(2026, 3, 2, tzinfo=UTC),
+        holdout_end=datetime(2026, 4, 1, tzinfo=UTC),
+        embargo_hours=24,
+        status="LOCKED",
+        locked_by="codex",
+        decision_basis="locked_evaluation_protocol",
+    )
+    repository.save_experiment_trial(trial)
+    repository.save_split_manifest(split)
 
 
 def _seed_dashboard_distractor_strategy_research_without_run(
@@ -924,6 +973,27 @@ def test_dashboard_shows_strategy_revision_candidate_even_when_autopilot_chain_p
     assert "DRAFT" in html
     assert "Require positive after-cost edge" in html
     assert "negative_excess_return" in html
+
+
+def test_dashboard_shows_strategy_revision_retest_scaffold(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    _seed_dashboard_strategy_research(repository, now)
+    _seed_dashboard_revision_candidate(repository, now + timedelta(minutes=10))
+    _seed_dashboard_revision_retest_scaffold(repository, now + timedelta(minutes=20))
+
+    html = render_dashboard_html(build_dashboard_snapshot(tmp_path))
+
+    assert "Revision Retest Scaffold" in html
+    assert "experiment-trial:dashboard-revision-retest" in html
+    assert "research-dataset:dashboard-revision-retest" in html
+    assert "PENDING" in html
+    assert "split-manifest:dashboard-revision-retest" in html
+    assert "baseline_evaluation" in html
+    assert "backtest_result" in html
+    assert "locked_evaluation_result" in html
 
 
 def test_dashboard_does_not_label_unrelated_agenda_as_revision_retest(tmp_path):

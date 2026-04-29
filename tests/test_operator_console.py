@@ -20,6 +20,7 @@ from forecast_loop.models import (
     ResearchAgenda,
     ResearchAutopilotRun,
     RiskSnapshot,
+    SplitManifest,
     StrategyCard,
     StrategyDecision,
 )
@@ -446,6 +447,54 @@ def _seed_visible_revision_candidate(repository: JsonFileRepository, now: dateti
     repository.save_research_agenda(agenda)
 
 
+def _seed_visible_revision_retest_scaffold(repository: JsonFileRepository, now: datetime) -> None:
+    trial = ExperimentTrial(
+        trial_id="experiment-trial:visible-revision-retest",
+        created_at=now,
+        strategy_card_id="strategy-card:visible-revision",
+        trial_index=1,
+        status="PENDING",
+        symbol="BTC-USD",
+        seed=7,
+        dataset_id="research-dataset:visible-revision-retest",
+        backtest_result_id=None,
+        walk_forward_validation_id=None,
+        event_edge_evaluation_id=None,
+        prompt_hash=None,
+        code_hash=None,
+        parameters={
+            "revision_retest_protocol": "pr14-v1",
+            "revision_retest_source_card_id": "strategy-card:visible-revision",
+            "revision_source_outcome_id": "paper-shadow-outcome:visible",
+            "revision_parent_card_id": "strategy-card:visible",
+        },
+        metric_summary={},
+        failure_reason=None,
+        started_at=now,
+        completed_at=None,
+        decision_basis="revision_retest_scaffold",
+    )
+    split = SplitManifest(
+        manifest_id="split-manifest:visible-revision-retest",
+        created_at=now,
+        symbol="BTC-USD",
+        strategy_card_id="strategy-card:visible-revision",
+        dataset_id="research-dataset:visible-revision-retest",
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 2, 1, tzinfo=UTC),
+        validation_start=datetime(2026, 2, 2, tzinfo=UTC),
+        validation_end=datetime(2026, 3, 1, tzinfo=UTC),
+        holdout_start=datetime(2026, 3, 2, tzinfo=UTC),
+        holdout_end=datetime(2026, 4, 1, tzinfo=UTC),
+        embargo_hours=24,
+        status="LOCKED",
+        locked_by="codex",
+        decision_basis="locked_evaluation_protocol",
+    )
+    repository.save_experiment_trial(trial)
+    repository.save_split_manifest(split)
+
+
 def _seed_distractor_strategy_research_without_run(repository: JsonFileRepository, now: datetime) -> None:
     card = replace(
         _visible_strategy_card(now),
@@ -716,6 +765,27 @@ def test_operator_console_shows_strategy_revision_candidate(tmp_path):
     assert research_html.count("策略修正候選") == 1
     assert "strategy-card:visible" in research_html
     assert "research-autopilot-run:visible" in research_html
+
+
+def test_operator_console_shows_strategy_revision_retest_scaffold(tmp_path):
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_visible_strategy_research(repository, now)
+    _seed_visible_revision_candidate(repository, now + timedelta(minutes=10))
+    _seed_visible_revision_retest_scaffold(repository, now + timedelta(minutes=20))
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    research_html = render_operator_console_page(snapshot, page="research")
+    overview_html = render_operator_console_page(snapshot, page="overview")
+
+    for html in (research_html, overview_html):
+        assert "Revision Retest Scaffold" in html
+        assert "experiment-trial:visible-revision-retest" in html
+        assert "research-dataset:visible-revision-retest" in html
+        assert "split-manifest:visible-revision-retest" in html
+        assert "baseline_evaluation" in html
+        assert "backtest_result" in html
+        assert "locked_evaluation_result" in html
 
 
 def test_overview_prioritizes_strategy_research_focus_before_artifact_counts(tmp_path):

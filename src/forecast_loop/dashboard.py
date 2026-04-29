@@ -31,6 +31,7 @@ from forecast_loop.models import (
     ResearchAutopilotRun,
     RiskSnapshot,
     Review,
+    SplitManifest,
     StrategyCard,
     StrategyDecision,
 )
@@ -62,6 +63,9 @@ class DashboardSnapshot:
     latest_strategy_revision_card: StrategyCard | None
     latest_strategy_revision_agenda: ResearchAgenda | None
     latest_strategy_revision_source_outcome: PaperShadowOutcome | None
+    latest_strategy_revision_retest_trial: ExperimentTrial | None
+    latest_strategy_revision_split_manifest: SplitManifest | None
+    latest_strategy_revision_next_required_artifacts: list[str]
     paper_orders: list[PaperOrder]
     broker_orders: list[BrokerOrder]
     paper_fills: list[PaperFill]
@@ -119,6 +123,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
     strategy_cards = [item for item in repository.load_strategy_cards() if dashboard_symbol in item.symbols]
     experiment_trials = [item for item in repository.load_experiment_trials() if item.symbol == dashboard_symbol]
     all_locked_evaluations = repository.load_locked_evaluation_results()
+    split_manifests = repository.load_split_manifests()
     leaderboard_entries = [item for item in repository.load_leaderboard_entries() if item.symbol == dashboard_symbol]
     paper_shadow_outcomes = [item for item in repository.load_paper_shadow_outcomes() if item.symbol == dashboard_symbol]
     research_agendas = [item for item in repository.load_research_agendas() if item.symbol == dashboard_symbol]
@@ -128,6 +133,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         strategy_cards=strategy_cards,
         experiment_trials=experiment_trials,
         locked_evaluations=all_locked_evaluations,
+        split_manifests=split_manifests,
         leaderboard_entries=leaderboard_entries,
         paper_shadow_outcomes=paper_shadow_outcomes,
         research_agendas=research_agendas,
@@ -178,6 +184,17 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         ),
         latest_strategy_revision_source_outcome=(
             research_chain.revision_candidate.source_outcome if research_chain.revision_candidate else None
+        ),
+        latest_strategy_revision_retest_trial=(
+            research_chain.revision_candidate.retest_trial if research_chain.revision_candidate else None
+        ),
+        latest_strategy_revision_split_manifest=(
+            research_chain.revision_candidate.retest_split_manifest if research_chain.revision_candidate else None
+        ),
+        latest_strategy_revision_next_required_artifacts=(
+            research_chain.revision_candidate.retest_next_required_artifacts
+            if research_chain.revision_candidate
+            else []
         ),
         paper_orders=paper_orders,
         broker_orders=broker_orders,
@@ -901,6 +918,8 @@ def _render_strategy_revision_candidate(snapshot: DashboardSnapshot) -> str:
 
     agenda = snapshot.latest_strategy_revision_agenda
     source = snapshot.latest_strategy_revision_source_outcome
+    retest_trial = snapshot.latest_strategy_revision_retest_trial
+    retest_split = snapshot.latest_strategy_revision_split_manifest
     attributions = revision.parameters.get("revision_failure_attributions", [])
     attribution_list = [str(item) for item in attributions] if isinstance(attributions, list) else [str(attributions)]
     return f"""
@@ -924,6 +943,15 @@ def _render_strategy_revision_candidate(snapshot: DashboardSnapshot) -> str:
             <dt>Acceptance</dt><dd>{_dashboard_list_inline(agenda.acceptance_criteria if agenda else [])}</dd>
           </dl>
         </div>
+      </div>
+      <div class="evidence-block">
+        <h3>Revision Retest Scaffold</h3>
+        <dl>
+          <dt>Retest Trial</dt><dd>{_dashboard_artifact_id(retest_trial, "trial_id")} / {escape(retest_trial.status if retest_trial else "尚未建立")}</dd>
+          <dt>Dataset</dt><dd>{escape(retest_trial.dataset_id if retest_trial and retest_trial.dataset_id else "n/a")}</dd>
+          <dt>Locked Split</dt><dd>{_dashboard_artifact_id(retest_split, "manifest_id")} / {escape(retest_split.status if retest_split else "尚未鎖定")}</dd>
+          <dt>Next Required</dt><dd>{_dashboard_list_inline(snapshot.latest_strategy_revision_next_required_artifacts)}</dd>
+        </dl>
       </div>
     """
 

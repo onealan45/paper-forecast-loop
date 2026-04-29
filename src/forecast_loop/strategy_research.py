@@ -10,6 +10,7 @@ from forecast_loop.models import (
     PaperShadowOutcome,
     ResearchAgenda,
     ResearchAutopilotRun,
+    SplitManifest,
     StrategyCard,
 )
 
@@ -23,6 +24,9 @@ class StrategyRevisionCandidate:
     strategy_card: StrategyCard
     research_agenda: ResearchAgenda | None
     source_outcome: PaperShadowOutcome | None
+    retest_trial: ExperimentTrial | None
+    retest_split_manifest: SplitManifest | None
+    retest_next_required_artifacts: list[str]
 
 
 @dataclass(slots=True)
@@ -43,6 +47,7 @@ def resolve_latest_strategy_research_chain(
     strategy_cards: list[StrategyCard],
     experiment_trials: list[ExperimentTrial],
     locked_evaluations: list[LockedEvaluationResult],
+    split_manifests: list[SplitManifest],
     leaderboard_entries: list[LeaderboardEntry],
     paper_shadow_outcomes: list[PaperShadowOutcome],
     research_agendas: list[ResearchAgenda],
@@ -68,7 +73,7 @@ def resolve_latest_strategy_research_chain(
     entry_by_id = {item.entry_id: item for item in entries}
     outcome_by_id = {item.outcome_id: item for item in outcomes}
     agenda_by_id = {item.agenda_id: item for item in agendas}
-    revision_candidate = _latest_revision_candidate(cards, outcome_by_id, agendas)
+    revision_candidate = _latest_revision_candidate(cards, outcome_by_id, agendas, trials, split_manifests)
 
     latest_run = _latest(runs)
     if latest_run is not None:
@@ -255,6 +260,8 @@ def _latest_revision_candidate(
     cards: list[StrategyCard],
     outcome_by_id: dict[str, PaperShadowOutcome],
     agendas: list[ResearchAgenda],
+    trials: list[ExperimentTrial],
+    split_manifests: list[SplitManifest],
 ) -> StrategyRevisionCandidate | None:
     revision_cards = [
         card
@@ -274,11 +281,68 @@ def _latest_revision_candidate(
         if revision.card_id in agenda.strategy_card_ids and agenda.decision_basis == REVISION_AGENDA_BASIS
     ]
     agenda = _latest(revision_agendas)
+    retest_trial = _latest_revision_retest_trial(trials, revision)
+    retest_split = _latest_revision_split_manifest(split_manifests, revision, retest_trial)
     return StrategyRevisionCandidate(
         strategy_card=revision,
         research_agenda=agenda,
         source_outcome=source_outcome,
+        retest_trial=retest_trial,
+        retest_split_manifest=retest_split,
+        retest_next_required_artifacts=_revision_retest_next_required_artifacts(retest_trial, retest_split),
     )
+
+
+def _latest_revision_retest_trial(
+    trials: list[ExperimentTrial],
+    revision: StrategyCard,
+) -> ExperimentTrial | None:
+    candidates = [
+        trial
+        for trial in trials
+        if trial.strategy_card_id == revision.card_id
+        and trial.status == "PENDING"
+        and trial.parameters.get("revision_retest_protocol") == "pr14-v1"
+        and trial.parameters.get("revision_retest_source_card_id") == revision.card_id
+        and trial.parameters.get("revision_source_outcome_id") == revision.parameters.get("revision_source_outcome_id")
+    ]
+    return _latest(candidates)
+
+
+def _latest_revision_split_manifest(
+    split_manifests: list[SplitManifest],
+    revision: StrategyCard,
+    retest_trial: ExperimentTrial | None,
+) -> SplitManifest | None:
+    if retest_trial is None or retest_trial.dataset_id is None:
+        return None
+    candidates = [
+        manifest
+        for manifest in split_manifests
+        if manifest.strategy_card_id == revision.card_id
+        and manifest.dataset_id == retest_trial.dataset_id
+        and manifest.symbol == retest_trial.symbol
+        and manifest.status == "LOCKED"
+    ]
+    return _latest(candidates)
+
+
+def _revision_retest_next_required_artifacts(
+    retest_trial: ExperimentTrial | None,
+    retest_split: SplitManifest | None,
+) -> list[str]:
+    required: list[str] = []
+    if retest_trial is None:
+        required.append("experiment_trial")
+    if retest_split is None:
+        required.extend(["split_manifest", "cost_model_snapshot"])
+    required.append("baseline_evaluation")
+    if retest_trial is None or retest_trial.backtest_result_id is None:
+        required.append("backtest_result")
+    if retest_trial is None or retest_trial.walk_forward_validation_id is None:
+        required.append("walk_forward_validation")
+    required.extend(["locked_evaluation_result", "leaderboard_entry", "paper_shadow_outcome"])
+    return required
 
 
 def _latest_anchor(

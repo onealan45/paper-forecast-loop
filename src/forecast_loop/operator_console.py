@@ -27,6 +27,7 @@ from forecast_loop.models import (
     ResearchAutopilotRun,
     RepairRequest,
     RiskSnapshot,
+    SplitManifest,
     StrategyCard,
     StrategyDecision,
     WalkForwardValidation,
@@ -62,6 +63,9 @@ class OperatorConsoleSnapshot:
     latest_strategy_revision_card: StrategyCard | None
     latest_strategy_revision_agenda: ResearchAgenda | None
     latest_strategy_revision_source_outcome: PaperShadowOutcome | None
+    latest_strategy_revision_retest_trial: ExperimentTrial | None
+    latest_strategy_revision_split_manifest: SplitManifest | None
+    latest_strategy_revision_next_required_artifacts: list[str]
     repair_requests: list[RepairRequest]
     control_events: list[PaperControlEvent]
     control_state: PaperControlState
@@ -105,6 +109,7 @@ def build_operator_console_snapshot(
     experiment_trials = [item for item in _safe_load(repository.load_experiment_trials) if item.symbol == symbol]
     trial_ids = {item.trial_id for item in experiment_trials}
     all_locked_evaluations = _safe_load(repository.load_locked_evaluation_results)
+    split_manifests = _safe_load(repository.load_split_manifests)
     locked_evaluations = [
         item
         for item in all_locked_evaluations
@@ -119,6 +124,7 @@ def build_operator_console_snapshot(
         strategy_cards=strategy_cards,
         experiment_trials=experiment_trials,
         locked_evaluations=all_locked_evaluations,
+        split_manifests=split_manifests,
         leaderboard_entries=leaderboard_entries,
         paper_shadow_outcomes=paper_shadow_outcomes,
         research_agendas=research_agendas,
@@ -158,6 +164,17 @@ def build_operator_console_snapshot(
         latest_strategy_revision_source_outcome=(
             research_chain.revision_candidate.source_outcome if research_chain.revision_candidate else None
         ),
+        latest_strategy_revision_retest_trial=(
+            research_chain.revision_candidate.retest_trial if research_chain.revision_candidate else None
+        ),
+        latest_strategy_revision_split_manifest=(
+            research_chain.revision_candidate.retest_split_manifest if research_chain.revision_candidate else None
+        ),
+        latest_strategy_revision_next_required_artifacts=(
+            research_chain.revision_candidate.retest_next_required_artifacts
+            if research_chain.revision_candidate
+            else []
+        ),
         repair_requests=repair_requests,
         control_events=control_events,
         control_state=control_state,
@@ -179,6 +196,7 @@ def build_operator_console_snapshot(
             "walk_forward_validations": len(walk_forwards),
             "strategy_cards": len(strategy_cards),
             "experiment_trials": len(experiment_trials),
+            "split_manifests": len(split_manifests),
             "locked_evaluations": len(locked_evaluations),
             "leaderboard_entries": len(leaderboard_entries),
             "paper_shadow_outcomes": len(paper_shadow_outcomes),
@@ -1062,6 +1080,8 @@ def _revision_candidate_panel(snapshot: OperatorConsoleSnapshot, *, wide: bool) 
         return ""
     agenda = snapshot.latest_strategy_revision_agenda
     source = snapshot.latest_strategy_revision_source_outcome
+    retest_trial = snapshot.latest_strategy_revision_retest_trial
+    retest_split = snapshot.latest_strategy_revision_split_manifest
     attributions = revision.parameters.get("revision_failure_attributions", [])
     attribution_list = [str(item) for item in attributions] if isinstance(attributions, list) else [str(attributions)]
     panel_class = "panel wide" if wide else "panel"
@@ -1084,6 +1104,12 @@ def _revision_candidate_panel(snapshot: OperatorConsoleSnapshot, *, wide: bool) 
     {_plain_list(revision.entry_rules + revision.exit_rules + revision.risk_rules)}
     <h4>Acceptance</h4>
     {_plain_list(agenda.acceptance_criteria if agenda else [])}
+    <h4>Revision Retest Scaffold</h4>
+    <p>Trial：{_artifact_id(retest_trial, "trial_id")} / {escape(retest_trial.status if retest_trial else "尚未建立")}</p>
+    <p>Dataset：<code>{escape(retest_trial.dataset_id if retest_trial and retest_trial.dataset_id else "n/a")}</code></p>
+    <p>Locked split：{_artifact_id(retest_split, "manifest_id")} / {escape(retest_split.status if retest_split else "尚未鎖定")}</p>
+    <p>Next required：</p>
+    {_plain_list(snapshot.latest_strategy_revision_next_required_artifacts)}
   </article>
 """
 
@@ -1096,6 +1122,8 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
     revision = snapshot.latest_strategy_revision_card
     revision_agenda = snapshot.latest_strategy_revision_agenda
     revision_source = snapshot.latest_strategy_revision_source_outcome
+    retest_trial = snapshot.latest_strategy_revision_retest_trial
+    retest_split = snapshot.latest_strategy_revision_split_manifest
     return f"""
 <p>策略卡：{_artifact_id(card, "card_id")} / {escape(card.strategy_name if card else "n/a")}</p>
 <p>假設：{escape(card.hypothesis if card else "目前沒有 strategy_cards artifact。")}</p>
@@ -1103,6 +1131,8 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
 <p>Paper-shadow：{escape(outcome.recommended_strategy_action if outcome else "n/a")} / {escape(outcome.outcome_grade if outcome else "n/a")}</p>
 <p>下一步：{escape(autopilot.next_research_action if autopilot else "n/a")} / Run {_artifact_id(autopilot, "run_id")}</p>
 <p>策略修正候選：{_artifact_id(revision, "card_id")} / 來源 {_artifact_id(revision_source, "outcome_id")} / Agenda {_artifact_id(revision_agenda, "agenda_id")}</p>
+<p>Revision Retest Scaffold：{_artifact_id(retest_trial, "trial_id")} / Dataset <code>{escape(retest_trial.dataset_id if retest_trial and retest_trial.dataset_id else "n/a")}</code> / Split {_artifact_id(retest_split, "manifest_id")}</p>
+{_plain_list(snapshot.latest_strategy_revision_next_required_artifacts, empty="目前沒有 pending retest scaffold")}
 {_plain_list(revision.entry_rules + revision.exit_rules + revision.risk_rules if revision else [], empty="目前沒有 DRAFT 修正候選")}
 """
 

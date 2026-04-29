@@ -16,6 +16,7 @@ from forecast_loop.models import (
 )
 from forecast_loop.sqlite_repository import SQLiteRepository, export_sqlite_to_jsonl, migrate_jsonl_to_sqlite
 from forecast_loop.storage import JsonFileRepository
+from forecast_loop.revision_retest import create_revision_retest_scaffold
 from forecast_loop.strategy_evolution import propose_strategy_revision
 
 
@@ -583,6 +584,297 @@ def test_cli_propose_strategy_revision_outputs_revision_and_persists(tmp_path, c
     assert revision["parent_card_id"] == card.card_id
     assert agenda["agenda_id"].startswith("research-agenda:")
     assert agenda["strategy_card_ids"] == [revision["card_id"]]
+
+
+def test_create_revision_retest_scaffold_creates_pending_trial(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+
+    scaffold = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+    )
+
+    trial = scaffold.experiment_trial
+    assert trial.status == "PENDING"
+    assert trial.strategy_card_id == revision.card_id
+    assert trial.symbol == "BTC-USD"
+    assert trial.dataset_id == "research-dataset:revision-retest"
+    assert trial.backtest_result_id is None
+    assert trial.walk_forward_validation_id is None
+    assert trial.parameters["revision_retest_source_card_id"] == revision.card_id
+    assert trial.parameters["revision_source_outcome_id"] == outcome.outcome_id
+    assert "backtest_result" in scaffold.next_required_artifacts
+    assert not [
+        budget
+        for budget in repository.load_experiment_budgets()
+        if budget.strategy_card_id == revision.card_id
+    ]
+    assert not [
+        result
+        for result in repository.load_locked_evaluation_results()
+        if result.strategy_card_id == revision.card_id
+    ]
+
+
+def test_create_revision_retest_scaffold_is_idempotent(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+
+    first = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+    )
+    second = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=99,
+    )
+
+    assert second.experiment_trial.trial_id == first.experiment_trial.trial_id
+    assert len([trial for trial in repository.load_experiment_trials() if trial.strategy_card_id == revision.card_id]) == 1
+
+
+def test_create_revision_retest_scaffold_returns_persisted_split_and_cost_on_rerun(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+
+    first = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 2, 1, tzinfo=UTC),
+        validation_start=datetime(2026, 2, 2, tzinfo=UTC),
+        validation_end=datetime(2026, 3, 1, tzinfo=UTC),
+        holdout_start=datetime(2026, 3, 2, tzinfo=UTC),
+        holdout_end=datetime(2026, 4, 1, tzinfo=UTC),
+    )
+    second = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now() + timedelta(hours=1),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 2, 1, tzinfo=UTC),
+        validation_start=datetime(2026, 2, 2, tzinfo=UTC),
+        validation_end=datetime(2026, 3, 1, tzinfo=UTC),
+        holdout_start=datetime(2026, 3, 2, tzinfo=UTC),
+        holdout_end=datetime(2026, 4, 1, tzinfo=UTC),
+    )
+
+    assert first.split_manifest is not None
+    assert second.split_manifest is not None
+    assert first.cost_model_snapshot is not None
+    assert second.cost_model_snapshot is not None
+    assert second.split_manifest.manifest_id == first.split_manifest.manifest_id
+    assert second.split_manifest.created_at == first.split_manifest.created_at
+    assert second.cost_model_snapshot.cost_model_id == first.cost_model_snapshot.cost_model_id
+    assert second.cost_model_snapshot.created_at == first.cost_model_snapshot.created_at
+
+
+def test_create_revision_retest_scaffold_rejects_non_revision_card(tmp_path):
+    repository, card, _trial, _evaluation, _entry, _decision, _outcome = _seed_repository(tmp_path)
+
+    try:
+        create_revision_retest_scaffold(
+            repository=repository,
+            created_at=_now(),
+            revision_card_id=card.card_id,
+            symbol="BTC-USD",
+            dataset_id="research-dataset:revision-retest",
+            max_trials=20,
+        )
+    except ValueError as exc:
+        assert "not a DRAFT strategy revision card" in str(exc)
+    else:
+        raise AssertionError("non-revision cards must not create retest scaffolds")
+
+
+def test_create_revision_retest_scaffold_rejects_revision_without_parent(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    bogus = StrategyCard.from_dict(
+        {
+            **revision.to_dict(),
+            "card_id": "strategy-card:revision-without-parent",
+            "parent_card_id": None,
+        }
+    )
+    repository.save_strategy_card(bogus)
+
+    try:
+        create_revision_retest_scaffold(
+            repository=repository,
+            created_at=_now(),
+            revision_card_id=bogus.card_id,
+            symbol="BTC-USD",
+            dataset_id="research-dataset:revision-retest",
+            max_trials=20,
+        )
+    except ValueError as exc:
+        assert "not a DRAFT strategy revision card" in str(exc)
+    else:
+        raise AssertionError("revision-like cards without parent must not create retest scaffolds")
+
+
+def test_create_revision_retest_scaffold_rejects_parent_source_mismatch(tmp_path):
+    repository, card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    bogus = StrategyCard.from_dict(
+        {
+            **revision.to_dict(),
+            "card_id": "strategy-card:revision-parent-mismatch",
+            "parent_card_id": "strategy-card:wrong-parent",
+        }
+    )
+    repository.save_strategy_card(bogus)
+
+    try:
+        create_revision_retest_scaffold(
+            repository=repository,
+            created_at=_now(),
+            revision_card_id=bogus.card_id,
+            symbol="BTC-USD",
+            dataset_id="research-dataset:revision-retest",
+            max_trials=20,
+        )
+    except ValueError as exc:
+        assert "does not match revision parent" in str(exc)
+    else:
+        raise AssertionError("revision parent must match the source outcome strategy card")
+    assert card.card_id == outcome.strategy_card_id
+
+
+def test_create_revision_retest_scaffold_locks_protocol_without_evaluation_result(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+
+    scaffold = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 2, 1, tzinfo=UTC),
+        validation_start=datetime(2026, 2, 2, tzinfo=UTC),
+        validation_end=datetime(2026, 3, 1, tzinfo=UTC),
+        holdout_start=datetime(2026, 3, 2, tzinfo=UTC),
+        holdout_end=datetime(2026, 4, 1, tzinfo=UTC),
+    )
+
+    assert scaffold.split_manifest is not None
+    assert scaffold.cost_model_snapshot is not None
+    assert scaffold.split_manifest.strategy_card_id == revision.card_id
+    assert scaffold.split_manifest.status == "LOCKED"
+    assert scaffold.cost_model_snapshot.status == "LOCKED"
+    assert not [
+        result
+        for result in repository.load_locked_evaluation_results()
+        if result.strategy_card_id == revision.card_id
+    ]
+
+
+def test_cli_create_revision_retest_scaffold_outputs_json_and_persists(tmp_path, capsys):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+
+    assert main(
+        [
+            "create-revision-retest-scaffold",
+            "--storage-dir",
+            str(tmp_path),
+            "--revision-card-id",
+            revision.card_id,
+            "--symbol",
+            "BTC-USD",
+            "--dataset-id",
+            "research-dataset:revision-retest",
+            "--max-trials",
+            "20",
+            "--seed",
+            "7",
+            "--created-at",
+            "2026-04-28T14:00:00+00:00",
+        ]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["revision_retest_scaffold"]["strategy_card_id"] == revision.card_id
+    assert payload["revision_retest_scaffold"]["source_outcome_id"] == outcome.outcome_id
+    assert payload["revision_retest_scaffold"]["experiment_trial"]["status"] == "PENDING"
+    assert payload["revision_retest_scaffold"]["split_manifest"] is None
+    assert len([trial for trial in repository.load_experiment_trials() if trial.strategy_card_id == revision.card_id]) == 1
 
 
 def test_cli_creates_research_agenda_and_autopilot_run(tmp_path, capsys):

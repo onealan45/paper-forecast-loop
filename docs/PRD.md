@@ -97,6 +97,9 @@ The PRD follows that decision:
 - PR13 adds Strategy Revision Visibility: the dashboard and operator console
   show the latest DRAFT revision candidate, parent strategy, source
   paper-shadow failure, mutation rules, and retest agenda.
+- PR14 adds Strategy Revision Retest Scaffold: a DRAFT revision candidate can
+  produce an idempotent `PENDING` experiment trial and optional locked
+  split/cost protocol without fabricating evaluation or promotion evidence.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -127,6 +130,10 @@ Product implications:
 - The first implemented self-evolving primitive is revision-candidate creation:
   failed paper-shadow outcomes can become DRAFT child strategy cards that must
   be retested before promotion.
+- The first implemented retest bridge is a scaffold, not a result: revision
+  candidates can now open a pending experiment trial, but baseline, backtest,
+  walk-forward, locked evaluation, leaderboard, and new shadow evidence still
+  have to be produced by later research steps.
 - Revision candidates must be visible in the UX so the user can inspect what
   the AI is trying to fix next, not only whether the loop is healthy.
 - The evaluation path must be deterministic, versioned, and auditable.

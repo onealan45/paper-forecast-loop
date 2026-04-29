@@ -58,6 +58,7 @@ from forecast_loop.stock_data import (
     run_stock_candle_health,
 )
 from forecast_loop.strategy_evolution import propose_strategy_revision
+from forecast_loop.revision_retest import create_revision_retest_scaffold
 from forecast_loop.sqlite_repository import (
     export_sqlite_to_jsonl,
     initialize_sqlite_database,
@@ -453,6 +454,28 @@ def main(argv: list[str] | None = None) -> int:
     strategy_revision_cmd.add_argument("--revision-version")
     strategy_revision_cmd.add_argument("--created-at")
 
+    revision_retest_cmd = subparsers.add_parser("create-revision-retest-scaffold")
+    revision_retest_cmd.add_argument("--storage-dir", required=True)
+    revision_retest_cmd.add_argument("--revision-card-id")
+    revision_retest_cmd.add_argument("--symbol", default="BTC-USD")
+    revision_retest_cmd.add_argument("--dataset-id", required=True)
+    revision_retest_cmd.add_argument("--max-trials", type=int, default=20)
+    revision_retest_cmd.add_argument("--seed", type=int)
+    revision_retest_cmd.add_argument("--train-start")
+    revision_retest_cmd.add_argument("--train-end")
+    revision_retest_cmd.add_argument("--validation-start")
+    revision_retest_cmd.add_argument("--validation-end")
+    revision_retest_cmd.add_argument("--holdout-start")
+    revision_retest_cmd.add_argument("--holdout-end")
+    revision_retest_cmd.add_argument("--embargo-hours", type=int, default=24)
+    revision_retest_cmd.add_argument("--fee-bps", type=float, default=5.0)
+    revision_retest_cmd.add_argument("--slippage-bps", type=float, default=10.0)
+    revision_retest_cmd.add_argument("--max-turnover", type=float, default=5.0)
+    revision_retest_cmd.add_argument("--max-drawdown", type=float, default=0.10)
+    revision_retest_cmd.add_argument("--baseline-suite-version", default="m4b-v1")
+    revision_retest_cmd.add_argument("--locked-by", default="codex")
+    revision_retest_cmd.add_argument("--created-at")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "run-once":
@@ -547,6 +570,8 @@ def main(argv: list[str] | None = None) -> int:
             return _record_research_autopilot_run(args)
         if args.command == "propose-strategy-revision":
             return _propose_strategy_revision(args)
+        if args.command == "create-revision-retest-scaffold":
+            return _create_revision_retest_scaffold(args)
     except ValueError as exc:
         parser.error(str(exc))
     return 1
@@ -1664,6 +1689,34 @@ def _propose_strategy_revision(args) -> int:
             ensure_ascii=False,
         )
     )
+    return 0
+
+
+def _create_revision_retest_scaffold(args) -> int:
+    created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
+    scaffold = create_revision_retest_scaffold(
+        repository=JsonFileRepository(args.storage_dir),
+        created_at=created_at,
+        revision_card_id=args.revision_card_id,
+        symbol=args.symbol.upper(),
+        dataset_id=args.dataset_id,
+        max_trials=args.max_trials,
+        seed=args.seed,
+        train_start=_parse_datetime(args.train_start) if args.train_start else None,
+        train_end=_parse_datetime(args.train_end) if args.train_end else None,
+        validation_start=_parse_datetime(args.validation_start) if args.validation_start else None,
+        validation_end=_parse_datetime(args.validation_end) if args.validation_end else None,
+        holdout_start=_parse_datetime(args.holdout_start) if args.holdout_start else None,
+        holdout_end=_parse_datetime(args.holdout_end) if args.holdout_end else None,
+        embargo_hours=args.embargo_hours,
+        fee_bps=args.fee_bps,
+        slippage_bps=args.slippage_bps,
+        max_turnover=args.max_turnover,
+        max_drawdown=args.max_drawdown,
+        baseline_suite_version=args.baseline_suite_version,
+        locked_by=args.locked_by,
+    )
+    print(json.dumps({"revision_retest_scaffold": scaffold.to_dict()}, ensure_ascii=False))
     return 0
 
 

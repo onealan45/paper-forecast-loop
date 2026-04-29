@@ -103,6 +103,9 @@ factory:
 - PR13 makes those DRAFT revision candidates visible in the dashboard and
   operator console so strategy self-correction is inspectable without reading
   JSONL.
+- PR14 adds a retest scaffold for DRAFT revision candidates: it creates an
+  idempotent `PENDING` experiment trial and can lock split/cost protocol
+  artifacts without fabricating evaluation results.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -219,6 +222,7 @@ This version intentionally includes:
   - `create-research-agenda`
   - `record-research-autopilot-run`
   - `propose-strategy-revision`
+  - `create-revision-retest-scaffold`
 
 This version intentionally excludes:
 
@@ -691,6 +695,20 @@ PR13 makes the revision candidate visible:
   so the first page shows what the AI is trying to fix next.
 
 This still does not automatically run the retest or promote the revised card.
+
+PR14 adds the retest scaffold:
+
+- `create-revision-retest-scaffold` consumes a DRAFT revision card.
+- It creates or returns one `PENDING` `experiment_trials.jsonl` row linked to
+  the revision card and source paper-shadow outcome.
+- It can optionally lock `split_manifests.jsonl` and
+  `cost_model_snapshots.jsonl` when explicit train / validation / holdout
+  windows are provided.
+- It does not create baseline, backtest, walk-forward, locked evaluation,
+  leaderboard, or promotion artifacts.
+
+This gives the next research worker a concrete starting point without claiming
+the revised strategy has already been validated.
 
 ### Strategy-Visible UX
 
@@ -1246,6 +1264,23 @@ python run_forecast_loop.py propose-strategy-revision --storage-dir .\paper_stor
 linked `research_agendas.jsonl` row. The generated strategy card remains
 `DRAFT`; it must pass a new locked evaluation and paper-shadow cycle before any
 later promotion workflow may trust it.
+
+Create a pending retest scaffold for a DRAFT revision card:
+
+```powershell
+python run_forecast_loop.py create-revision-retest-scaffold --storage-dir .\paper_storage\manual-research --revision-card-id strategy-card:example-revision --symbol BTC-USD --dataset-id research-dataset:revision-retest --max-trials 20 --created-at 2026-04-28T14:00:00+00:00
+```
+
+Optionally lock a retest split/cost protocol at the same time:
+
+```powershell
+python run_forecast_loop.py create-revision-retest-scaffold --storage-dir .\paper_storage\manual-research --revision-card-id strategy-card:example-revision --symbol BTC-USD --dataset-id research-dataset:revision-retest --train-start 2026-01-01T00:00:00+00:00 --train-end 2026-02-01T00:00:00+00:00 --validation-start 2026-02-02T00:00:00+00:00 --validation-end 2026-03-01T00:00:00+00:00 --holdout-start 2026-03-02T00:00:00+00:00 --holdout-end 2026-04-01T00:00:00+00:00
+```
+
+`create-revision-retest-scaffold` writes a `PENDING` experiment trial and
+returns `next_required_artifacts`. It does not create a locked evaluation result
+or leaderboard entry; those require actual baseline, backtest, and walk-forward
+evidence.
 
 Generate a Markdown research report from existing artifacts:
 

@@ -998,6 +998,7 @@ def _render_strategy_lineage_summary(summary: StrategyLineageSummary | None) -> 
           <dt>Root Strategy</dt><dd><code>{escape(summary.root_card_id)}</code></dd>
           <dt>Revision Count</dt><dd>{summary.revision_count}</dd>
           <dt>Revision Cards</dt><dd>{_dashboard_list_inline(summary.revision_card_ids)}</dd>
+          <dt>Revision Tree</dt><dd>{_dashboard_revision_tree(summary)}</dd>
           <dt>Shadow Outcomes</dt><dd>{summary.outcome_count}</dd>
           <dt>Actions</dt><dd>{_dashboard_dict_inline(summary.action_counts)}</dd>
           <dt>Failure Attribution</dt><dd>{_dashboard_dict_inline(summary.failure_attribution_counts)}</dd>
@@ -1006,6 +1007,15 @@ def _render_strategy_lineage_summary(summary: StrategyLineageSummary | None) -> 
         </dl>
       </div>
     """
+
+
+def _dashboard_revision_tree(summary: StrategyLineageSummary) -> str:
+    if not summary.revision_nodes:
+        return "none"
+    return "<br>".join(
+        f"Depth {node.depth} / Parent {escape(node.parent_card_id)} / <code>{escape(node.card_id)}</code>"
+        for node in summary.revision_nodes
+    )
 
 
 def _render_strategy_revision_candidate(snapshot: DashboardSnapshot) -> str:

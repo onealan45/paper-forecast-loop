@@ -878,6 +878,8 @@ def _strategy_lineage_panel(summary: StrategyLineageSummary | None) -> str:
     <p>Revisions：{summary.revision_count}</p>
     <p>Revision cards：</p>
     {_plain_list(summary.revision_card_ids)}
+    <h4>Revision Tree</h4>
+    {_strategy_lineage_tree(summary)}
     <p>Shadow outcomes：{summary.outcome_count}</p>
     <h4>Action counts</h4>
     {_dict_rows(summary.action_counts)}
@@ -887,6 +889,17 @@ def _strategy_lineage_panel(summary: StrategyLineageSummary | None) -> str:
     <p>Latest outcome：<code>{escape(summary.latest_outcome_id or "none")}</code></p>
   </article>
 """
+
+
+def _strategy_lineage_tree(summary: StrategyLineageSummary | None) -> str:
+    if summary is None or not summary.revision_nodes:
+        return '<p class="muted">目前沒有 revision tree。</p>'
+    return _plain_list(
+        [
+            f"Depth {node.depth} / Parent {node.parent_card_id} / {node.card_id}"
+            for node in summary.revision_nodes
+        ]
+    )
 
 
 def _render_health(snapshot: OperatorConsoleSnapshot) -> str:
@@ -1295,6 +1308,8 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
 <p>Revision Retest Scaffold：{_artifact_id(retest_trial, "trial_id")} / Dataset <code>{escape(retest_trial.dataset_id if retest_trial and retest_trial.dataset_id else "n/a")}</code> / Split {_artifact_id(retest_split, "manifest_id")}</p>
 <p>策略 lineage：Root <code>{escape(lineage.root_card_id if lineage else "n/a")}</code> / Revisions {lineage.revision_count if lineage else "n/a"} / Outcomes {lineage.outcome_count if lineage else "n/a"}</p>
 <p>Lineage best/worst：{_format_number(lineage.best_excess_return_after_costs if lineage else None)} / {_format_number(lineage.worst_excess_return_after_costs if lineage else None)} / Latest <code>{escape(lineage.latest_outcome_id if lineage and lineage.latest_outcome_id else "none")}</code></p>
+<p>Revision Tree</p>
+{_strategy_lineage_tree(lineage)}
 {_plain_list(list(lineage.action_counts.keys()) if lineage else [], empty="目前沒有 lineage action")}
 {_plain_list(list(lineage.failure_attribution_counts.keys()) if lineage else [], empty="目前沒有 lineage failure attribution")}
 {_revision_retest_task_plan_panel(snapshot.latest_strategy_revision_retest_task_plan)}

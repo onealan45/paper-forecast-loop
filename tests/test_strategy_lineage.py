@@ -180,6 +180,10 @@ def test_strategy_lineage_summary_includes_multi_generation_revisions():
     assert summary is not None
     assert summary.root_card_id == parent.card_id
     assert summary.revision_card_ids == [revision.card_id, second_revision.card_id]
+    assert [(node.card_id, node.parent_card_id, node.depth) for node in summary.revision_nodes] == [
+        (revision.card_id, parent.card_id, 1),
+        (second_revision.card_id, revision.card_id, 2),
+    ]
     assert summary.revision_count == 2
     assert summary.outcome_count == 3
     assert summary.action_counts == {"QUARANTINE_STRATEGY": 1, "REVISE_STRATEGY": 2}

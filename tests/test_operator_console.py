@@ -1123,12 +1123,19 @@ def test_operator_console_strategy_lineage_includes_multi_generation_revisions(t
         "strategy-card:visible-revision",
         "strategy-card:visible-second-revision",
     ]
+    assert [(node.card_id, node.parent_card_id, node.depth) for node in snapshot.latest_strategy_lineage_summary.revision_nodes] == [
+        ("strategy-card:visible-revision", "strategy-card:visible", 1),
+        ("strategy-card:visible-second-revision", "strategy-card:visible-revision", 2),
+    ]
     assert snapshot.latest_strategy_lineage_summary.outcome_count == 3
     assert snapshot.latest_strategy_lineage_summary.action_counts == {
         "QUARANTINE_STRATEGY": 2,
         "REVISE_STRATEGY": 1,
     }
     for html in (research_html, overview_html):
+        assert "Revision Tree" in html
+        assert "Depth 2" in html
+        assert "Parent strategy-card:visible-revision" in html
         assert "weak_baseline_edge" in html
         assert "paper-shadow-outcome:visible-second-revision-quarantine" in html
         assert "-0.1100" in html

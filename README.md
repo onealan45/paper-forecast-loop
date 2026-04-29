@@ -173,6 +173,10 @@ factory:
 - PR36 adds malicious-HTML regression coverage for revision change summaries so
   natural-language strategy fields remain escaped in dashboard and operator
   console views.
+- PR37 adds strategy lineage performance trajectory: the UX now shows each
+  lineage paper-shadow outcome's after-cost excess return, delta versus the
+  previous outcome, improvement/worsening label, action, and failure
+  attribution.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

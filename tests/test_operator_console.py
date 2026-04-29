@@ -1187,6 +1187,76 @@ def test_operator_console_strategy_lineage_includes_multi_generation_revisions(t
         assert "-0.1100" in html
 
 
+def test_strategy_lineage_cli_outputs_latest_lineage_summary_json(tmp_path, capsys):
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_visible_strategy_research(repository, now)
+    _seed_visible_revision_candidate(repository, now + timedelta(minutes=10))
+    _seed_visible_strategy_lineage(repository, now + timedelta(minutes=20))
+    _seed_visible_second_generation_strategy_lineage(repository, now + timedelta(minutes=30))
+    repository.save_strategy_card(
+        replace(
+            _visible_strategy_card(now + timedelta(minutes=35)),
+            card_id="strategy-card:eth-distractor",
+            strategy_name="ETH distractor revision",
+            symbols=["ETH-USD"],
+            parent_card_id="strategy-card:visible",
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        PaperShadowOutcome(
+            outcome_id="paper-shadow-outcome:eth-distractor",
+            created_at=now + timedelta(minutes=36),
+            leaderboard_entry_id="leaderboard-entry:eth-distractor",
+            evaluation_id="locked-evaluation:eth-distractor",
+            strategy_card_id="strategy-card:eth-distractor",
+            trial_id="experiment-trial:eth-distractor",
+            symbol="ETH-USD",
+            window_start=now - timedelta(hours=24),
+            window_end=now,
+            observed_return=0.20,
+            benchmark_return=0.01,
+            excess_return_after_costs=0.18,
+            max_adverse_excursion=0.02,
+            turnover=0.5,
+            outcome_grade="PASS",
+            failure_attributions=[],
+            recommended_promotion_stage="PAPER_SHADOW_PASSED",
+            recommended_strategy_action="PROMOTE_TO_PAPER",
+            blocked_reasons=[],
+            notes=["Cross-symbol distractor must not enter BTC lineage CLI output."],
+            decision_basis="test",
+        )
+    )
+
+    assert main(["strategy-lineage", "--storage-dir", str(tmp_path), "--symbol", "BTC-USD"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    summary = payload["strategy_lineage"]
+    assert summary["root_card_id"] == "strategy-card:visible"
+    assert summary["revision_count"] == 2
+    assert summary["outcome_count"] == 3
+    assert summary["performance_verdict"] == "惡化"
+    assert summary["latest_recommended_strategy_action"] == "QUARANTINE_STRATEGY"
+    assert summary["next_research_focus"] == "停止加碼此 lineage，優先研究 drawdown_breach 的修正或新策略。"
+    assert "paper-shadow-outcome:eth-distractor" not in {
+        item["outcome_id"] for item in summary["outcome_nodes"]
+    }
+
+
+def test_strategy_lineage_cli_rejects_missing_storage_without_creating_directory(tmp_path, capsys):
+    missing_storage = tmp_path / "typo-storage"
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["strategy-lineage", "--storage-dir", str(missing_storage), "--symbol", "BTC-USD"])
+
+    assert exc_info.value.code == 2
+    assert not missing_storage.exists()
+    captured = capsys.readouterr()
+    assert "storage directory does not exist" in captured.err
+    assert "Traceback" not in captured.err
+
+
 def test_operator_console_strategy_lineage_escapes_revision_change_summary(tmp_path):
     now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
     repository = JsonFileRepository(tmp_path)

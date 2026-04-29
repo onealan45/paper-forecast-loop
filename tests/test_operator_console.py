@@ -788,6 +788,42 @@ def test_operator_console_shows_strategy_revision_retest_scaffold(tmp_path):
         assert "locked_evaluation_result" in html
 
 
+def test_operator_console_shows_revision_retest_task_plan(tmp_path):
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_visible_strategy_research(repository, now)
+    _seed_visible_revision_candidate(repository, now + timedelta(minutes=10))
+    _seed_visible_revision_retest_scaffold(repository, now + timedelta(minutes=20))
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    research_html = render_operator_console_page(snapshot, page="research")
+    overview_html = render_operator_console_page(snapshot, page="overview")
+
+    for html in (research_html, overview_html):
+        assert "下一個 retest 研究任務" in html
+        assert "lock_evaluation_protocol" in html
+        assert "ready" in html
+        assert "cost_model_snapshot" in html
+        assert "lock-evaluation-protocol" in html
+        assert "--train-start" in html
+
+
+def test_operator_console_revision_retest_task_plan_falls_back_when_source_missing(tmp_path):
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_visible_strategy_research(repository, now)
+    _seed_visible_revision_candidate(repository, now + timedelta(minutes=10))
+    (tmp_path / "paper_shadow_outcomes.jsonl").write_text("", encoding="utf-8")
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    research_html = render_operator_console_page(snapshot, page="research")
+    overview_html = render_operator_console_page(snapshot, page="overview")
+
+    for html in (research_html, overview_html):
+        assert "策略修正候選" in html
+        assert "目前沒有可解析的 retest task plan" in html
+
+
 def test_overview_prioritizes_strategy_research_focus_before_artifact_counts(tmp_path):
     now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
     repository = JsonFileRepository(tmp_path)

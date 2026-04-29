@@ -996,6 +996,40 @@ def test_dashboard_shows_strategy_revision_retest_scaffold(tmp_path):
     assert "locked_evaluation_result" in html
 
 
+def test_dashboard_shows_revision_retest_task_plan(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    _seed_dashboard_strategy_research(repository, now)
+    _seed_dashboard_revision_candidate(repository, now + timedelta(minutes=10))
+    _seed_dashboard_revision_retest_scaffold(repository, now + timedelta(minutes=20))
+
+    html = render_dashboard_html(build_dashboard_snapshot(tmp_path))
+
+    assert "下一個 retest 研究任務" in html
+    assert "lock_evaluation_protocol" in html
+    assert "ready" in html
+    assert "cost_model_snapshot" in html
+    assert "lock-evaluation-protocol" in html
+    assert "--train-start" in html
+
+
+def test_dashboard_revision_retest_task_plan_falls_back_when_source_missing(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    _seed_dashboard_strategy_research(repository, now)
+    _seed_dashboard_revision_candidate(repository, now + timedelta(minutes=10))
+    (tmp_path / "paper_shadow_outcomes.jsonl").write_text("", encoding="utf-8")
+
+    html = render_dashboard_html(build_dashboard_snapshot(tmp_path))
+
+    assert "策略修正候選" in html
+    assert "目前沒有可解析的 retest task plan" in html
+
+
 def test_dashboard_does_not_label_unrelated_agenda_as_revision_retest(tmp_path):
     from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
 

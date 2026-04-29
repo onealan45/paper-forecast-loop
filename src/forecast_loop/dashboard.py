@@ -35,6 +35,7 @@ from forecast_loop.models import (
     StrategyCard,
     StrategyDecision,
 )
+from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.storage import JsonFileRepository
 
@@ -66,6 +67,7 @@ class DashboardSnapshot:
     latest_strategy_revision_retest_trial: ExperimentTrial | None
     latest_strategy_revision_split_manifest: SplitManifest | None
     latest_strategy_revision_next_required_artifacts: list[str]
+    latest_strategy_revision_retest_task_plan: RevisionRetestTaskPlan | None
     paper_orders: list[PaperOrder]
     broker_orders: list[BrokerOrder]
     paper_fills: list[PaperFill]
@@ -155,6 +157,13 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         now=datetime.now(tz=UTC),
         create_repair_request=False,
     )
+    revision_card = research_chain.revision_candidate.strategy_card if research_chain.revision_candidate else None
+    revision_task_plan = _safe_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=storage_dir,
+        symbol=dashboard_symbol,
+        revision_card=revision_card,
+    )
 
     return DashboardSnapshot(
         storage_dir=storage_dir,
@@ -176,9 +185,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         latest_paper_shadow_outcome=research_chain.paper_shadow_outcome,
         latest_research_agenda=research_chain.research_agenda,
         latest_research_autopilot_run=research_chain.research_autopilot_run,
-        latest_strategy_revision_card=(
-            research_chain.revision_candidate.strategy_card if research_chain.revision_candidate else None
-        ),
+        latest_strategy_revision_card=revision_card,
         latest_strategy_revision_agenda=(
             research_chain.revision_candidate.research_agenda if research_chain.revision_candidate else None
         ),
@@ -196,6 +203,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
             if research_chain.revision_candidate
             else []
         ),
+        latest_strategy_revision_retest_task_plan=revision_task_plan,
         paper_orders=paper_orders,
         broker_orders=broker_orders,
         paper_fills=paper_fills,
@@ -223,6 +231,26 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         repair_request_id=health_result.repair_request_id,
         health_findings=health_result.findings,
     )
+
+
+def _safe_revision_retest_task_plan(
+    *,
+    repository: JsonFileRepository,
+    storage_dir: Path,
+    symbol: str,
+    revision_card: StrategyCard | None,
+) -> RevisionRetestTaskPlan | None:
+    if revision_card is None:
+        return None
+    try:
+        return build_revision_retest_task_plan(
+            repository=repository,
+            storage_dir=storage_dir,
+            symbol=symbol,
+            revision_card_id=revision_card.card_id,
+        )
+    except ValueError:
+        return None
 
 
 def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
@@ -952,7 +980,32 @@ def _render_strategy_revision_candidate(snapshot: DashboardSnapshot) -> str:
           <dt>Locked Split</dt><dd>{_dashboard_artifact_id(retest_split, "manifest_id")} / {escape(retest_split.status if retest_split else "尚未鎖定")}</dd>
           <dt>Next Required</dt><dd>{_dashboard_list_inline(snapshot.latest_strategy_revision_next_required_artifacts)}</dd>
         </dl>
+        {_render_revision_retest_task_plan(snapshot.latest_strategy_revision_retest_task_plan)}
       </div>
+    """
+
+
+def _render_revision_retest_task_plan(plan: RevisionRetestTaskPlan | None) -> str:
+    if plan is None:
+        return """
+        <div class="evidence-block subtle">
+          <h4>下一個 retest 研究任務</h4>
+          <p class="micro-copy">目前沒有可解析的 retest task plan。</p>
+        </div>
+        """
+    next_task = plan.task_by_id(plan.next_task_id) if plan.next_task_id else None
+    command = " ".join(next_task.command_args) if next_task and next_task.command_args else "無"
+    return f"""
+        <div class="evidence-block subtle">
+          <h4>下一個 retest 研究任務</h4>
+          <dl>
+            <dt>Task</dt><dd><code>{escape(next_task.task_id if next_task else "none")}</code> / {escape(next_task.status if next_task else "completed")}</dd>
+            <dt>Required Artifact</dt><dd><code>{escape(next_task.required_artifact if next_task else "none")}</code></dd>
+            <dt>Blocked Reason</dt><dd>{escape(next_task.blocked_reason if next_task and next_task.blocked_reason else "none")}</dd>
+            <dt>Missing Inputs</dt><dd>{_dashboard_list_inline(next_task.missing_inputs if next_task else [])}</dd>
+            <dt>Command Args</dt><dd><code>{escape(command)}</code><br><span class="micro-copy">只顯示，不執行。</span></dd>
+          </dl>
+        </div>
     """
 
 

@@ -142,6 +142,9 @@ The PRD follows that decision:
 - PR27 adds Revision Retest Completed Chain Visibility: the strategy research
   resolver and read-only UX now treat a completed revision retest chain as
   `PASSED` evidence with no remaining `Next Required` artifacts.
+- PR28 adds Revision Retest Autopilot Run support: completed DRAFT revision
+  retests can be recorded as research autopilot runs without fabricating a
+  strategy decision artifact.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -194,6 +197,9 @@ Product implications:
 - Completed revision retest chains must remain visible as completed evidence,
   not disappear back into raw JSONL after the pending scaffold is superseded by
   a PASSED trial.
+- Completed revision retest chains may be logged as research autopilot evidence
+  without requiring a next-horizon strategy decision, while normal strategy
+  runs still require decision evidence.
 - The evaluation path must be deterministic, versioned, and auditable.
 - Failed experiments must be retained as evidence, not discarded.
 - Promotion inside the research loop must depend on research evidence, not on
@@ -683,9 +689,10 @@ correctness defects:
   retest trial recording from existing evidence, and PR25 adds leaderboard-gate
   execution from plan-linked PASSED retest evidence, and PR26 adds explicit
   shadow-outcome execution when real observation inputs are supplied, and PR27
-  keeps completed chains visible as completed revision evidence, but strong
-  strategy generation, model training, deeper self-evolving skill loops, and
-  optimizers are not included yet
+  keeps completed chains visible as completed revision evidence, and PR28
+  records revision retest autopilot runs without fake decision artifacts, but
+  strong strategy generation, model training, deeper self-evolving skill loops,
+  and optimizers are not included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved
 - walk-forward validation now influences simulated BUY/SELL gates through
   M4F research-quality checks

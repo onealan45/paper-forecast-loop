@@ -10,6 +10,7 @@ from forecast_loop.models import (
     ResearchAutopilotRun,
 )
 from forecast_loop.storage import ArtifactRepository
+from forecast_loop.strategy_research import REVISION_CARD_BASIS
 
 
 def create_research_agenda(
@@ -181,7 +182,7 @@ def _blocked_reasons(
         blocked.append(f"missing_leaderboard_entry:{leaderboard_entry_id}")
     if strategy_decision_id and decision is None:
         blocked.append(f"missing_strategy_decision:{strategy_decision_id}")
-    if strategy_decision_id is None:
+    if strategy_decision_id is None and _requires_strategy_decision(card, outcome):
         blocked.append("strategy_decision_missing")
     if decision is not None:
         if entry is not None and decision.symbol != entry.symbol:
@@ -235,6 +236,18 @@ def _blocked_reasons(
         if outcome.recommended_strategy_action in {"RETIRE", "REVISE"}:
             blocked.extend(outcome.failure_attributions)
     return _unique(blocked)
+
+
+def _requires_strategy_decision(card, outcome: PaperShadowOutcome | None) -> bool:
+    if card is None:
+        return True
+    is_revision_retest = (
+        card.status == "DRAFT"
+        and card.decision_basis == REVISION_CARD_BASIS
+        and outcome is not None
+        and outcome.strategy_card_id == card.card_id
+    )
+    return not is_revision_retest
 
 
 def _loop_status_and_action(

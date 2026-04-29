@@ -132,6 +132,10 @@ factory:
 - PR23 extends the same executor to `run_walk_forward`, allowing the retest
   chain to produce rolling validation evidence from the locked full split window
   while still rejecting passed-trial recording and later tasks.
+- PR24 extends the same executor to `record_passed_retest_trial`, allowing the
+  retest chain to link baseline, holdout backtest, and walk-forward evidence
+  into a PASSED trial while still rejecting leaderboard evaluation and later
+  tasks.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -1404,8 +1408,10 @@ backtest step uses the locked split manifest holdout window and stored candles
 in the same storage directory. The walk-forward step uses the locked full split
 window from `train_start` through `holdout_end`. It writes the created artifact
 plus an execution `AutomationRun`, then returns before/after task plans.
-`record_passed_retest_trial` and later retest tasks remain blocked until they
-receive their own narrow executor support.
+`record_passed_retest_trial`. The passed-trial step links the pending retest
+trial to the current dataset, backtest, walk-forward validation, and source
+paper-shadow outcome. `evaluate_leaderboard_gate` and later retest tasks remain
+blocked until they receive their own narrow executor support.
 
 Generate a Markdown research report from existing artifacts:
 

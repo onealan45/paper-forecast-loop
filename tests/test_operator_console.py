@@ -556,6 +556,62 @@ def _seed_visible_strategy_lineage(repository: JsonFileRepository, now: datetime
     )
 
 
+def _seed_visible_second_generation_strategy_lineage(repository: JsonFileRepository, now: datetime) -> None:
+    second_revision = StrategyCard(
+        card_id="strategy-card:visible-second-revision",
+        created_at=now,
+        strategy_name="BTC strategy visibility second revision",
+        strategy_family="breakout_reversal",
+        version="v2.rev2",
+        status="DRAFT",
+        symbols=["BTC-USD"],
+        hypothesis="Second revision should inherit the original visible strategy lineage.",
+        signal_description="Second revision tightens risk after the first revised shadow failed.",
+        entry_rules=["突破前高且成交量放大", "Require second-generation risk confirmation."],
+        exit_rules=["跌回突破區間", "Stop when second-generation drawdown guard triggers."],
+        risk_rules=["Block promotion until recursive lineage shows repaired failure attributions."],
+        parameters={
+            "revision_source_outcome_id": "paper-shadow-outcome:visible-revision-quarantine",
+            "revision_failure_attributions": ["drawdown_breach"],
+            "minimum_after_cost_edge": 0.015,
+        },
+        data_requirements=["market_candles:BTC-USD:1h"],
+        feature_snapshot_ids=[],
+        backtest_result_ids=[],
+        walk_forward_validation_ids=[],
+        event_edge_evaluation_ids=[],
+        parent_card_id="strategy-card:visible-revision",
+        author="codex-strategy-evolution",
+        decision_basis="paper_shadow_strategy_revision_candidate",
+    )
+    repository.save_strategy_card(second_revision)
+    repository.save_paper_shadow_outcome(
+        PaperShadowOutcome(
+            outcome_id="paper-shadow-outcome:visible-second-revision-quarantine",
+            created_at=now,
+            leaderboard_entry_id="leaderboard-entry:visible-second-revision-retest",
+            evaluation_id="locked-evaluation:visible-second-revision-retest",
+            strategy_card_id=second_revision.card_id,
+            trial_id="experiment-trial:visible-second-revision-retest",
+            symbol="BTC-USD",
+            window_start=now - timedelta(hours=24),
+            window_end=now,
+            observed_return=-0.08,
+            benchmark_return=0.02,
+            excess_return_after_costs=-0.11,
+            max_adverse_excursion=0.18,
+            turnover=2.1,
+            outcome_grade="FAIL",
+            failure_attributions=["drawdown_breach", "weak_baseline_edge"],
+            recommended_promotion_stage="PAPER_SHADOW_FAILED",
+            recommended_strategy_action="QUARANTINE_STRATEGY",
+            blocked_reasons=["paper_shadow_failed", "weak_baseline_edge"],
+            notes=["Second-generation revision still failed paper shadow."],
+            decision_basis="test",
+        )
+    )
+
+
 def _seed_distractor_strategy_research_without_run(repository: JsonFileRepository, now: datetime) -> None:
     card = replace(
         _visible_strategy_card(now),
@@ -1047,6 +1103,35 @@ def test_operator_console_lineage_uses_parent_root_when_latest_chain_is_revision
     assert summary.outcome_count == 2
     assert summary.action_counts == {"QUARANTINE_STRATEGY": 1, "REVISE_STRATEGY": 1}
     assert summary.best_excess_return_after_costs == -0.025
+
+
+def test_operator_console_strategy_lineage_includes_multi_generation_revisions(tmp_path):
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_visible_strategy_research(repository, now)
+    _seed_visible_revision_candidate(repository, now + timedelta(minutes=10))
+    _seed_visible_strategy_lineage(repository, now + timedelta(minutes=20))
+    _seed_visible_second_generation_strategy_lineage(repository, now + timedelta(minutes=30))
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    research_html = render_operator_console_page(snapshot, page="research")
+    overview_html = render_operator_console_page(snapshot, page="overview")
+
+    assert snapshot.latest_strategy_lineage_summary is not None
+    assert snapshot.latest_strategy_lineage_summary.root_card_id == "strategy-card:visible"
+    assert snapshot.latest_strategy_lineage_summary.revision_card_ids == [
+        "strategy-card:visible-revision",
+        "strategy-card:visible-second-revision",
+    ]
+    assert snapshot.latest_strategy_lineage_summary.outcome_count == 3
+    assert snapshot.latest_strategy_lineage_summary.action_counts == {
+        "QUARANTINE_STRATEGY": 2,
+        "REVISE_STRATEGY": 1,
+    }
+    for html in (research_html, overview_html):
+        assert "weak_baseline_edge" in html
+        assert "paper-shadow-outcome:visible-second-revision-quarantine" in html
+        assert "-0.1100" in html
 
 
 def test_operator_console_revision_retest_task_plan_falls_back_when_source_missing(tmp_path):

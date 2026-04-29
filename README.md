@@ -159,6 +159,9 @@ factory:
   parent strategy, DRAFT revisions, paper-shadow action counts, failure
   attribution concentration, best/worst after-cost excess return, and latest
   shadow outcome.
+- PR32 makes that strategy lineage recursive: multi-generation revisions and
+  their shadow outcomes now stay attached to the original root strategy, so the
+  UX can show deeper self-evolution history instead of only direct children.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from forecast_loop.backtest import run_backtest
 from forecast_loop.baselines import build_baseline_evaluation
 from forecast_loop.locked_evaluation import lock_evaluation_protocol
 from forecast_loop.models import AutomationRun
@@ -60,6 +61,13 @@ def execute_revision_retest_next_task(
     elif task.task_id == "generate_baseline_evaluation":
         created_artifact_ids = _execute_generate_baseline_evaluation(
             repository=repository,
+            plan=before_plan,
+            created_at=created_at,
+        )
+    elif task.task_id == "run_backtest":
+        created_artifact_ids = _execute_run_backtest(
+            repository=repository,
+            storage_dir=storage_path,
             plan=before_plan,
             created_at=created_at,
         )
@@ -133,6 +141,31 @@ def _execute_generate_baseline_evaluation(
     )
     repository.save_baseline_evaluation(baseline)
     return [baseline.baseline_id]
+
+
+def _execute_run_backtest(
+    *,
+    repository: ArtifactRepository,
+    storage_dir: Path,
+    plan: RevisionRetestTaskPlan,
+    created_at: datetime,
+) -> list[str]:
+    if plan.split_manifest_id is None:
+        raise ValueError("revision_retest_split_manifest_missing")
+    split = next(
+        (item for item in repository.load_split_manifests() if item.manifest_id == plan.split_manifest_id),
+        None,
+    )
+    if split is None:
+        raise ValueError(f"missing_split_manifest:{plan.split_manifest_id}")
+    result = run_backtest(
+        storage_dir=storage_dir,
+        symbol=plan.symbol,
+        start=split.holdout_start,
+        end=split.holdout_end,
+        created_at=created_at,
+    )
+    return [result.result.result_id]
 
 
 def _execute_lock_evaluation_protocol(

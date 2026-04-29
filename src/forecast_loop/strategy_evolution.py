@@ -5,6 +5,7 @@ from datetime import datetime
 
 from forecast_loop.models import PaperShadowOutcome, ResearchAgenda, StrategyCard
 from forecast_loop.storage import ArtifactRepository
+from forecast_loop.strategy_research import REVISION_REQUIRED_ACTIONS
 
 
 REVISION_AUTHOR = "codex-strategy-evolution"
@@ -33,7 +34,7 @@ def propose_strategy_revision(
         artifact_name="paper shadow outcome",
     )
     assert isinstance(outcome, PaperShadowOutcome)
-    if outcome.recommended_strategy_action not in {"RETIRE", "REVISE"}:
+    if outcome.recommended_strategy_action not in REVISION_REQUIRED_ACTIONS:
         raise ValueError(
             "paper shadow outcome does not require revision: "
             f"{paper_shadow_outcome_id} action={outcome.recommended_strategy_action}"

@@ -33,6 +33,7 @@ from forecast_loop.event_reliability import build_event_reliability
 from forecast_loop.experiment_registry import record_experiment_trial, register_strategy_card
 from forecast_loop.health import run_health_check
 from forecast_loop.lineage_agenda import create_lineage_research_agenda
+from forecast_loop.lineage_research_plan import build_lineage_research_task_plan
 from forecast_loop.locked_evaluation import evaluate_leaderboard_gate, lock_evaluation_protocol
 from forecast_loop.macro_events import import_macro_events, macro_calendar
 from forecast_loop.market_reaction import build_market_reactions
@@ -123,6 +124,10 @@ def main(argv: list[str] | None = None) -> int:
     lineage_agenda_cmd.add_argument("--storage-dir", required=True)
     lineage_agenda_cmd.add_argument("--symbol", default="BTC-USD")
     lineage_agenda_cmd.add_argument("--created-at")
+
+    lineage_plan_cmd = subparsers.add_parser("lineage-research-plan")
+    lineage_plan_cmd.add_argument("--storage-dir", required=True)
+    lineage_plan_cmd.add_argument("--symbol", default="BTC-USD")
 
     operator_control = subparsers.add_parser("operator-control")
     operator_control.add_argument("--storage-dir", required=True)
@@ -540,6 +545,8 @@ def main(argv: list[str] | None = None) -> int:
             return _strategy_lineage(args)
         if args.command == "create-lineage-research-agenda":
             return _create_lineage_research_agenda(args)
+        if args.command == "lineage-research-plan":
+            return _lineage_research_plan(args)
         if args.command == "operator-control":
             return _operator_control(args)
         if args.command == "repair-storage":
@@ -1013,6 +1020,30 @@ def _create_lineage_research_agenda(args) -> int:
         symbol=args.symbol,
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _lineage_research_plan(args) -> int:
+    storage_dir = Path(args.storage_dir)
+    if not storage_dir.exists():
+        raise ValueError(f"storage directory does not exist: {storage_dir}")
+    if not storage_dir.is_dir():
+        raise ValueError(f"storage path is not a directory: {storage_dir}")
+    plan = build_lineage_research_task_plan(
+        repository=JsonFileRepository(storage_dir),
+        storage_dir=storage_dir,
+        symbol=args.symbol,
+    )
+    print(
+        json.dumps(
+            {
+                "storage_dir": str(storage_dir.resolve()),
+                "symbol": args.symbol.upper(),
+                "lineage_research_task_plan": plan.to_dict(),
+            },
+            ensure_ascii=False,
+        )
+    )
     return 0
 
 

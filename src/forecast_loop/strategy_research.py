@@ -17,6 +17,7 @@ from forecast_loop.models import (
 
 REVISION_CARD_BASIS = "paper_shadow_strategy_revision_candidate"
 REVISION_AGENDA_BASIS = "paper_shadow_strategy_revision_agenda"
+REVISION_REQUIRED_ACTIONS = {"RETIRE", "REVISE", "REVISE_STRATEGY"}
 
 
 @dataclass(slots=True)

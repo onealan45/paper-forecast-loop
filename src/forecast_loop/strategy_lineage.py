@@ -29,10 +29,7 @@ def build_strategy_lineage_summary(
         return None
 
     root_card = _lineage_root_card(root_card, strategy_cards)
-    revision_cards = sorted(
-        [card for card in strategy_cards if card.parent_card_id == root_card.card_id],
-        key=lambda card: (card.created_at, card.card_id),
-    )
+    revision_cards = _lineage_revision_cards(root_card, strategy_cards)
     lineage_card_ids = {root_card.card_id, *(card.card_id for card in revision_cards)}
     lineage_outcomes = sorted(
         [outcome for outcome in paper_shadow_outcomes if outcome.strategy_card_id in lineage_card_ids],
@@ -66,7 +63,36 @@ def build_strategy_lineage_summary(
 
 
 def _lineage_root_card(card: StrategyCard, strategy_cards: list[StrategyCard]) -> StrategyCard:
-    if card.parent_card_id is None:
-        return card
     parent_by_id = {candidate.card_id: candidate for candidate in strategy_cards}
-    return parent_by_id.get(card.parent_card_id, card)
+    current = card
+    visited = {card.card_id}
+    while current.parent_card_id is not None:
+        parent = parent_by_id.get(current.parent_card_id)
+        if parent is None or parent.card_id in visited:
+            return current
+        current = parent
+        visited.add(current.card_id)
+    return current
+
+
+def _lineage_revision_cards(root_card: StrategyCard, strategy_cards: list[StrategyCard]) -> list[StrategyCard]:
+    children_by_parent: dict[str, list[StrategyCard]] = {}
+    for card in strategy_cards:
+        if card.card_id == root_card.card_id or card.parent_card_id is None:
+            continue
+        children_by_parent.setdefault(card.parent_card_id, []).append(card)
+
+    for children in children_by_parent.values():
+        children.sort(key=lambda card: (card.created_at, card.card_id))
+
+    revision_cards: list[StrategyCard] = []
+    visited = {root_card.card_id}
+    stack = list(reversed(children_by_parent.get(root_card.card_id, [])))
+    while stack:
+        card = stack.pop()
+        if card.card_id in visited:
+            continue
+        visited.add(card.card_id)
+        revision_cards.append(card)
+        stack.extend(reversed(children_by_parent.get(card.card_id, [])))
+    return revision_cards

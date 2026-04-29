@@ -138,3 +138,52 @@ def test_strategy_lineage_summary_resolves_parent_when_current_card_is_revision(
     assert summary.outcome_count == 2
     assert summary.action_counts == {"QUARANTINE_STRATEGY": 1, "REVISE_STRATEGY": 1}
     assert summary.best_excess_return_after_costs == -0.03
+
+
+def test_strategy_lineage_summary_includes_multi_generation_revisions():
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    parent = _card("strategy-card:parent")
+    revision = _card("strategy-card:revision", parent_card_id=parent.card_id, status="DRAFT")
+    second_revision = _card("strategy-card:second-revision", parent_card_id=revision.card_id, status="DRAFT")
+
+    summary = build_strategy_lineage_summary(
+        root_card=second_revision,
+        strategy_cards=[parent, revision, second_revision],
+        paper_shadow_outcomes=[
+            _outcome(
+                "parent-fail",
+                card_id=parent.card_id,
+                created_at=now,
+                action="REVISE_STRATEGY",
+                excess=-0.03,
+                attributions=["negative_excess_return"],
+            ),
+            _outcome(
+                "revision-fail",
+                card_id=revision.card_id,
+                created_at=now + timedelta(hours=1),
+                action="REVISE_STRATEGY",
+                excess=-0.05,
+                attributions=["negative_excess_return"],
+            ),
+            _outcome(
+                "second-revision-fail",
+                card_id=second_revision.card_id,
+                created_at=now + timedelta(hours=2),
+                action="QUARANTINE_STRATEGY",
+                excess=-0.09,
+                attributions=["drawdown_breach"],
+            ),
+        ],
+    )
+
+    assert summary is not None
+    assert summary.root_card_id == parent.card_id
+    assert summary.revision_card_ids == [revision.card_id, second_revision.card_id]
+    assert summary.revision_count == 2
+    assert summary.outcome_count == 3
+    assert summary.action_counts == {"QUARANTINE_STRATEGY": 1, "REVISE_STRATEGY": 2}
+    assert summary.failure_attribution_counts == {"drawdown_breach": 1, "negative_excess_return": 2}
+    assert summary.best_excess_return_after_costs == -0.03
+    assert summary.worst_excess_return_after_costs == -0.09
+    assert summary.latest_outcome_id == "second-revision-fail"

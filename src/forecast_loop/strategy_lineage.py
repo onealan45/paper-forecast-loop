@@ -77,8 +77,10 @@ def _lineage_root_card(card: StrategyCard, strategy_cards: list[StrategyCard]) -
     visited = {card.card_id}
     while current.parent_card_id is not None:
         parent = parent_by_id.get(current.parent_card_id)
-        if parent is None or parent.card_id in visited:
+        if parent is None:
             return current
+        if parent.card_id in visited:
+            return card
         current = parent
         visited.add(current.card_id)
     return current

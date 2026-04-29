@@ -161,6 +161,9 @@ The PRD follows that decision:
 - PR33 adds Strategy Lineage Tree Visibility: dashboard and operator console
   now expose each revision's parent and depth so nested or branching revision
   paths remain inspectable.
+- PR34 adds Strategy Lineage Edge Regressions: branching trees, missing parents,
+  and parent cycles are now committed regression cases instead of reviewer-only
+  smoke checks.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -229,6 +232,9 @@ Product implications:
   the latest visible strategy card is a second- or later-generation revision.
 - Strategy lineage should show revision tree structure, not only a flat list,
   when the AI creates nested or sibling revisions.
+- Corrupt lineage metadata should fail conservatively: missing parents should
+  keep the current card as root, and cycles should terminate without switching
+  the UX anchor to an arbitrary cycle member.
 - The evaluation path must be deterministic, versioned, and auditable.
 - Failed experiments must be retained as evidence, not discarded.
 - Promotion inside the research loop must depend on research evidence, not on
@@ -731,8 +737,8 @@ correctness defects:
   PR30 makes those completed revision retest autopilot runs visible in the
   dashboard and operator console. PR31 adds strategy lineage summaries for
   parent/revision shadow evidence, PR32 makes those summaries recursive across
-  multi-generation revision trees, and PR33 exposes revision parent/depth rows
-  in the UX, but
+  multi-generation revision trees, PR33 exposes revision parent/depth rows in
+  the UX, and PR34 hardens branching/missing-parent/cycle edge cases, but
   strong strategy generation, model training, deeper self-evolving skill loops,
   and optimizers are not included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved

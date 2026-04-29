@@ -71,6 +71,7 @@ class DashboardSnapshot:
     latest_strategy_revision_next_required_artifacts: list[str]
     latest_strategy_revision_retest_task_plan: RevisionRetestTaskPlan | None
     latest_strategy_revision_retest_task_run: AutomationRun | None
+    latest_strategy_revision_retest_autopilot_run: ResearchAutopilotRun | None
     paper_orders: list[PaperOrder]
     broker_orders: list[BrokerOrder]
     paper_fills: list[PaperFill]
@@ -168,6 +169,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         symbol=dashboard_symbol,
         revision_card=revision_card,
     )
+    revision_autopilot_run = _latest_revision_retest_autopilot_run(research_autopilot_runs, revision_card)
 
     return DashboardSnapshot(
         storage_dir=storage_dir,
@@ -209,6 +211,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         ),
         latest_strategy_revision_retest_task_plan=revision_task_plan,
         latest_strategy_revision_retest_task_run=_latest_revision_retest_task_run(automation_runs, revision_task_plan),
+        latest_strategy_revision_retest_autopilot_run=revision_autopilot_run,
         paper_orders=paper_orders,
         broker_orders=broker_orders,
         paper_fills=paper_fills,
@@ -270,6 +273,23 @@ def _latest_revision_retest_task_run(
         if automation_run_matches_revision_retest_plan(run, task_plan)
     ]
     return max(matches, key=lambda run: run.completed_at) if matches else None
+
+
+def _latest_revision_retest_autopilot_run(
+    runs: list[ResearchAutopilotRun],
+    revision_card: StrategyCard | None,
+) -> ResearchAutopilotRun | None:
+    if revision_card is None:
+        return None
+    matches = [
+        run
+        for run in runs
+        if run.strategy_card_id == revision_card.card_id
+        and run.decision_basis == "research_paper_autopilot_loop"
+        and run.strategy_decision_id is None
+        and run.paper_shadow_outcome_id is not None
+    ]
+    return max(matches, key=lambda run: run.created_at) if matches else None
 
 
 def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
@@ -1001,6 +1021,7 @@ def _render_strategy_revision_candidate(snapshot: DashboardSnapshot) -> str:
         </dl>
         {_render_revision_retest_task_plan(snapshot.latest_strategy_revision_retest_task_plan)}
         {_render_revision_retest_task_run(snapshot.latest_strategy_revision_retest_task_run)}
+        {_render_revision_retest_autopilot_run(snapshot.latest_strategy_revision_retest_autopilot_run)}
       </div>
     """
 
@@ -1052,6 +1073,30 @@ def _render_revision_retest_task_run(run: AutomationRun | None) -> str:
     """
 
 
+def _render_revision_retest_autopilot_run(run: ResearchAutopilotRun | None) -> str:
+    if run is None:
+        return """
+        <div class="evidence-block subtle">
+          <h4>最新 revision retest autopilot run</h4>
+          <p class="micro-copy">尚未記錄 completed revision retest chain 的 research autopilot run；可用 <code>record-revision-retest-autopilot-run</code> 寫入閉環證據。</p>
+        </div>
+        """
+    return f"""
+        <div class="evidence-block subtle">
+          <h4>最新 revision retest autopilot run</h4>
+          <dl>
+            <dt>Loop Status</dt><dd><span class="{_dashboard_automation_status_class(run.loop_status)}">{escape(run.loop_status)}</span></dd>
+            <dt>Run ID</dt><dd><code>{escape(run.run_id)}</code></dd>
+            <dt>Next Action</dt><dd>{escape(run.next_research_action)}</dd>
+            <dt>Paper-shadow Outcome</dt><dd><code>{escape(run.paper_shadow_outcome_id or "none")}</code></dd>
+            <dt>Blocked</dt><dd>{_dashboard_list_inline(run.blocked_reasons)}</dd>
+            <dt>Steps</dt><dd>{_dashboard_steps_inline(run)}</dd>
+          </dl>
+          <p class="micro-copy">這是 revision retest 完整閉環的 research autopilot 紀錄；只顯示，不執行。</p>
+        </div>
+    """
+
+
 def _dashboard_run_step_list(run: AutomationRun) -> str:
     if not run.steps:
         return '<span class="micro-copy">沒有 step 記錄。</span>'
@@ -1066,7 +1111,7 @@ def _dashboard_run_step_list(run: AutomationRun) -> str:
 
 
 def _dashboard_automation_status_class(status: str) -> str:
-    if status in {"RETEST_TASK_BLOCKED", "failed", "repair_required"}:
+    if status in {"BLOCKED", "RETEST_TASK_BLOCKED", "failed", "repair_required"}:
         return "tag warn"
     return "tag ok"
 

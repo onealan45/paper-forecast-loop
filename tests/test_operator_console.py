@@ -808,6 +808,102 @@ def test_operator_console_shows_revision_retest_task_plan(tmp_path):
         assert "--train-start" in html
 
 
+def test_operator_console_shows_revision_retest_task_run_log(tmp_path):
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_visible_strategy_research(repository, now)
+    _seed_visible_revision_candidate(repository, now + timedelta(minutes=10))
+    _seed_visible_revision_retest_scaffold(repository, now + timedelta(minutes=20))
+    repository.save_automation_run(
+        AutomationRun(
+            automation_run_id="automation-run:visible-retest-task",
+            started_at=now + timedelta(minutes=30),
+            completed_at=now + timedelta(minutes=30),
+            status="RETEST_TASK_READY",
+            symbol="BTC-USD",
+            provider="research",
+            command="revision-retest-plan",
+            steps=[
+                {
+                    "name": "revision_card",
+                    "status": "completed",
+                    "artifact_id": "strategy-card:visible-revision",
+                },
+                {
+                    "name": "source_outcome",
+                    "status": "completed",
+                    "artifact_id": "paper-shadow-outcome:visible",
+                },
+                {
+                    "name": "lock_evaluation_protocol",
+                    "status": "ready",
+                    "artifact_id": "split-manifest:visible-revision-retest",
+                }
+            ],
+            health_check_id=None,
+            decision_id=None,
+            repair_request_id=None,
+            decision_basis="revision_retest_task_plan_run_log",
+        )
+    )
+    repository.save_automation_run(
+        AutomationRun(
+            automation_run_id="automation-run:visible-wrong-revision-newer",
+            started_at=now + timedelta(minutes=35),
+            completed_at=now + timedelta(minutes=35),
+            status="RETEST_TASK_BLOCKED",
+            symbol="BTC-USD",
+            provider="research",
+            command="revision-retest-plan",
+            steps=[
+                {
+                    "name": "revision_card",
+                    "status": "completed",
+                    "artifact_id": "strategy-card:other-revision",
+                },
+                {
+                    "name": "source_outcome",
+                    "status": "completed",
+                    "artifact_id": "paper-shadow-outcome:other",
+                },
+            ],
+            health_check_id=None,
+            decision_id=None,
+            repair_request_id=None,
+            decision_basis="revision_retest_task_plan_run_log",
+        )
+    )
+    repository.save_automation_run(
+        AutomationRun(
+            automation_run_id="automation-run:visible-unrelated-newer",
+            started_at=now + timedelta(minutes=40),
+            completed_at=now + timedelta(minutes=40),
+            status="SUCCESS",
+            symbol="BTC-USD",
+            provider="coingecko",
+            command="run-once",
+            steps=[],
+            health_check_id=None,
+            decision_id=None,
+            repair_request_id=None,
+            decision_basis="hourly_cycle",
+        )
+    )
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    research_html = render_operator_console_page(snapshot, page="research")
+    overview_html = render_operator_console_page(snapshot, page="overview")
+
+    for html in (research_html, overview_html):
+        assert "最新 retest task run log" in html
+        assert "automation-run:visible-retest-task" in html
+        assert "RETEST_TASK_READY" in html
+        assert "revision-retest-plan" in html
+        assert "lock_evaluation_protocol" in html
+        assert "automation-run:visible-wrong-revision-newer" not in html
+    assert "automation-run:visible-unrelated-newer" not in research_html
+
+
 def test_operator_console_revision_retest_task_plan_falls_back_when_source_missing(tmp_path):
     now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
     repository = JsonFileRepository(tmp_path)

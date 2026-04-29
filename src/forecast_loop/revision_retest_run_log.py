@@ -21,6 +21,20 @@ class RevisionRetestRunLogResult:
         }
 
 
+def automation_run_matches_revision_retest_plan(
+    run: AutomationRun,
+    task_plan: RevisionRetestTaskPlan,
+) -> bool:
+    return (
+        run.symbol == task_plan.symbol
+        and run.provider == "research"
+        and run.command == "revision-retest-plan"
+        and run.decision_basis == "revision_retest_task_plan_run_log"
+        and _step_artifact_id(run, "revision_card") == task_plan.strategy_card_id
+        and _step_artifact_id(run, "source_outcome") == task_plan.source_outcome_id
+    )
+
+
 def record_revision_retest_task_run(
     *,
     repository: ArtifactRepository,
@@ -62,6 +76,13 @@ def record_revision_retest_task_run(
     )
     repository.save_automation_run(run)
     return RevisionRetestRunLogResult(automation_run=run, task_plan=task_plan)
+
+
+def _step_artifact_id(run: AutomationRun, step_name: str) -> str | None:
+    for step in run.steps:
+        if step.get("name") == step_name:
+            return step.get("artifact_id")
+    return None
 
 
 def _run_status(task_plan: RevisionRetestTaskPlan) -> str:

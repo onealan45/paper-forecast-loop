@@ -10,6 +10,7 @@ import tomllib
 
 from forecast_loop.health import run_health_check
 from forecast_loop.models import (
+    AutomationRun,
     BaselineEvaluation,
     BrokerOrder,
     BrokerReconciliation,
@@ -36,6 +37,7 @@ from forecast_loop.models import (
     StrategyDecision,
 )
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
+from forecast_loop.revision_retest_run_log import automation_run_matches_revision_retest_plan
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.storage import JsonFileRepository
 
@@ -68,6 +70,7 @@ class DashboardSnapshot:
     latest_strategy_revision_split_manifest: SplitManifest | None
     latest_strategy_revision_next_required_artifacts: list[str]
     latest_strategy_revision_retest_task_plan: RevisionRetestTaskPlan | None
+    latest_strategy_revision_retest_task_run: AutomationRun | None
     paper_orders: list[PaperOrder]
     broker_orders: list[BrokerOrder]
     paper_fills: list[PaperFill]
@@ -130,6 +133,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
     paper_shadow_outcomes = [item for item in repository.load_paper_shadow_outcomes() if item.symbol == dashboard_symbol]
     research_agendas = [item for item in repository.load_research_agendas() if item.symbol == dashboard_symbol]
     research_autopilot_runs = [item for item in repository.load_research_autopilot_runs() if item.symbol == dashboard_symbol]
+    automation_runs = [item for item in repository.load_automation_runs() if item.symbol == dashboard_symbol]
     research_chain = resolve_latest_strategy_research_chain(
         symbol=dashboard_symbol,
         strategy_cards=strategy_cards,
@@ -204,6 +208,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
             else []
         ),
         latest_strategy_revision_retest_task_plan=revision_task_plan,
+        latest_strategy_revision_retest_task_run=_latest_revision_retest_task_run(automation_runs, revision_task_plan),
         paper_orders=paper_orders,
         broker_orders=broker_orders,
         paper_fills=paper_fills,
@@ -251,6 +256,20 @@ def _safe_revision_retest_task_plan(
         )
     except ValueError:
         return None
+
+
+def _latest_revision_retest_task_run(
+    runs: list[AutomationRun],
+    task_plan: RevisionRetestTaskPlan | None,
+) -> AutomationRun | None:
+    if task_plan is None:
+        return None
+    matches = [
+        run
+        for run in runs
+        if automation_run_matches_revision_retest_plan(run, task_plan)
+    ]
+    return max(matches, key=lambda run: run.completed_at) if matches else None
 
 
 def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
@@ -981,6 +1000,7 @@ def _render_strategy_revision_candidate(snapshot: DashboardSnapshot) -> str:
           <dt>Next Required</dt><dd>{_dashboard_list_inline(snapshot.latest_strategy_revision_next_required_artifacts)}</dd>
         </dl>
         {_render_revision_retest_task_plan(snapshot.latest_strategy_revision_retest_task_plan)}
+        {_render_revision_retest_task_run(snapshot.latest_strategy_revision_retest_task_run)}
       </div>
     """
 
@@ -1007,6 +1027,48 @@ def _render_revision_retest_task_plan(plan: RevisionRetestTaskPlan | None) -> st
           </dl>
         </div>
     """
+
+
+def _render_revision_retest_task_run(run: AutomationRun | None) -> str:
+    if run is None:
+        return """
+        <div class="evidence-block subtle">
+          <h4>最新 retest task run log</h4>
+          <p class="micro-copy">尚未記錄 retest task run log；可用 <code>record-revision-retest-task-run</code> 寫入唯讀稽核紀錄。</p>
+        </div>
+        """
+    return f"""
+        <div class="evidence-block subtle">
+          <h4>最新 retest task run log</h4>
+          <dl>
+            <dt>Status</dt><dd><span class="{_dashboard_automation_status_class(run.status)}">{escape(run.status)}</span></dd>
+            <dt>Run ID</dt><dd><code>{escape(run.automation_run_id)}</code></dd>
+            <dt>Command</dt><dd><code>{escape(run.command)}</code></dd>
+            <dt>Completed</dt><dd>{escape(run.completed_at.isoformat())}</dd>
+            <dt>Steps</dt><dd>{_dashboard_run_step_list(run)}</dd>
+          </dl>
+          <p class="micro-copy">這是 PR18 寫入的稽核紀錄；只顯示，不執行。</p>
+        </div>
+    """
+
+
+def _dashboard_run_step_list(run: AutomationRun) -> str:
+    if not run.steps:
+        return '<span class="micro-copy">沒有 step 記錄。</span>'
+    rows = "".join(
+        "<li>"
+        f"{escape(step.get('name') or '')}: {escape(step.get('status') or '')} "
+        f"<code>{escape(step.get('artifact_id') or 'none')}</code>"
+        "</li>"
+        for step in run.steps
+    )
+    return f'<ul class="compact-list">{rows}</ul>'
+
+
+def _dashboard_automation_status_class(status: str) -> str:
+    if status in {"RETEST_TASK_BLOCKED", "failed", "repair_required"}:
+        return "tag warn"
+    return "tag ok"
 
 
 def render_portfolio_risk_panel(snapshot: DashboardSnapshot) -> str:

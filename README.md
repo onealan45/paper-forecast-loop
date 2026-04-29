@@ -118,6 +118,9 @@ factory:
 - PR18 records the current retest task plan as a research `AutomationRun`, so
   the system can audit when a retest task was inspected and whether it was
   ready or blocked without executing it.
+- PR19 surfaces those retest task run logs in the dashboard and operator
+  console beside the task plan, so the UX shows both the next task and the
+  latest audit evidence for inspecting it.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -763,6 +766,13 @@ PR18 makes the task plan auditable:
 - The run status records whether the next retest task is ready, blocked,
   complete, or in progress.
 - It does not execute command args or create retest evidence.
+
+PR19 shows that audit log in the read-only UX:
+
+- dashboard and operator console render the latest matching retest task run;
+- the panel includes run id, status, source command, completed time, and task
+  steps;
+- rendering remains display-only and never executes command args.
 
 ### Strategy-Visible UX
 

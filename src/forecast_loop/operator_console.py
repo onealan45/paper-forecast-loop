@@ -34,6 +34,7 @@ from forecast_loop.models import (
 )
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.revision_retest_run_log import automation_run_matches_revision_retest_plan
+from forecast_loop.strategy_lineage import StrategyLineageSummary, build_strategy_lineage_summary
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.storage import JsonFileRepository
 
@@ -62,6 +63,7 @@ class OperatorConsoleSnapshot:
     latest_paper_shadow_outcome: PaperShadowOutcome | None
     latest_research_agenda: ResearchAgenda | None
     latest_research_autopilot_run: ResearchAutopilotRun | None
+    latest_strategy_lineage_summary: StrategyLineageSummary | None
     latest_strategy_revision_card: StrategyCard | None
     latest_strategy_revision_agenda: ResearchAgenda | None
     latest_strategy_revision_source_outcome: PaperShadowOutcome | None
@@ -148,6 +150,11 @@ def build_operator_console_snapshot(
         revision_card=revision_card,
     )
     revision_autopilot_run = _latest_revision_retest_autopilot_run(research_autopilot_runs, revision_card)
+    lineage_summary = build_strategy_lineage_summary(
+        root_card=research_chain.strategy_card,
+        strategy_cards=strategy_cards,
+        paper_shadow_outcomes=paper_shadow_outcomes,
+    )
 
     return OperatorConsoleSnapshot(
         storage_dir=storage_path,
@@ -168,6 +175,7 @@ def build_operator_console_snapshot(
         latest_paper_shadow_outcome=research_chain.paper_shadow_outcome,
         latest_research_agenda=research_chain.research_agenda,
         latest_research_autopilot_run=research_chain.research_autopilot_run,
+        latest_strategy_lineage_summary=lineage_summary,
         latest_strategy_revision_card=revision_card,
         latest_strategy_revision_agenda=(
             research_chain.revision_candidate.research_agenda if research_chain.revision_candidate else None
@@ -744,6 +752,7 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
     outcome = snapshot.latest_paper_shadow_outcome
     agenda = snapshot.latest_research_agenda
     autopilot = snapshot.latest_research_autopilot_run
+    lineage = snapshot.latest_strategy_lineage_summary
     return f"""
 <section class="grid">
   <article class="panel wide">
@@ -769,6 +778,7 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
     {_plain_list(autopilot.blocked_reasons if autopilot else [])}
   </article>
   {_revision_candidate_panel(snapshot, wide=False)}
+  {_strategy_lineage_panel(lineage)}
   <article class="panel">
     <h3>Leaderboard</h3>
     <p>ID：{_artifact_id(leaderboard, "entry_id")}</p>
@@ -850,6 +860,32 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
     {_autopilot_steps(autopilot)}
   </article>
 </section>
+"""
+
+
+def _strategy_lineage_panel(summary: StrategyLineageSummary | None) -> str:
+    if summary is None:
+        return """
+  <article class="panel">
+    <h3>策略 lineage</h3>
+    <p class="muted">目前沒有可彙整的策略 lineage。</p>
+  </article>
+"""
+    return f"""
+  <article class="panel wide">
+    <h3>策略 lineage</h3>
+    <p>Root：<code>{escape(summary.root_card_id)}</code></p>
+    <p>Revisions：{summary.revision_count}</p>
+    <p>Revision cards：</p>
+    {_plain_list(summary.revision_card_ids)}
+    <p>Shadow outcomes：{summary.outcome_count}</p>
+    <h4>Action counts</h4>
+    {_dict_rows(summary.action_counts)}
+    <h4>Failure attribution</h4>
+    {_dict_rows(summary.failure_attribution_counts)}
+    <p>Best / worst excess：{_format_number(summary.best_excess_return_after_costs)} / {_format_number(summary.worst_excess_return_after_costs)}</p>
+    <p>Latest outcome：<code>{escape(summary.latest_outcome_id or "none")}</code></p>
+  </article>
 """
 
 
@@ -1248,6 +1284,7 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
     revision_source = snapshot.latest_strategy_revision_source_outcome
     retest_trial = snapshot.latest_strategy_revision_retest_trial
     retest_split = snapshot.latest_strategy_revision_split_manifest
+    lineage = snapshot.latest_strategy_lineage_summary
     return f"""
 <p>策略卡：{_artifact_id(card, "card_id")} / {escape(card.strategy_name if card else "n/a")}</p>
 <p>假設：{escape(card.hypothesis if card else "目前沒有 strategy_cards artifact。")}</p>
@@ -1256,6 +1293,10 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
 <p>下一步：{escape(autopilot.next_research_action if autopilot else "n/a")} / Run {_artifact_id(autopilot, "run_id")}</p>
 <p>策略修正候選：{_artifact_id(revision, "card_id")} / 來源 {_artifact_id(revision_source, "outcome_id")} / Agenda {_artifact_id(revision_agenda, "agenda_id")}</p>
 <p>Revision Retest Scaffold：{_artifact_id(retest_trial, "trial_id")} / Dataset <code>{escape(retest_trial.dataset_id if retest_trial and retest_trial.dataset_id else "n/a")}</code> / Split {_artifact_id(retest_split, "manifest_id")}</p>
+<p>策略 lineage：Root <code>{escape(lineage.root_card_id if lineage else "n/a")}</code> / Revisions {lineage.revision_count if lineage else "n/a"} / Outcomes {lineage.outcome_count if lineage else "n/a"}</p>
+<p>Lineage best/worst：{_format_number(lineage.best_excess_return_after_costs if lineage else None)} / {_format_number(lineage.worst_excess_return_after_costs if lineage else None)} / Latest <code>{escape(lineage.latest_outcome_id if lineage and lineage.latest_outcome_id else "none")}</code></p>
+{_plain_list(list(lineage.action_counts.keys()) if lineage else [], empty="目前沒有 lineage action")}
+{_plain_list(list(lineage.failure_attribution_counts.keys()) if lineage else [], empty="目前沒有 lineage failure attribution")}
 {_revision_retest_task_plan_panel(snapshot.latest_strategy_revision_retest_task_plan)}
 {_revision_retest_task_run_panel(snapshot.latest_strategy_revision_retest_task_run)}
 {_revision_retest_autopilot_run_panel(snapshot.latest_strategy_revision_retest_autopilot_run)}

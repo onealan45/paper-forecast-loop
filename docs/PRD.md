@@ -151,6 +151,10 @@ The PRD follows that decision:
 - PR30 adds Revision Retest Autopilot Run UX: dashboard and operator console
   now show the latest revision-scoped research autopilot run next to the retest
   task plan and task-run log.
+- PR31 adds Strategy Lineage Visibility: dashboard and operator console now
+  summarize parent strategy lineage, DRAFT revisions, paper-shadow action
+  counts, repeated failure attributions, best/worst after-cost excess return,
+  and latest shadow outcome.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -212,6 +216,9 @@ Product implications:
 - Completed revision retest autopilot runs should be visible in strategy UX
   surfaces, including loop status, next research action, blocked reasons,
   paper-shadow outcome, and recorded steps.
+- Strategy UX should show whether a strategy family's failures are concentrated
+  around repeated failure attributions or demotion/quarantine actions, not just
+  the latest isolated artifact.
 - The evaluation path must be deterministic, versioned, and auditable.
 - Failed experiments must be retained as evidence, not discarded.
 - Promotion inside the research loop must depend on research evidence, not on
@@ -625,6 +632,9 @@ V1 MVP should include:
 - dashboard and operator console visibility for completed revision retest
   autopilot runs, including loop status, next action, blocked reasons,
   paper-shadow outcome, and steps
+- dashboard and operator console visibility for strategy lineage, including
+  revision count, shadow action counts, failure attribution counts, best/worst
+  excess return, and latest shadow outcome
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,
@@ -708,7 +718,8 @@ correctness defects:
   records revision retest autopilot runs without fake decision artifacts. PR29
   adds one-command recording for completed revision retest autopilot runs, and
   PR30 makes those completed revision retest autopilot runs visible in the
-  dashboard and operator console, but
+  dashboard and operator console. PR31 adds strategy lineage summaries for
+  parent/revision shadow evidence, but
   strong strategy generation, model training, deeper self-evolving skill loops,
   and optimizers are not included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved

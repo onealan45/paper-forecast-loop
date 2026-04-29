@@ -158,6 +158,9 @@ The PRD follows that decision:
 - PR32 adds Recursive Strategy Lineage: strategy lineage now follows
   multi-generation revision trees back to the original root strategy and
   includes nested revision outcomes in the UX summary.
+- PR33 adds Strategy Lineage Tree Visibility: dashboard and operator console
+  now expose each revision's parent and depth so nested or branching revision
+  paths remain inspectable.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -224,6 +227,8 @@ Product implications:
   the latest isolated artifact.
 - Strategy lineage should remain tied to the original root strategy even when
   the latest visible strategy card is a second- or later-generation revision.
+- Strategy lineage should show revision tree structure, not only a flat list,
+  when the AI creates nested or sibling revisions.
 - The evaluation path must be deterministic, versioned, and auditable.
 - Failed experiments must be retained as evidence, not discarded.
 - Promotion inside the research loop must depend on research evidence, not on
@@ -638,8 +643,9 @@ V1 MVP should include:
   autopilot runs, including loop status, next action, blocked reasons,
   paper-shadow outcome, and steps
 - dashboard and operator console visibility for strategy lineage, including
-  multi-generation revision count, shadow action counts, failure attribution
-  counts, best/worst excess return, and latest shadow outcome
+  multi-generation revision count, revision parent/depth tree rows, shadow
+  action counts, failure attribution counts, best/worst excess return, and
+  latest shadow outcome
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,
@@ -724,8 +730,9 @@ correctness defects:
   adds one-command recording for completed revision retest autopilot runs, and
   PR30 makes those completed revision retest autopilot runs visible in the
   dashboard and operator console. PR31 adds strategy lineage summaries for
-  parent/revision shadow evidence, and PR32 makes those summaries recursive
-  across multi-generation revision trees, but
+  parent/revision shadow evidence, PR32 makes those summaries recursive across
+  multi-generation revision trees, and PR33 exposes revision parent/depth rows
+  in the UX, but
   strong strategy generation, model training, deeper self-evolving skill loops,
   and optimizers are not included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved

@@ -1323,11 +1323,18 @@ def test_dashboard_strategy_lineage_includes_multi_generation_revisions(tmp_path
         "strategy-card:dashboard-revision",
         "strategy-card:dashboard-second-revision",
     ]
+    assert [(node.card_id, node.parent_card_id, node.depth) for node in snapshot.latest_strategy_lineage_summary.revision_nodes] == [
+        ("strategy-card:dashboard-revision", "strategy-card:dashboard-visible", 1),
+        ("strategy-card:dashboard-second-revision", "strategy-card:dashboard-revision", 2),
+    ]
     assert snapshot.latest_strategy_lineage_summary.outcome_count == 3
     assert snapshot.latest_strategy_lineage_summary.action_counts == {
         "QUARANTINE_STRATEGY": 2,
         "REVISE_STRATEGY": 1,
     }
+    assert "Revision Tree" in html
+    assert "Depth 2" in html
+    assert "Parent strategy-card:dashboard-revision" in html
     assert "weak_baseline_edge" in html
     assert "paper-shadow-outcome:dashboard-second-revision-quarantine" in html
     assert "-0.1100" in html

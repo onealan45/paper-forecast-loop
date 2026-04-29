@@ -162,6 +162,9 @@ factory:
 - PR32 makes that strategy lineage recursive: multi-generation revisions and
   their shadow outcomes now stay attached to the original root strategy, so the
   UX can show deeper self-evolution history instead of only direct children.
+- PR33 adds revision-tree visibility: the same lineage summary now exposes each
+  revision's parent and depth, so branching or nested self-evolution does not
+  collapse into an ambiguous flat list.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

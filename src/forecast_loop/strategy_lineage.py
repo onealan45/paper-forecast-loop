@@ -7,9 +7,17 @@ from forecast_loop.models import PaperShadowOutcome, StrategyCard
 
 
 @dataclass(frozen=True, slots=True)
+class StrategyLineageRevisionNode:
+    card_id: str
+    parent_card_id: str
+    depth: int
+
+
+@dataclass(frozen=True, slots=True)
 class StrategyLineageSummary:
     root_card_id: str
     revision_card_ids: list[str]
+    revision_nodes: list[StrategyLineageRevisionNode]
     revision_count: int
     outcome_count: int
     action_counts: dict[str, int]
@@ -29,7 +37,7 @@ def build_strategy_lineage_summary(
         return None
 
     root_card = _lineage_root_card(root_card, strategy_cards)
-    revision_cards = _lineage_revision_cards(root_card, strategy_cards)
+    revision_cards, revision_nodes = _lineage_revision_tree(root_card, strategy_cards)
     lineage_card_ids = {root_card.card_id, *(card.card_id for card in revision_cards)}
     lineage_outcomes = sorted(
         [outcome for outcome in paper_shadow_outcomes if outcome.strategy_card_id in lineage_card_ids],
@@ -44,6 +52,7 @@ def build_strategy_lineage_summary(
     return StrategyLineageSummary(
         root_card_id=root_card.card_id,
         revision_card_ids=[card.card_id for card in revision_cards],
+        revision_nodes=revision_nodes,
         revision_count=len(revision_cards),
         outcome_count=len(lineage_outcomes),
         action_counts=dict(sorted(Counter(outcome.recommended_strategy_action for outcome in lineage_outcomes).items())),
@@ -75,7 +84,10 @@ def _lineage_root_card(card: StrategyCard, strategy_cards: list[StrategyCard]) -
     return current
 
 
-def _lineage_revision_cards(root_card: StrategyCard, strategy_cards: list[StrategyCard]) -> list[StrategyCard]:
+def _lineage_revision_tree(
+    root_card: StrategyCard,
+    strategy_cards: list[StrategyCard],
+) -> tuple[list[StrategyCard], list[StrategyLineageRevisionNode]]:
     children_by_parent: dict[str, list[StrategyCard]] = {}
     for card in strategy_cards:
         if card.card_id == root_card.card_id or card.parent_card_id is None:
@@ -86,13 +98,21 @@ def _lineage_revision_cards(root_card: StrategyCard, strategy_cards: list[Strate
         children.sort(key=lambda card: (card.created_at, card.card_id))
 
     revision_cards: list[StrategyCard] = []
+    revision_nodes: list[StrategyLineageRevisionNode] = []
     visited = {root_card.card_id}
-    stack = list(reversed(children_by_parent.get(root_card.card_id, [])))
+    stack = [(card, 1) for card in reversed(children_by_parent.get(root_card.card_id, []))]
     while stack:
-        card = stack.pop()
+        card, depth = stack.pop()
         if card.card_id in visited:
             continue
         visited.add(card.card_id)
         revision_cards.append(card)
-        stack.extend(reversed(children_by_parent.get(card.card_id, [])))
-    return revision_cards
+        revision_nodes.append(
+            StrategyLineageRevisionNode(
+                card_id=card.card_id,
+                parent_card_id=card.parent_card_id or root_card.card_id,
+                depth=depth,
+            )
+        )
+        stack.extend((child, depth + 1) for child in reversed(children_by_parent.get(card.card_id, [])))
+    return revision_cards, revision_nodes

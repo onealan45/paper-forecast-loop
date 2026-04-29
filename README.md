@@ -109,6 +109,9 @@ factory:
 - PR15 makes those retest scaffolds visible in the dashboard and operator
   console, including pending trial, dataset, locked split, and remaining
   required evidence artifacts.
+- PR16 adds a read-only revision retest task planner: it turns the latest DRAFT
+  revision and retest scaffold into ordered research tasks, missing inputs, and
+  runnable command arguments when prerequisites exist.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -226,6 +229,7 @@ This version intentionally includes:
   - `record-research-autopilot-run`
   - `propose-strategy-revision`
   - `create-revision-retest-scaffold`
+  - `revision-retest-plan`
 
 This version intentionally excludes:
 
@@ -722,6 +726,20 @@ PR15 makes the scaffold visible:
 
 This is read-only visibility. It does not run the retest or create downstream
 research evidence.
+
+PR16 makes the next retest step explicit:
+
+- `revision-retest-plan` reads the DRAFT revision, source paper-shadow outcome,
+  pending or passed retest trial, locked split, cost model, baseline, backtest,
+  walk-forward, locked evaluation, leaderboard, and paper-shadow evidence.
+- It returns ordered task statuses plus the exact next task ID.
+- It emits command arguments for runnable research steps such as `backtest` and
+  `walk-forward` only when their prerequisite split exists.
+- It keeps missing split windows and future paper-shadow returns blocked instead
+  of inventing them.
+
+This is still read-only planning. It helps the self-evolving loop know what to
+study next, but it does not execute a retest or promote a revised strategy.
 
 ### Strategy-Visible UX
 
@@ -1294,6 +1312,16 @@ python run_forecast_loop.py create-revision-retest-scaffold --storage-dir .\pape
 returns `next_required_artifacts`. It does not create a locked evaluation result
 or leaderboard entry; those require actual baseline, backtest, and walk-forward
 evidence.
+
+Inspect the next retest research task without writing artifacts:
+
+```powershell
+python run_forecast_loop.py revision-retest-plan --storage-dir .\paper_storage\manual-research --revision-card-id strategy-card:example-revision --symbol BTC-USD
+```
+
+`revision-retest-plan` prints JSON with `next_task_id`, task status, missing
+inputs, linked artifact IDs, and command arguments for runnable steps. It is a
+research planner, not a retest executor.
 
 Generate a Markdown research report from existing artifacts:
 

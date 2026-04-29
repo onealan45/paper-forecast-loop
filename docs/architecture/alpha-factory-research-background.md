@@ -37,12 +37,12 @@ as the completed factory.
 
 | Layer | Current M1-M6 state | Alpha Factory gap |
 |---|---|---|
-| Decision layer | Produces paper-only strategy decisions with evidence, risk, blocked reasons, PR8 paper-shadow outcome recommendations, PR12 DRAFT revision candidates, PR13 revision visibility, PR14 pending retest scaffolds, and PR15 retest scaffold visibility. | Needs richer per-strategy candidate lineage, demotion history, and automated retest execution. |
+| Decision layer | Produces paper-only strategy decisions with evidence, risk, blocked reasons, PR8 paper-shadow outcome recommendations, PR12 DRAFT revision candidates, PR13 revision visibility, PR14 pending retest scaffolds, PR15 retest scaffold visibility, and PR16 read-only retest task plans. | Needs richer per-strategy candidate lineage, demotion history, and automated retest execution. |
 | Health and repair | Detects artifact and runtime issues and can write repair requests. | Needs research-specific findings for provider distortion, experiment invalidation, and promotion quarantine. |
 | Storage | Has SQLite migration support and JSONL audit/export compatibility. | Needs stronger research snapshot metadata and larger dataset storage conventions. |
 | Data providers | Supports sample, CoinGecko, stored candles, and CSV stock fixtures. | Needs canonical primary/secondary provider comparison before serious promotion. |
-| Research evidence | Supports baselines, research datasets, backtests, reports, walk-forward, research gates, PR6 strategy-card / experiment-trial registry, PR7 locked-evaluation / leaderboard hard-gate artifacts, PR8 paper-shadow outcome learning, PR9 agenda/autopilot loop records, and PR14 revision retest scaffolds. | Needs strategy generation, self-evolving skills, CPCV-like paths, PBO, DSR, bootstrap, and parameter stability. |
-| UI and operations | Shows read-only decisions, health, portfolio, risk, automation, broker/sandbox state, concrete strategy context, leaderboard state, paper-shadow attribution, next research action, and pending revision retest scaffold state. | Needs richer candidate lifecycle, hypothesis-change history, comparison charts, and quarantine/demotion trend views. |
+| Research evidence | Supports baselines, research datasets, backtests, reports, walk-forward, research gates, PR6 strategy-card / experiment-trial registry, PR7 locked-evaluation / leaderboard hard-gate artifacts, PR8 paper-shadow outcome learning, PR9 agenda/autopilot loop records, PR14 revision retest scaffolds, and PR16 retest task planning. | Needs strategy generation, self-evolving skills, CPCV-like paths, PBO, DSR, bootstrap, and parameter stability. |
+| UI and operations | Shows read-only decisions, health, portfolio, risk, automation, broker/sandbox state, concrete strategy context, leaderboard state, paper-shadow attribution, next research action, pending revision retest scaffold state, and machine-readable next retest tasks. | Needs richer candidate lifecycle, hypothesis-change history, comparison charts, and quarantine/demotion trend views. |
 
 ## Core Direction
 

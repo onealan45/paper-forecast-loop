@@ -191,3 +191,103 @@ def test_strategy_lineage_summary_includes_multi_generation_revisions():
     assert summary.best_excess_return_after_costs == -0.03
     assert summary.worst_excess_return_after_costs == -0.09
     assert summary.latest_outcome_id == "second-revision-fail"
+
+
+def test_strategy_lineage_summary_preserves_branching_revision_tree_order():
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    parent = _card("strategy-card:parent")
+    first_revision = _card("strategy-card:first-revision", parent_card_id=parent.card_id, status="DRAFT")
+    second_revision = _card("strategy-card:second-revision", parent_card_id=parent.card_id, status="DRAFT")
+    nested_revision = _card("strategy-card:nested-revision", parent_card_id=first_revision.card_id, status="DRAFT")
+
+    summary = build_strategy_lineage_summary(
+        root_card=parent,
+        strategy_cards=[parent, second_revision, nested_revision, first_revision],
+        paper_shadow_outcomes=[],
+    )
+
+    assert summary is not None
+    assert [(node.card_id, node.parent_card_id, node.depth) for node in summary.revision_nodes] == [
+        (first_revision.card_id, parent.card_id, 1),
+        (nested_revision.card_id, first_revision.card_id, 2),
+        (second_revision.card_id, parent.card_id, 1),
+    ]
+    assert summary.revision_card_ids == [
+        first_revision.card_id,
+        nested_revision.card_id,
+        second_revision.card_id,
+    ]
+
+
+def test_strategy_lineage_summary_falls_back_to_current_card_when_parent_missing():
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    orphan = _card("strategy-card:orphan", parent_card_id="strategy-card:missing", status="DRAFT")
+    child = _card("strategy-card:child", parent_card_id=orphan.card_id, status="DRAFT")
+
+    summary = build_strategy_lineage_summary(
+        root_card=orphan,
+        strategy_cards=[orphan, child],
+        paper_shadow_outcomes=[
+            _outcome(
+                "orphan-outcome",
+                card_id=orphan.card_id,
+                created_at=now,
+                action="REVISE_STRATEGY",
+                excess=-0.02,
+                attributions=[],
+            ),
+            _outcome(
+                "child-outcome",
+                card_id=child.card_id,
+                created_at=now + timedelta(hours=1),
+                action="QUARANTINE_STRATEGY",
+                excess=-0.07,
+                attributions=["weak_baseline_edge"],
+            ),
+        ],
+    )
+
+    assert summary is not None
+    assert summary.root_card_id == orphan.card_id
+    assert [(node.card_id, node.parent_card_id, node.depth) for node in summary.revision_nodes] == [
+        (child.card_id, orphan.card_id, 1)
+    ]
+    assert summary.outcome_count == 2
+    assert summary.latest_outcome_id == "child-outcome"
+
+
+def test_strategy_lineage_summary_terminates_on_parent_cycle():
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    first = _card("strategy-card:first", parent_card_id="strategy-card:second", status="DRAFT")
+    second = _card("strategy-card:second", parent_card_id=first.card_id, status="DRAFT")
+
+    summary = build_strategy_lineage_summary(
+        root_card=first,
+        strategy_cards=[first, second],
+        paper_shadow_outcomes=[
+            _outcome(
+                "first-outcome",
+                card_id=first.card_id,
+                created_at=now,
+                action="REVISE_STRATEGY",
+                excess=-0.04,
+                attributions=["cycle_smoke"],
+            ),
+            _outcome(
+                "second-outcome",
+                card_id=second.card_id,
+                created_at=now + timedelta(hours=1),
+                action="QUARANTINE_STRATEGY",
+                excess=-0.08,
+                attributions=["cycle_smoke"],
+            ),
+        ],
+    )
+
+    assert summary is not None
+    assert summary.root_card_id == first.card_id
+    assert [(node.card_id, node.parent_card_id, node.depth) for node in summary.revision_nodes] == [
+        (second.card_id, first.card_id, 1)
+    ]
+    assert summary.outcome_count == 2
+    assert summary.failure_attribution_counts == {"cycle_smoke": 2}

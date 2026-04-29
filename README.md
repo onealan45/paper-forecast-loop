@@ -165,6 +165,8 @@ factory:
 - PR33 adds revision-tree visibility: the same lineage summary now exposes each
   revision's parent and depth, so branching or nested self-evolution does not
   collapse into an ambiguous flat list.
+- PR34 hardens lineage edge cases with committed regressions for branching
+  revision trees, missing parents, and parent cycles.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

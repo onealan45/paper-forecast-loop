@@ -170,6 +170,9 @@ factory:
 - PR35 adds revision change summaries to lineage nodes: the UX now shows each
   revision's strategy name, status, hypothesis, source outcome, and intended
   failure attributions to repair.
+- PR36 adds malicious-HTML regression coverage for revision change summaries so
+  natural-language strategy fields remain escaped in dashboard and operator
+  console views.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

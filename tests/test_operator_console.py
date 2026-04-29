@@ -612,6 +612,36 @@ def _seed_visible_second_generation_strategy_lineage(repository: JsonFileReposit
     )
 
 
+def _seed_visible_malicious_strategy_lineage(repository: JsonFileRepository, now: datetime) -> None:
+    revision = StrategyCard(
+        card_id="strategy-card:visible-malicious-revision",
+        created_at=now,
+        strategy_name='Visible <script>alert("name")</script> revision',
+        strategy_family="breakout_reversal",
+        version="v2.rev-xss",
+        status="DRAFT",
+        symbols=["BTC-USD"],
+        hypothesis='Visible repair <script>alert("hypothesis")</script>',
+        signal_description="Malicious display fixture.",
+        entry_rules=[],
+        exit_rules=[],
+        risk_rules=[],
+        parameters={
+            "revision_source_outcome_id": 'paper-shadow-outcome:<script>alert("source")</script>',
+            "revision_failure_attributions": ['weak_baseline_edge<script>alert("fix")</script>'],
+        },
+        data_requirements=["market_candles:BTC-USD:1h"],
+        feature_snapshot_ids=[],
+        backtest_result_ids=[],
+        walk_forward_validation_ids=[],
+        event_edge_evaluation_ids=[],
+        parent_card_id="strategy-card:visible",
+        author="codex-strategy-evolution",
+        decision_basis="paper_shadow_strategy_revision_candidate",
+    )
+    repository.save_strategy_card(revision)
+
+
 def _seed_distractor_strategy_research_without_run(repository: JsonFileRepository, now: datetime) -> None:
     card = replace(
         _visible_strategy_card(now),
@@ -1143,6 +1173,27 @@ def test_operator_console_strategy_lineage_includes_multi_generation_revisions(t
         assert "weak_baseline_edge" in html
         assert "paper-shadow-outcome:visible-second-revision-quarantine" in html
         assert "-0.1100" in html
+
+
+def test_operator_console_strategy_lineage_escapes_revision_change_summary(tmp_path):
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_visible_strategy_research(repository, now)
+    _seed_visible_malicious_strategy_lineage(repository, now + timedelta(minutes=10))
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    research_html = render_operator_console_page(snapshot, page="research")
+    overview_html = render_operator_console_page(snapshot, page="overview")
+
+    for html in (research_html, overview_html):
+        assert '<script>alert("name")</script>' not in html
+        assert '<script>alert("hypothesis")</script>' not in html
+        assert '<script>alert("source")</script>' not in html
+        assert '<script>alert("fix")</script>' not in html
+        assert 'Visible &lt;script&gt;alert(&quot;name&quot;)&lt;/script&gt; revision' in html
+        assert 'Visible repair &lt;script&gt;alert(&quot;hypothesis&quot;)&lt;/script&gt;' in html
+        assert 'paper-shadow-outcome:&lt;script&gt;alert(&quot;source&quot;)&lt;/script&gt;' in html
+        assert 'weak_baseline_edge&lt;script&gt;alert(&quot;fix&quot;)&lt;/script&gt;' in html
 
 
 def test_operator_console_revision_retest_task_plan_falls_back_when_source_missing(tmp_path):

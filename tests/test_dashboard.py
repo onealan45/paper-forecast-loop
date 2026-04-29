@@ -407,6 +407,36 @@ def _seed_dashboard_second_generation_strategy_lineage(repository: JsonFileRepos
     repository.save_paper_shadow_outcome(second_outcome)
 
 
+def _seed_dashboard_malicious_strategy_lineage(repository: JsonFileRepository, now: datetime) -> None:
+    revision = StrategyCard(
+        card_id="strategy-card:dashboard-malicious-revision",
+        created_at=now,
+        strategy_name='Dashboard <script>alert("name")</script> revision',
+        strategy_family="breakout_reversal",
+        version="v2.rev-xss",
+        status="DRAFT",
+        symbols=["BTC-USD"],
+        hypothesis='Repair hypothesis <script>alert("hypothesis")</script>',
+        signal_description="Malicious display fixture.",
+        entry_rules=[],
+        exit_rules=[],
+        risk_rules=[],
+        parameters={
+            "revision_source_outcome_id": 'paper-shadow-outcome:<script>alert("source")</script>',
+            "revision_failure_attributions": ['drawdown_breach<script>alert("fix")</script>'],
+        },
+        data_requirements=["market_candles:BTC-USD:1h"],
+        feature_snapshot_ids=[],
+        backtest_result_ids=[],
+        walk_forward_validation_ids=[],
+        event_edge_evaluation_ids=[],
+        parent_card_id="strategy-card:dashboard-visible",
+        author="codex-strategy-evolution",
+        decision_basis="paper_shadow_strategy_revision_candidate",
+    )
+    repository.save_strategy_card(revision)
+
+
 def _seed_dashboard_distractor_strategy_research_without_run(
     repository: JsonFileRepository,
     now: datetime,
@@ -1342,6 +1372,26 @@ def test_dashboard_strategy_lineage_includes_multi_generation_revisions(tmp_path
     assert "weak_baseline_edge" in html
     assert "paper-shadow-outcome:dashboard-second-revision-quarantine" in html
     assert "-0.1100" in html
+
+
+def test_dashboard_strategy_lineage_escapes_revision_change_summary(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    _seed_dashboard_strategy_research(repository, now)
+    _seed_dashboard_malicious_strategy_lineage(repository, now + timedelta(minutes=10))
+
+    html = render_dashboard_html(build_dashboard_snapshot(tmp_path))
+
+    assert '<script>alert("name")</script>' not in html
+    assert '<script>alert("hypothesis")</script>' not in html
+    assert '<script>alert("source")</script>' not in html
+    assert '<script>alert("fix")</script>' not in html
+    assert 'Dashboard &lt;script&gt;alert(&quot;name&quot;)&lt;/script&gt; revision' in html
+    assert 'Repair hypothesis &lt;script&gt;alert(&quot;hypothesis&quot;)&lt;/script&gt;' in html
+    assert 'paper-shadow-outcome:&lt;script&gt;alert(&quot;source&quot;)&lt;/script&gt;' in html
+    assert 'drawdown_breach&lt;script&gt;alert(&quot;fix&quot;)&lt;/script&gt;' in html
 
 
 def test_dashboard_revision_retest_task_plan_falls_back_when_source_missing(tmp_path):

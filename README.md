@@ -121,6 +121,9 @@ factory:
 - PR19 surfaces those retest task run logs in the dashboard and operator
   console beside the task plan, so the UX shows both the next task and the
   latest audit evidence for inspecting it.
+- PR20 adds the first narrow retest executor: it can execute the ready
+  `lock_evaluation_protocol` task directly through domain code, write a cost
+  model, record an execution `AutomationRun`, and return before/after plans.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -774,6 +777,13 @@ PR19 shows that audit log in the read-only UX:
   steps;
 - rendering remains display-only and never executes command args.
 
+PR20 starts artifact-producing retest execution:
+
+- `execute-revision-retest-next-task` executes only a ready
+  `lock_evaluation_protocol` task;
+- it calls repository/domain code directly rather than shelling out;
+- unsupported ready tasks are rejected until implemented one at a time.
+
 ### Strategy-Visible UX
 
 PR10 promotes concrete strategy context from raw artifacts into the inspection
@@ -1365,6 +1375,16 @@ python run_forecast_loop.py record-revision-retest-task-run --storage-dir .\pape
 
 `record-revision-retest-task-run` writes only `automation_runs.jsonl`. It does
 not run the displayed command args.
+
+Execute the next whitelisted retest task:
+
+```powershell
+python run_forecast_loop.py execute-revision-retest-next-task --storage-dir .\paper_storage\manual-research --revision-card-id strategy-card:example-revision --symbol BTC-USD --now 2026-04-29T10:00:00+00:00
+```
+
+Currently this supports only `lock_evaluation_protocol`. It writes a cost model
+snapshot plus an execution `AutomationRun`, then returns before/after task
+plans.
 
 Generate a Markdown research report from existing artifacts:
 

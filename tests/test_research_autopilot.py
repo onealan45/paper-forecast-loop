@@ -14,6 +14,7 @@ from forecast_loop.models import (
     ResearchAgenda,
     ResearchAutopilotRun,
     BacktestResult,
+    SplitManifest,
     StrategyCard,
     StrategyDecision,
     WalkForwardValidation,
@@ -21,6 +22,7 @@ from forecast_loop.models import (
 from forecast_loop.sqlite_repository import SQLiteRepository, export_sqlite_to_jsonl, migrate_jsonl_to_sqlite
 from forecast_loop.storage import JsonFileRepository
 from forecast_loop.revision_retest import create_revision_retest_scaffold
+from forecast_loop.revision_retest_executor import execute_revision_retest_next_task
 from forecast_loop.revision_retest_plan import build_revision_retest_task_plan
 from forecast_loop.revision_retest_run_log import record_revision_retest_task_run
 from forecast_loop.strategy_evolution import propose_strategy_revision
@@ -1400,6 +1402,161 @@ def test_cli_record_revision_retest_task_run_outputs_json_and_persists(tmp_path,
     assert payload["automation_run"]["status"] == "RETEST_TASK_BLOCKED"
     assert payload["revision_retest_task_plan"]["next_task_id"] == "lock_evaluation_protocol"
     assert len(JsonFileRepository(tmp_path).load_automation_runs()) == 1
+
+
+def test_execute_revision_retest_next_task_locks_evaluation_protocol(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+    )
+    split = SplitManifest(
+        manifest_id="split-manifest:executor-retest",
+        created_at=_now(),
+        symbol="BTC-USD",
+        strategy_card_id=revision.card_id,
+        dataset_id="research-dataset:revision-retest",
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 2, 1, tzinfo=UTC),
+        validation_start=datetime(2026, 2, 2, tzinfo=UTC),
+        validation_end=datetime(2026, 3, 1, tzinfo=UTC),
+        holdout_start=datetime(2026, 3, 2, tzinfo=UTC),
+        holdout_end=datetime(2026, 4, 1, tzinfo=UTC),
+        embargo_hours=24,
+        status="LOCKED",
+        locked_by="codex",
+        decision_basis="locked_evaluation_protocol",
+    )
+    repository.save_split_manifest(split)
+
+    result = execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 10, 0, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+
+    assert result.executed_task_id == "lock_evaluation_protocol"
+    assert result.before_plan.next_task_id == "lock_evaluation_protocol"
+    assert result.after_plan.next_task_id == "generate_baseline_evaluation"
+    assert result.automation_run.status == "RETEST_TASK_EXECUTED"
+    assert result.after_plan.cost_model_id is not None
+    assert result.created_artifact_ids == [result.after_plan.split_manifest_id, result.after_plan.cost_model_id]
+    assert result.after_plan.split_manifest_id != split.manifest_id
+    assert len(repository.load_cost_model_snapshots()) == 1
+    assert repository.load_automation_runs() == [result.automation_run]
+
+
+def test_execute_revision_retest_next_task_rejects_unsupported_ready_task(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 2, 1, tzinfo=UTC),
+        validation_start=datetime(2026, 2, 2, tzinfo=UTC),
+        validation_end=datetime(2026, 3, 1, tzinfo=UTC),
+        holdout_start=datetime(2026, 3, 2, tzinfo=UTC),
+        holdout_end=datetime(2026, 4, 1, tzinfo=UTC),
+    )
+
+    with pytest.raises(ValueError, match="unsupported_revision_retest_task_execution"):
+        execute_revision_retest_next_task(
+            repository=repository,
+            storage_dir=tmp_path,
+            symbol="BTC-USD",
+            created_at=datetime(2026, 4, 29, 10, 0, tzinfo=UTC),
+            revision_card_id=revision.card_id,
+        )
+
+
+def test_cli_execute_revision_retest_next_task_outputs_json_and_persists(tmp_path, capsys):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+    )
+    repository.save_split_manifest(
+        SplitManifest(
+            manifest_id="split-manifest:executor-cli",
+            created_at=_now(),
+            symbol="BTC-USD",
+            strategy_card_id=revision.card_id,
+            dataset_id="research-dataset:revision-retest",
+            train_start=datetime(2026, 1, 1, tzinfo=UTC),
+            train_end=datetime(2026, 2, 1, tzinfo=UTC),
+            validation_start=datetime(2026, 2, 2, tzinfo=UTC),
+            validation_end=datetime(2026, 3, 1, tzinfo=UTC),
+            holdout_start=datetime(2026, 3, 2, tzinfo=UTC),
+            holdout_end=datetime(2026, 4, 1, tzinfo=UTC),
+            embargo_hours=24,
+            status="LOCKED",
+            locked_by="codex",
+            decision_basis="locked_evaluation_protocol",
+        )
+    )
+
+    assert main(
+        [
+            "execute-revision-retest-next-task",
+            "--storage-dir",
+            str(tmp_path),
+            "--revision-card-id",
+            revision.card_id,
+            "--symbol",
+            "BTC-USD",
+            "--now",
+            "2026-04-29T10:00:00+00:00",
+        ]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["executed_task_id"] == "lock_evaluation_protocol"
+    assert payload["automation_run"]["status"] == "RETEST_TASK_EXECUTED"
+    assert payload["before_plan"]["next_task_id"] == "lock_evaluation_protocol"
+    assert payload["after_plan"]["next_task_id"] == "generate_baseline_evaluation"
+    assert len(JsonFileRepository(tmp_path).load_automation_runs()) == 1
+    assert len(JsonFileRepository(tmp_path).load_cost_model_snapshots()) == 1
 
 
 def test_cli_creates_research_agenda_and_autopilot_run(tmp_path, capsys):

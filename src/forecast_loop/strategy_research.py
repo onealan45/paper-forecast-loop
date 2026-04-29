@@ -73,7 +73,16 @@ def resolve_latest_strategy_research_chain(
     entry_by_id = {item.entry_id: item for item in entries}
     outcome_by_id = {item.outcome_id: item for item in outcomes}
     agenda_by_id = {item.agenda_id: item for item in agendas}
-    revision_candidate = _latest_revision_candidate(cards, outcome_by_id, agendas, trials, split_manifests)
+    revision_candidate = _latest_revision_candidate(
+        cards,
+        outcome_by_id,
+        agendas,
+        trials,
+        split_manifests,
+        locked_evaluations,
+        entries,
+        outcomes,
+    )
 
     latest_run = _latest(runs)
     if latest_run is not None:
@@ -262,6 +271,9 @@ def _latest_revision_candidate(
     agendas: list[ResearchAgenda],
     trials: list[ExperimentTrial],
     split_manifests: list[SplitManifest],
+    locked_evaluations: list[LockedEvaluationResult],
+    leaderboard_entries: list[LeaderboardEntry],
+    paper_shadow_outcomes: list[PaperShadowOutcome],
 ) -> StrategyRevisionCandidate | None:
     revision_cards = [
         card
@@ -289,7 +301,13 @@ def _latest_revision_candidate(
         source_outcome=source_outcome,
         retest_trial=retest_trial,
         retest_split_manifest=retest_split,
-        retest_next_required_artifacts=_revision_retest_next_required_artifacts(retest_trial, retest_split),
+        retest_next_required_artifacts=_revision_retest_next_required_artifacts(
+            retest_trial,
+            retest_split,
+            locked_evaluations,
+            leaderboard_entries,
+            paper_shadow_outcomes,
+        ),
     )
 
 
@@ -301,7 +319,7 @@ def _latest_revision_retest_trial(
         trial
         for trial in trials
         if trial.strategy_card_id == revision.card_id
-        and trial.status == "PENDING"
+        and trial.status in {"PENDING", "PASSED"}
         and trial.parameters.get("revision_retest_protocol") == "pr14-v1"
         and trial.parameters.get("revision_retest_source_card_id") == revision.card_id
         and trial.parameters.get("revision_source_outcome_id") == revision.parameters.get("revision_source_outcome_id")
@@ -330,19 +348,110 @@ def _latest_revision_split_manifest(
 def _revision_retest_next_required_artifacts(
     retest_trial: ExperimentTrial | None,
     retest_split: SplitManifest | None,
+    locked_evaluations: list[LockedEvaluationResult],
+    leaderboard_entries: list[LeaderboardEntry],
+    paper_shadow_outcomes: list[PaperShadowOutcome],
 ) -> list[str]:
     required: list[str] = []
+    locked_evaluation = _latest_revision_locked_evaluation(
+        locked_evaluations,
+        retest_trial,
+        retest_split,
+    )
+    leaderboard_entry = _latest_revision_leaderboard_entry(
+        leaderboard_entries,
+        retest_trial,
+        locked_evaluation,
+    )
+    shadow_outcome = _latest_revision_shadow_outcome(
+        paper_shadow_outcomes,
+        retest_trial,
+        locked_evaluation,
+        leaderboard_entry,
+    )
     if retest_trial is None:
         required.append("experiment_trial")
     if retest_split is None:
         required.extend(["split_manifest", "cost_model_snapshot"])
-    required.append("baseline_evaluation")
+    if locked_evaluation is None:
+        required.append("baseline_evaluation")
     if retest_trial is None or retest_trial.backtest_result_id is None:
         required.append("backtest_result")
     if retest_trial is None or retest_trial.walk_forward_validation_id is None:
         required.append("walk_forward_validation")
-    required.extend(["locked_evaluation_result", "leaderboard_entry", "paper_shadow_outcome"])
+    if locked_evaluation is None:
+        required.append("locked_evaluation_result")
+    if leaderboard_entry is None:
+        required.append("leaderboard_entry")
+    if shadow_outcome is None:
+        required.append("paper_shadow_outcome")
     return required
+
+
+def _latest_revision_locked_evaluation(
+    locked_evaluations: list[LockedEvaluationResult],
+    retest_trial: ExperimentTrial | None,
+    retest_split: SplitManifest | None,
+) -> LockedEvaluationResult | None:
+    if retest_trial is None:
+        return None
+    candidates = []
+    for evaluation in locked_evaluations:
+        if evaluation.strategy_card_id != retest_trial.strategy_card_id:
+            continue
+        if evaluation.trial_id != retest_trial.trial_id:
+            continue
+        if retest_split is not None and evaluation.split_manifest_id != retest_split.manifest_id:
+            continue
+        if retest_trial.backtest_result_id is not None and evaluation.backtest_result_id != retest_trial.backtest_result_id:
+            continue
+        if (
+            retest_trial.walk_forward_validation_id is not None
+            and evaluation.walk_forward_validation_id != retest_trial.walk_forward_validation_id
+        ):
+            continue
+        candidates.append(evaluation)
+    return _latest(candidates)
+
+
+def _latest_revision_leaderboard_entry(
+    leaderboard_entries: list[LeaderboardEntry],
+    retest_trial: ExperimentTrial | None,
+    locked_evaluation: LockedEvaluationResult | None,
+) -> LeaderboardEntry | None:
+    if retest_trial is None or locked_evaluation is None:
+        return None
+    return _latest(
+        [
+            entry
+            for entry in leaderboard_entries
+            if entry.strategy_card_id == retest_trial.strategy_card_id
+            and entry.trial_id == retest_trial.trial_id
+            and entry.evaluation_id == locked_evaluation.evaluation_id
+            and entry.symbol == retest_trial.symbol
+        ]
+    )
+
+
+def _latest_revision_shadow_outcome(
+    paper_shadow_outcomes: list[PaperShadowOutcome],
+    retest_trial: ExperimentTrial | None,
+    locked_evaluation: LockedEvaluationResult | None,
+    leaderboard_entry: LeaderboardEntry | None,
+) -> PaperShadowOutcome | None:
+    if retest_trial is None or locked_evaluation is None or leaderboard_entry is None:
+        return None
+    return _latest(
+        [
+            outcome
+            for outcome in paper_shadow_outcomes
+            if outcome.leaderboard_entry_id == leaderboard_entry.entry_id
+            and outcome.strategy_card_id == retest_trial.strategy_card_id
+            and outcome.trial_id == retest_trial.trial_id
+            and outcome.evaluation_id == locked_evaluation.evaluation_id
+            and outcome.symbol == retest_trial.symbol
+        ]
+    )
 
 
 def _latest_anchor(

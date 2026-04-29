@@ -28,6 +28,7 @@ from forecast_loop.revision_retest_executor import execute_revision_retest_next_
 from forecast_loop.revision_retest_plan import build_revision_retest_task_plan
 from forecast_loop.revision_retest_run_log import record_revision_retest_task_run
 from forecast_loop.strategy_evolution import propose_strategy_revision
+from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 
 
 def _now() -> datetime:
@@ -2565,6 +2566,41 @@ def test_cli_execute_revision_retest_shadow_outcome_next_task_outputs_json(tmp_p
     assert payload["after_plan"]["next_task_id"] is None
     assert len(revision_outcomes) == 1
     assert payload["created_artifact_ids"] == [revision_outcomes[0].outcome_id]
+
+
+def test_completed_revision_retest_chain_is_visible_as_done(tmp_path):
+    repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 30, 13, 0, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+        shadow_window_start=datetime(2026, 4, 29, 12, 30, tzinfo=UTC),
+        shadow_window_end=datetime(2026, 4, 30, 12, 30, tzinfo=UTC),
+        shadow_observed_return=0.04,
+        shadow_benchmark_return=0.01,
+        shadow_max_adverse_excursion=0.02,
+        shadow_turnover=1.5,
+    )
+
+    chain = resolve_latest_strategy_research_chain(
+        symbol="BTC-USD",
+        strategy_cards=repository.load_strategy_cards(),
+        experiment_trials=repository.load_experiment_trials(),
+        locked_evaluations=repository.load_locked_evaluation_results(),
+        split_manifests=repository.load_split_manifests(),
+        leaderboard_entries=repository.load_leaderboard_entries(),
+        paper_shadow_outcomes=repository.load_paper_shadow_outcomes(),
+        research_agendas=repository.load_research_agendas(),
+        research_autopilot_runs=repository.load_research_autopilot_runs(),
+    )
+
+    assert chain.revision_candidate is not None
+    assert chain.revision_candidate.strategy_card.card_id == revision.card_id
+    assert chain.revision_candidate.retest_trial is not None
+    assert chain.revision_candidate.retest_trial.status == "PASSED"
+    assert chain.revision_candidate.retest_next_required_artifacts == []
 
 
 def test_cli_creates_research_agenda_and_autopilot_run(tmp_path, capsys):

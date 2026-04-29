@@ -143,6 +143,9 @@ factory:
 - PR26 extends the same executor to `record_paper_shadow_outcome` only when
   explicit shadow-window observation inputs are supplied, allowing the retest
   chain to close without fabricating future returns.
+- PR27 makes completed revision retest chains visible to the strategy research
+  resolver and read-only UX surfaces, so a PASSED retest with locked evaluation,
+  leaderboard entry, and shadow outcome no longer appears as missing work.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -1426,6 +1429,11 @@ step remains blocked unless the caller supplies `--shadow-window-start`,
 executed task writes the created artifact ids plus an execution `AutomationRun`,
 then returns before/after task plans.
 
+When a revision retest chain has completed through explicit shadow outcome
+recording, the strategy research resolver reports the linked retest trial as
+`PASSED` and leaves `Next Required` empty in the read-only surfaces instead of
+showing stale scaffold requirements.
+
 Generate a Markdown research report from existing artifacts:
 
 ```powershell
@@ -1514,5 +1522,6 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - PR9/PR10/PR11 research autopilot, strategy-visible UX, and Codex governance
   docs exist, PR12 can produce evidence-linked DRAFT revision candidates, and
   PR13 makes those candidates visible in the dashboard and operator console,
-  but full scheduling, autonomous strategy generation, automatic promotion, and
-  deeper CPCV/PBO/DSR/bootstrap statistics remain deferred
+  PR27 keeps completed chains visible as completed revision evidence, but full
+  scheduling, autonomous strategy generation, automatic promotion, and deeper
+  CPCV/PBO/DSR/bootstrap statistics remain deferred

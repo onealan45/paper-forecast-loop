@@ -139,6 +139,9 @@ The PRD follows that decision:
   `record_paper_shadow_outcome` only when explicit shadow-window observation
   inputs are supplied, preserving the no-fabricated-returns boundary while
   allowing a retest chain to close.
+- PR27 adds Revision Retest Completed Chain Visibility: the strategy research
+  resolver and read-only UX now treat a completed revision retest chain as
+  `PASSED` evidence with no remaining `Next Required` artifacts.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -169,10 +172,11 @@ Product implications:
 - The first implemented self-evolving primitive is revision-candidate creation:
   failed paper-shadow outcomes can become DRAFT child strategy cards that must
   be retested before promotion.
-- The first implemented retest bridge is a scaffold, not a result: revision
-  candidates can now open a pending experiment trial, but baseline, backtest,
-  walk-forward, locked evaluation, leaderboard, and new shadow evidence still
-  have to be produced by later research steps.
+- The first implemented retest bridge now spans scaffold through explicit
+  shadow-outcome closure: revision candidates can open a pending experiment
+  trial, produce baseline/backtest/walk-forward/locked-evaluation/leaderboard
+  evidence through whitelisted executor steps, and then close with explicit
+  observed shadow-window inputs.
 - Revision candidates must be visible in the UX so the user can inspect what
   the AI is trying to fix next, not only whether the loop is healthy.
 - Revision retest scaffolds must also be visible so the user can inspect
@@ -187,6 +191,9 @@ Product implications:
 - Revision retest planning should be auditable: inspecting a plan can write a
   run log, but the log must not create strategy evidence or execute the
   displayed command args.
+- Completed revision retest chains must remain visible as completed evidence,
+  not disappear back into raw JSONL after the pending scaffold is superseded by
+  a PASSED trial.
 - The evaluation path must be deterministic, versioned, and auditable.
 - Failed experiments must be retained as evidence, not discarded.
 - Promotion inside the research loop must depend on research evidence, not on
@@ -675,9 +682,10 @@ correctness defects:
   walk-forward execution from the locked full split window, PR24 adds passed
   retest trial recording from existing evidence, and PR25 adds leaderboard-gate
   execution from plan-linked PASSED retest evidence, and PR26 adds explicit
-  shadow-outcome execution when real observation inputs are supplied, but strong strategy
-  generation, model training, deeper self-evolving skill loops, and optimizers
-  are not included yet
+  shadow-outcome execution when real observation inputs are supplied, and PR27
+  keeps completed chains visible as completed revision evidence, but strong
+  strategy generation, model training, deeper self-evolving skill loops, and
+  optimizers are not included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved
 - walk-forward validation now influences simulated BUY/SELL gates through
   M4F research-quality checks

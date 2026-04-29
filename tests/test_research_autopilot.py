@@ -2603,6 +2603,102 @@ def test_completed_revision_retest_chain_is_visible_as_done(tmp_path):
     assert chain.revision_candidate.retest_next_required_artifacts == []
 
 
+def test_revision_retest_autopilot_run_allows_missing_strategy_decision(tmp_path):
+    repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 30, 13, 0, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+        shadow_window_start=datetime(2026, 4, 29, 12, 30, tzinfo=UTC),
+        shadow_window_end=datetime(2026, 4, 30, 12, 30, tzinfo=UTC),
+        shadow_observed_return=0.04,
+        shadow_benchmark_return=0.01,
+        shadow_max_adverse_excursion=0.02,
+        shadow_turnover=1.5,
+    )
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+    agenda = next(
+        item
+        for item in repository.load_research_agendas()
+        if item.strategy_card_ids == [revision.card_id]
+    )
+
+    run = record_research_autopilot_run(
+        repository=repository,
+        created_at=datetime(2026, 4, 30, 13, 30, tzinfo=UTC),
+        agenda_id=agenda.agenda_id,
+        strategy_card_id=revision.card_id,
+        experiment_trial_id=plan.passed_trial_id,
+        locked_evaluation_id=plan.locked_evaluation_id,
+        leaderboard_entry_id=plan.leaderboard_entry_id,
+        paper_shadow_outcome_id=plan.paper_shadow_outcome_id,
+    )
+
+    assert "strategy_decision_missing" not in run.blocked_reasons
+    assert "locked_evaluation_not_rankable" in run.blocked_reasons
+    assert run.loop_status == "BLOCKED"
+    assert run.next_research_action == "REPAIR_EVIDENCE_CHAIN"
+    assert run.strategy_decision_id is None
+    assert run.paper_shadow_outcome_id == plan.paper_shadow_outcome_id
+
+
+def test_sqlite_repository_preserves_revision_retest_autopilot_run_without_decision(tmp_path):
+    repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 30, 13, 0, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+        shadow_window_start=datetime(2026, 4, 29, 12, 30, tzinfo=UTC),
+        shadow_window_end=datetime(2026, 4, 30, 12, 30, tzinfo=UTC),
+        shadow_observed_return=0.04,
+        shadow_benchmark_return=0.01,
+        shadow_max_adverse_excursion=0.02,
+        shadow_turnover=1.5,
+    )
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+    agenda = next(
+        item
+        for item in repository.load_research_agendas()
+        if item.strategy_card_ids == [revision.card_id]
+    )
+    run = record_research_autopilot_run(
+        repository=repository,
+        created_at=datetime(2026, 4, 30, 13, 30, tzinfo=UTC),
+        agenda_id=agenda.agenda_id,
+        strategy_card_id=revision.card_id,
+        experiment_trial_id=plan.passed_trial_id,
+        locked_evaluation_id=plan.locked_evaluation_id,
+        leaderboard_entry_id=plan.leaderboard_entry_id,
+        paper_shadow_outcome_id=plan.paper_shadow_outcome_id,
+    )
+    sqlite_repo = SQLiteRepository(tmp_path)
+
+    migrate_jsonl_to_sqlite(storage_dir=tmp_path, db_path=sqlite_repo.db_path)
+
+    loaded_run = next(
+        item
+        for item in sqlite_repo.load_research_autopilot_runs()
+        if item.run_id == run.run_id
+    )
+    assert loaded_run.strategy_decision_id is None
+    assert loaded_run.paper_shadow_outcome_id == plan.paper_shadow_outcome_id
+    assert loaded_run.blocked_reasons == run.blocked_reasons
+
+
 def test_cli_creates_research_agenda_and_autopilot_run(tmp_path, capsys):
     _repository, card, trial, evaluation, entry, decision, outcome = _seed_repository(tmp_path)
 

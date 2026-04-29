@@ -146,6 +146,9 @@ factory:
 - PR27 makes completed revision retest chains visible to the strategy research
   resolver and read-only UX surfaces, so a PASSED retest with locked evaluation,
   leaderboard entry, and shadow outcome no longer appears as missing work.
+- PR28 lets completed DRAFT revision retests be recorded as research autopilot
+  runs without inventing an unrelated strategy decision artifact; weak evidence
+  still blocks on the real evaluation / leaderboard reasons.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -1434,6 +1437,11 @@ recording, the strategy research resolver reports the linked retest trial as
 `PASSED` and leaves `Next Required` empty in the read-only surfaces instead of
 showing stale scaffold requirements.
 
+The completed revision retest can also be recorded with
+`record-research-autopilot-run` without `--strategy-decision-id`. This exception
+applies only to DRAFT revision cards with a linked paper-shadow outcome; normal
+strategy autopilot runs still require a strategy decision.
+
 Generate a Markdown research report from existing artifacts:
 
 ```powershell
@@ -1522,6 +1530,7 @@ This milestone improves correctness and auditability, but it does not yet solve 
 - PR9/PR10/PR11 research autopilot, strategy-visible UX, and Codex governance
   docs exist, PR12 can produce evidence-linked DRAFT revision candidates, and
   PR13 makes those candidates visible in the dashboard and operator console,
-  PR27 keeps completed chains visible as completed revision evidence, but full
+  PR27 keeps completed chains visible as completed revision evidence, and PR28
+  records completed revision retests without fake decision artifacts, but full
   scheduling, autonomous strategy generation, automatic promotion, and deeper
   CPCV/PBO/DSR/bootstrap statistics remain deferred

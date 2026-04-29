@@ -189,6 +189,9 @@ factory:
 - PR41 adds `create-lineage-research-agenda`, which turns the latest lineage
   next research focus into an idempotent research agenda artifact for the next
   self-evolution loop.
+- PR42 makes lineage-derived research agendas first-class in the strategy UX:
+  dashboard and operator console now show the agenda basis, priority,
+  hypothesis, and acceptance criteria next to the lineage summary.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

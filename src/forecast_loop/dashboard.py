@@ -65,6 +65,7 @@ class DashboardSnapshot:
     latest_research_agenda: ResearchAgenda | None
     latest_research_autopilot_run: ResearchAutopilotRun | None
     latest_strategy_lineage_summary: StrategyLineageSummary | None
+    latest_lineage_research_agenda: ResearchAgenda | None
     latest_strategy_revision_card: StrategyCard | None
     latest_strategy_revision_agenda: ResearchAgenda | None
     latest_strategy_revision_source_outcome: PaperShadowOutcome | None
@@ -177,6 +178,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         strategy_cards=strategy_cards,
         paper_shadow_outcomes=paper_shadow_outcomes,
     )
+    lineage_research_agenda = _latest_lineage_research_agenda(research_agendas, lineage_summary)
 
     return DashboardSnapshot(
         storage_dir=storage_dir,
@@ -199,6 +201,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         latest_research_agenda=research_chain.research_agenda,
         latest_research_autopilot_run=research_chain.research_autopilot_run,
         latest_strategy_lineage_summary=lineage_summary,
+        latest_lineage_research_agenda=lineage_research_agenda,
         latest_strategy_revision_card=revision_card,
         latest_strategy_revision_agenda=(
             research_chain.revision_candidate.research_agenda if research_chain.revision_candidate else None
@@ -298,6 +301,17 @@ def _latest_revision_retest_autopilot_run(
         and run.paper_shadow_outcome_id is not None
     ]
     return max(matches, key=lambda run: run.created_at) if matches else None
+
+
+def _latest_lineage_research_agenda(
+    agendas: list[ResearchAgenda],
+    summary: StrategyLineageSummary | None,
+) -> ResearchAgenda | None:
+    candidates = [item for item in agendas if item.decision_basis == "strategy_lineage_research_agenda"]
+    if summary is not None:
+        lineage_ids = {summary.root_card_id, *summary.revision_card_ids}
+        candidates = [item for item in candidates if lineage_ids.intersection(item.strategy_card_ids)]
+    return max(candidates, key=lambda item: item.created_at) if candidates else None
 
 
 def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
@@ -876,6 +890,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
     autopilot = snapshot.latest_research_autopilot_run
     revision_block = _render_strategy_revision_candidate(snapshot)
     lineage_block = _render_strategy_lineage_summary(snapshot.latest_strategy_lineage_summary)
+    lineage_agenda_block = _render_lineage_research_agenda(snapshot.latest_lineage_research_agenda)
     if (
         card is None
         and evaluation is None
@@ -903,6 +918,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
       </div>
       {revision_block}
       {lineage_block}
+      {lineage_agenda_block}
       <div class="evidence-grid">
         <div class="evidence-block">
           <h3>目前策略假設</h3>
@@ -980,6 +996,23 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
           </dl>
         </div>
       </details>
+    """
+
+
+def _render_lineage_research_agenda(agenda: ResearchAgenda | None) -> str:
+    if agenda is None or agenda.decision_basis != "strategy_lineage_research_agenda":
+        return ""
+    return f"""
+      <div class="evidence-block">
+        <h3>Lineage 研究 agenda</h3>
+        <dl>
+          <dt>Agenda</dt><dd>{_dashboard_artifact_id(agenda, "agenda_id")}</dd>
+          <dt>Priority</dt><dd>{escape(agenda.priority)}</dd>
+          <dt>Basis</dt><dd>{escape(agenda.decision_basis)}</dd>
+          <dt>Hypothesis</dt><dd>{escape(agenda.hypothesis)}</dd>
+          <dt>Acceptance</dt><dd>{_dashboard_list_inline(agenda.acceptance_criteria)}</dd>
+        </dl>
+      </div>
     """
 
 

@@ -64,6 +64,7 @@ class OperatorConsoleSnapshot:
     latest_research_agenda: ResearchAgenda | None
     latest_research_autopilot_run: ResearchAutopilotRun | None
     latest_strategy_lineage_summary: StrategyLineageSummary | None
+    latest_lineage_research_agenda: ResearchAgenda | None
     latest_strategy_revision_card: StrategyCard | None
     latest_strategy_revision_agenda: ResearchAgenda | None
     latest_strategy_revision_source_outcome: PaperShadowOutcome | None
@@ -155,6 +156,7 @@ def build_operator_console_snapshot(
         strategy_cards=strategy_cards,
         paper_shadow_outcomes=paper_shadow_outcomes,
     )
+    lineage_research_agenda = _latest_lineage_research_agenda(research_agendas, lineage_summary)
 
     return OperatorConsoleSnapshot(
         storage_dir=storage_path,
@@ -176,6 +178,7 @@ def build_operator_console_snapshot(
         latest_research_agenda=research_chain.research_agenda,
         latest_research_autopilot_run=research_chain.research_autopilot_run,
         latest_strategy_lineage_summary=lineage_summary,
+        latest_lineage_research_agenda=lineage_research_agenda,
         latest_strategy_revision_card=revision_card,
         latest_strategy_revision_agenda=(
             research_chain.revision_candidate.research_agenda if research_chain.revision_candidate else None
@@ -277,6 +280,17 @@ def _latest_revision_retest_autopilot_run(
         and run.paper_shadow_outcome_id is not None
     ]
     return max(matches, key=lambda run: run.created_at) if matches else None
+
+
+def _latest_lineage_research_agenda(
+    agendas: list[ResearchAgenda],
+    summary: StrategyLineageSummary | None,
+) -> ResearchAgenda | None:
+    candidates = [item for item in agendas if item.decision_basis == "strategy_lineage_research_agenda"]
+    if summary is not None:
+        lineage_ids = {summary.root_card_id, *summary.revision_card_ids}
+        candidates = [item for item in candidates if lineage_ids.intersection(item.strategy_card_ids)]
+    return max(candidates, key=lambda item: item.created_at) if candidates else None
 
 
 def render_operator_console_page(
@@ -779,6 +793,7 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
   </article>
   {_revision_candidate_panel(snapshot, wide=False)}
   {_strategy_lineage_panel(lineage)}
+  {_lineage_research_agenda_panel(snapshot.latest_lineage_research_agenda)}
   <article class="panel">
     <h3>Leaderboard</h3>
     <p>ID：{_artifact_id(leaderboard, "entry_id")}</p>
@@ -860,6 +875,22 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
     {_autopilot_steps(autopilot)}
   </article>
 </section>
+"""
+
+
+def _lineage_research_agenda_panel(agenda: ResearchAgenda | None) -> str:
+    if agenda is None or agenda.decision_basis != "strategy_lineage_research_agenda":
+        return ""
+    return f"""
+  <article class="panel wide">
+    <h3>Lineage 研究 agenda</h3>
+    <p>ID：{_artifact_id(agenda, "agenda_id")}</p>
+    <p>Priority：{escape(agenda.priority)}</p>
+    <p>Basis：{escape(agenda.decision_basis)}</p>
+    <p>Hypothesis：{escape(agenda.hypothesis)}</p>
+    <h4>Acceptance</h4>
+    {_plain_list(agenda.acceptance_criteria)}
+  </article>
 """
 
 

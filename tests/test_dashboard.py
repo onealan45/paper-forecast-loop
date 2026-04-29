@@ -6,6 +6,7 @@ import pytest
 
 from forecast_loop.cli import main
 from forecast_loop.evaluation import build_evaluation_summary
+from forecast_loop.lineage_agenda import create_lineage_research_agenda
 from forecast_loop.models import (
     AutomationRun,
     BaselineEvaluation,
@@ -1384,6 +1385,62 @@ def test_dashboard_strategy_lineage_includes_multi_generation_revisions(tmp_path
     assert "weak_baseline_edge" in html
     assert "paper-shadow-outcome:dashboard-second-revision-quarantine" in html
     assert "-0.1100" in html
+
+
+def test_dashboard_lineage_research_agenda_visibility(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    _seed_dashboard_strategy_research(repository, now)
+    _seed_dashboard_revision_candidate(repository, now + timedelta(minutes=10))
+    _seed_dashboard_strategy_lineage(repository, now + timedelta(minutes=20))
+    _seed_dashboard_second_generation_strategy_lineage(repository, now + timedelta(minutes=30))
+    create_lineage_research_agenda(
+        repository=repository,
+        created_at=now + timedelta(minutes=40),
+        symbol="BTC-USD",
+    )
+
+    html = render_dashboard_html(build_dashboard_snapshot(tmp_path))
+
+    assert "Lineage 研究 agenda" in html
+    assert "strategy_lineage_research_agenda" in html
+    assert "停止加碼此 lineage" in html
+    assert "drawdown_breach" in html
+
+
+def test_dashboard_lineage_research_agenda_ignores_other_lineage(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    _seed_dashboard_strategy_research(repository, now)
+    _seed_dashboard_revision_candidate(repository, now + timedelta(minutes=10))
+    _seed_dashboard_strategy_lineage(repository, now + timedelta(minutes=20))
+    repository.save_research_agenda(
+        ResearchAgenda(
+            agenda_id="research-agenda:other-lineage",
+            created_at=now + timedelta(minutes=30),
+            symbol="BTC-USD",
+            title="Other lineage agenda",
+            hypothesis="This same-symbol agenda belongs to another lineage.",
+            priority="HIGH",
+            status="OPEN",
+            target_strategy_family="breakout_reversal",
+            strategy_card_ids=["strategy-card:other-lineage"],
+            expected_artifacts=["strategy_revision_or_new_strategy"],
+            acceptance_criteria=["must not render beside the current lineage"],
+            blocked_actions=["real_order_submission"],
+            decision_basis="strategy_lineage_research_agenda",
+        )
+    )
+
+    html = render_dashboard_html(build_dashboard_snapshot(tmp_path))
+
+    assert "Lineage 研究 agenda" not in html
+    assert "research-agenda:other-lineage" not in html
+    assert "This same-symbol agenda belongs to another lineage." not in html
 
 
 def test_dashboard_strategy_lineage_escapes_revision_change_summary(tmp_path):

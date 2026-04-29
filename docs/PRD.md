@@ -187,6 +187,8 @@ The PRD follows that decision:
 - PR41 adds Strategy Lineage Research Agenda creation: the latest lineage next
   research focus can now be persisted as an idempotent research agenda artifact
   for the next self-evolution loop.
+- PR42 adds Strategy Lineage Agenda UX: dashboard and operator console now show
+  lineage-derived research agendas as explicit strategy research context.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -702,6 +704,8 @@ V1 MVP should include:
 - `create-lineage-research-agenda` CLI output that persists the latest lineage
   focus as `strategy_lineage_research_agenda` without creating a decision or
   mutating a strategy card
+- dashboard and operator console visibility for lineage-derived research
+  agendas, including basis, priority, hypothesis, and acceptance criteria
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,
@@ -793,7 +797,8 @@ correctness defects:
   escaping regressions for those fields. PR37 exposes lineage performance
   trajectory, PR38 adds the human-readable lineage verdict, and PR39 adds the
   next research focus, and PR40 exposes the same summary through a read-only
-  CLI. PR41 can persist that focus as a research agenda artifact, but
+  CLI. PR41 can persist that focus as a research agenda artifact, and PR42
+  makes that lineage-derived agenda visible in the strategy UX, but
   strong strategy generation, model training, deeper self-evolving skill loops,
   and optimizers are not included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved

@@ -5,6 +5,7 @@ import pytest
 
 from forecast_loop.autopilot import create_research_agenda, record_research_autopilot_run
 from forecast_loop.cli import main
+from forecast_loop.experiment_registry import record_experiment_trial
 from forecast_loop.health import run_health_check
 from forecast_loop.models import (
     ExperimentTrial,
@@ -22,7 +23,7 @@ from forecast_loop.models import (
 )
 from forecast_loop.sqlite_repository import SQLiteRepository, export_sqlite_to_jsonl, migrate_jsonl_to_sqlite
 from forecast_loop.storage import JsonFileRepository
-from forecast_loop.revision_retest import create_revision_retest_scaffold
+from forecast_loop.revision_retest import RETEST_PROTOCOL_VERSION, create_revision_retest_scaffold
 from forecast_loop.revision_retest_executor import execute_revision_retest_next_task
 from forecast_loop.revision_retest_plan import build_revision_retest_task_plan
 from forecast_loop.revision_retest_run_log import record_revision_retest_task_run
@@ -1561,12 +1562,22 @@ def test_execute_revision_retest_next_task_rejects_unsupported_ready_task(tmp_pa
 
     assert walk_forward_result.executed_task_id == "run_walk_forward"
     assert walk_forward_result.after_plan.next_task_id == "record_passed_retest_trial"
-    with pytest.raises(ValueError, match="unsupported_revision_retest_task_execution:record_passed_retest_trial"):
+    passed_trial_result = execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 10, 15, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+
+    assert passed_trial_result.executed_task_id == "record_passed_retest_trial"
+    assert passed_trial_result.after_plan.next_task_id == "evaluate_leaderboard_gate"
+    with pytest.raises(ValueError, match="unsupported_revision_retest_task_execution:evaluate_leaderboard_gate"):
         execute_revision_retest_next_task(
             repository=repository,
             storage_dir=tmp_path,
             symbol="BTC-USD",
-            created_at=datetime(2026, 4, 29, 10, 15, tzinfo=UTC),
+            created_at=datetime(2026, 4, 29, 10, 20, tzinfo=UTC),
             revision_card_id=revision.card_id,
         )
 
@@ -1951,6 +1962,225 @@ def test_cli_execute_revision_retest_walk_forward_next_task_outputs_json(tmp_pat
     assert payload["before_plan"]["next_task_id"] == "run_walk_forward"
     assert payload["after_plan"]["next_task_id"] == "record_passed_retest_trial"
     assert len(JsonFileRepository(tmp_path).load_walk_forward_validations()) == 1
+
+
+def test_execute_revision_retest_passed_trial_next_task_records_trial(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 1, 4, tzinfo=UTC),
+        validation_start=datetime(2026, 1, 5, tzinfo=UTC),
+        validation_end=datetime(2026, 1, 7, tzinfo=UTC),
+        holdout_start=datetime(2026, 1, 8, tzinfo=UTC),
+        holdout_end=datetime(2026, 1, 10, tzinfo=UTC),
+    )
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 10, 30, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+    _seed_retest_full_window_candles(repository)
+    backtest_result = execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 11, 0, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+    walk_forward_result = execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 11, 30, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+
+    result = execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 12, 0, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+    revision_trials = [trial for trial in repository.load_experiment_trials() if trial.strategy_card_id == revision.card_id]
+    passed_trials = [trial for trial in revision_trials if trial.status == "PASSED"]
+
+    assert result.executed_task_id == "record_passed_retest_trial"
+    assert result.before_plan.next_task_id == "record_passed_retest_trial"
+    assert result.after_plan.next_task_id == "evaluate_leaderboard_gate"
+    assert result.automation_run.status == "RETEST_TASK_EXECUTED"
+    assert len(passed_trials) == 1
+    assert passed_trials[0].dataset_id == "research-dataset:revision-retest"
+    assert passed_trials[0].backtest_result_id == backtest_result.created_artifact_ids[0]
+    assert passed_trials[0].walk_forward_validation_id == walk_forward_result.created_artifact_ids[0]
+    assert passed_trials[0].parameters["revision_retest_protocol"] == RETEST_PROTOCOL_VERSION
+    assert passed_trials[0].parameters["revision_retest_source_card_id"] == revision.card_id
+    assert passed_trials[0].parameters["revision_source_outcome_id"] == outcome.outcome_id
+    assert result.created_artifact_ids == [passed_trials[0].trial_id]
+    assert len(repository.load_automation_runs()) == 4
+
+
+def test_execute_revision_retest_passed_trial_blocks_budget_exhaustion(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=1,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 1, 4, tzinfo=UTC),
+        validation_start=datetime(2026, 1, 5, tzinfo=UTC),
+        validation_end=datetime(2026, 1, 7, tzinfo=UTC),
+        holdout_start=datetime(2026, 1, 8, tzinfo=UTC),
+        holdout_end=datetime(2026, 1, 10, tzinfo=UTC),
+    )
+    record_experiment_trial(
+        repository=repository,
+        created_at=datetime(2026, 4, 29, 10, 0, tzinfo=UTC),
+        strategy_card_id=revision.card_id,
+        trial_index=99,
+        status="FAILED",
+        symbol="BTC-USD",
+        max_trials=1,
+        failure_reason="prior_failed_retest",
+    )
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 10, 30, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+    _seed_retest_full_window_candles(repository)
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 11, 0, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 11, 30, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+    automation_count_before = len(repository.load_automation_runs())
+
+    with pytest.raises(ValueError, match="revision_retest_trial_budget_exhausted"):
+        execute_revision_retest_next_task(
+            repository=repository,
+            storage_dir=tmp_path,
+            symbol="BTC-USD",
+            created_at=datetime(2026, 4, 29, 12, 0, tzinfo=UTC),
+            revision_card_id=revision.card_id,
+        )
+
+    revision_trials = [trial for trial in repository.load_experiment_trials() if trial.strategy_card_id == revision.card_id]
+    assert [trial.status for trial in revision_trials].count("PASSED") == 0
+    assert [trial.status for trial in revision_trials].count("ABORTED") == 0
+    assert len(repository.load_automation_runs()) == automation_count_before
+
+
+def test_cli_execute_revision_retest_passed_trial_next_task_outputs_json(tmp_path, capsys):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 1, 4, tzinfo=UTC),
+        validation_start=datetime(2026, 1, 5, tzinfo=UTC),
+        validation_end=datetime(2026, 1, 7, tzinfo=UTC),
+        holdout_start=datetime(2026, 1, 8, tzinfo=UTC),
+        holdout_end=datetime(2026, 1, 10, tzinfo=UTC),
+    )
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 10, 30, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+    _seed_retest_full_window_candles(repository)
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 11, 0, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 11, 30, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+
+    assert main(
+        [
+            "execute-revision-retest-next-task",
+            "--storage-dir",
+            str(tmp_path),
+            "--revision-card-id",
+            revision.card_id,
+            "--symbol",
+            "BTC-USD",
+            "--now",
+            "2026-04-29T12:00:00+00:00",
+        ]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+    revision_trials = [
+        trial for trial in JsonFileRepository(tmp_path).load_experiment_trials() if trial.strategy_card_id == revision.card_id
+    ]
+
+    assert payload["executed_task_id"] == "record_passed_retest_trial"
+    assert payload["before_plan"]["next_task_id"] == "record_passed_retest_trial"
+    assert payload["after_plan"]["next_task_id"] == "evaluate_leaderboard_gate"
+    assert len([trial for trial in revision_trials if trial.status == "PASSED"]) == 1
 
 
 def test_cli_creates_research_agenda_and_autopilot_run(tmp_path, capsys):

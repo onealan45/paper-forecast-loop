@@ -6,8 +6,10 @@ from pathlib import Path
 
 from forecast_loop.backtest import run_backtest
 from forecast_loop.baselines import build_baseline_evaluation
+from forecast_loop.experiment_registry import record_experiment_trial
 from forecast_loop.locked_evaluation import lock_evaluation_protocol
 from forecast_loop.models import AutomationRun
+from forecast_loop.revision_retest import RETEST_PROTOCOL_VERSION
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.storage import ArtifactRepository
 from forecast_loop.walk_forward import run_walk_forward_validation
@@ -76,6 +78,12 @@ def execute_revision_retest_next_task(
         created_artifact_ids = _execute_run_walk_forward(
             repository=repository,
             storage_dir=storage_path,
+            plan=before_plan,
+            created_at=created_at,
+        )
+    elif task.task_id == "record_passed_retest_trial":
+        created_artifact_ids = _execute_record_passed_retest_trial(
+            repository=repository,
             plan=before_plan,
             created_at=created_at,
         )
@@ -199,6 +207,84 @@ def _execute_run_walk_forward(
         created_at=created_at,
     )
     return [result.validation.validation_id]
+
+
+def _execute_record_passed_retest_trial(
+    *,
+    repository: ArtifactRepository,
+    plan: RevisionRetestTaskPlan,
+    created_at: datetime,
+) -> list[str]:
+    if plan.pending_trial_id is None:
+        raise ValueError("revision_retest_pending_trial_missing")
+    if plan.dataset_id is None:
+        raise ValueError("revision_retest_dataset_missing")
+    if plan.backtest_result_id is None:
+        raise ValueError("revision_retest_backtest_result_missing")
+    if plan.walk_forward_validation_id is None:
+        raise ValueError("revision_retest_walk_forward_validation_missing")
+    pending_trial = next(
+        (item for item in repository.load_experiment_trials() if item.trial_id == plan.pending_trial_id),
+        None,
+    )
+    if pending_trial is None:
+        raise ValueError(f"missing_pending_retest_trial:{plan.pending_trial_id}")
+    _ensure_trial_budget_available(
+        repository=repository,
+        strategy_card_id=plan.strategy_card_id,
+        trial_index=pending_trial.trial_index,
+        max_trials=int(pending_trial.parameters.get("max_trials", 20)),
+    )
+    revision_card = next(
+        (item for item in repository.load_strategy_cards() if item.card_id == plan.strategy_card_id),
+        None,
+    )
+    if revision_card is None:
+        raise ValueError(f"missing_revision_strategy_card:{plan.strategy_card_id}")
+    trial = record_experiment_trial(
+        repository=repository,
+        created_at=created_at,
+        strategy_card_id=plan.strategy_card_id,
+        trial_index=pending_trial.trial_index,
+        status="PASSED",
+        symbol=plan.symbol,
+        max_trials=int(pending_trial.parameters.get("max_trials", 20)),
+        seed=pending_trial.seed,
+        dataset_id=plan.dataset_id,
+        backtest_result_id=plan.backtest_result_id,
+        walk_forward_validation_id=plan.walk_forward_validation_id,
+        parameters={
+            "revision_retest_protocol": RETEST_PROTOCOL_VERSION,
+            "revision_retest_source_card_id": plan.strategy_card_id,
+            "revision_source_outcome_id": plan.source_outcome_id,
+            "revision_parent_card_id": revision_card.parent_card_id,
+        },
+        started_at=pending_trial.started_at,
+        completed_at=created_at,
+    )
+    if trial.status != "PASSED":
+        raise ValueError(f"revision_retest_passed_trial_not_recorded:{trial.status}")
+    return [trial.trial_id]
+
+
+def _ensure_trial_budget_available(
+    *,
+    repository: ArtifactRepository,
+    strategy_card_id: str,
+    trial_index: int,
+    max_trials: int,
+) -> None:
+    consumed_indexes: set[int] = set()
+    for trial in repository.load_experiment_trials():
+        if trial.strategy_card_id != strategy_card_id:
+            continue
+        if trial.status in {"PENDING", "RUNNING"}:
+            continue
+        if trial.status == "ABORTED" and trial.failure_reason == "trial_budget_exhausted":
+            continue
+        consumed_indexes.add(trial.trial_index)
+    if trial_index not in consumed_indexes and len(consumed_indexes) >= max_trials:
+        raise ValueError("revision_retest_trial_budget_exhausted")
 
 
 def _execute_lock_evaluation_protocol(

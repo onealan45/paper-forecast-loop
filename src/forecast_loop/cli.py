@@ -495,6 +495,13 @@ def main(argv: list[str] | None = None) -> int:
     execute_retest_task_cmd.add_argument("--revision-card-id")
     execute_retest_task_cmd.add_argument("--symbol", default="BTC-USD")
     execute_retest_task_cmd.add_argument("--now")
+    execute_retest_task_cmd.add_argument("--shadow-window-start")
+    execute_retest_task_cmd.add_argument("--shadow-window-end")
+    execute_retest_task_cmd.add_argument("--shadow-observed-return", type=float)
+    execute_retest_task_cmd.add_argument("--shadow-benchmark-return", type=float)
+    execute_retest_task_cmd.add_argument("--shadow-max-adverse-excursion", type=float)
+    execute_retest_task_cmd.add_argument("--shadow-turnover", type=float)
+    execute_retest_task_cmd.add_argument("--shadow-note")
 
     args = parser.parse_args(argv)
     try:
@@ -1744,6 +1751,13 @@ def _execute_revision_retest_next_task(args) -> int:
         symbol=args.symbol.upper(),
         created_at=created_at,
         revision_card_id=args.revision_card_id,
+        shadow_window_start=_parse_datetime(args.shadow_window_start) if args.shadow_window_start else None,
+        shadow_window_end=_parse_datetime(args.shadow_window_end) if args.shadow_window_end else None,
+        shadow_observed_return=args.shadow_observed_return,
+        shadow_benchmark_return=args.shadow_benchmark_return,
+        shadow_max_adverse_excursion=args.shadow_max_adverse_excursion,
+        shadow_turnover=args.shadow_turnover,
+        shadow_note=args.shadow_note,
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0

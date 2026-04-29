@@ -9,6 +9,7 @@ from forecast_loop.baselines import build_baseline_evaluation
 from forecast_loop.experiment_registry import record_experiment_trial
 from forecast_loop.locked_evaluation import evaluate_leaderboard_gate, lock_evaluation_protocol
 from forecast_loop.models import AutomationRun
+from forecast_loop.paper_shadow import record_paper_shadow_outcome
 from forecast_loop.revision_retest import RETEST_PROTOCOL_VERSION
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.storage import ArtifactRepository
@@ -40,6 +41,13 @@ def execute_revision_retest_next_task(
     symbol: str,
     created_at: datetime,
     revision_card_id: str | None = None,
+    shadow_window_start: datetime | None = None,
+    shadow_window_end: datetime | None = None,
+    shadow_observed_return: float | None = None,
+    shadow_benchmark_return: float | None = None,
+    shadow_max_adverse_excursion: float | None = None,
+    shadow_turnover: float | None = None,
+    shadow_note: str | None = None,
 ) -> RevisionRetestTaskExecutionResult:
     if created_at.tzinfo is None or created_at.utcoffset() is None:
         raise ValueError("created_at must be timezone-aware")
@@ -53,7 +61,14 @@ def execute_revision_retest_next_task(
     if before_plan.next_task_id is None:
         raise ValueError("revision_retest_task_plan_complete")
     task = before_plan.task_by_id(before_plan.next_task_id)
-    if task.status != "ready":
+    shadow_observation_override = _can_execute_shadow_observation_task(
+        task=task,
+        shadow_window_start=shadow_window_start,
+        shadow_window_end=shadow_window_end,
+        shadow_observed_return=shadow_observed_return,
+        shadow_benchmark_return=shadow_benchmark_return,
+    )
+    if task.status != "ready" and not shadow_observation_override:
         raise ValueError(f"revision_retest_next_task_not_ready:{task.task_id}:{task.blocked_reason or task.status}")
     if task.task_id == "lock_evaluation_protocol":
         created_artifact_ids = _execute_lock_evaluation_protocol(
@@ -92,6 +107,19 @@ def execute_revision_retest_next_task(
             repository=repository,
             plan=before_plan,
             created_at=created_at,
+        )
+    elif task.task_id == "record_paper_shadow_outcome":
+        created_artifact_ids = _execute_record_paper_shadow_outcome(
+            repository=repository,
+            plan=before_plan,
+            created_at=created_at,
+            shadow_window_start=shadow_window_start,
+            shadow_window_end=shadow_window_end,
+            shadow_observed_return=shadow_observed_return,
+            shadow_benchmark_return=shadow_benchmark_return,
+            shadow_max_adverse_excursion=shadow_max_adverse_excursion,
+            shadow_turnover=shadow_turnover,
+            shadow_note=shadow_note,
         )
     else:
         raise ValueError(f"unsupported_revision_retest_task_execution:{task.task_id}")
@@ -333,6 +361,74 @@ def _execute_evaluate_leaderboard_gate(
         event_edge_evaluation_id=None,
     )
     return [evaluation.evaluation_id, entry.entry_id]
+
+
+def _can_execute_shadow_observation_task(
+    *,
+    task,
+    shadow_window_start: datetime | None,
+    shadow_window_end: datetime | None,
+    shadow_observed_return: float | None,
+    shadow_benchmark_return: float | None,
+) -> bool:
+    return (
+        task.task_id == "record_paper_shadow_outcome"
+        and task.status == "blocked"
+        and task.blocked_reason == "shadow_window_observation_required"
+        and shadow_window_start is not None
+        and shadow_window_end is not None
+        and shadow_observed_return is not None
+        and shadow_benchmark_return is not None
+    )
+
+
+def _execute_record_paper_shadow_outcome(
+    *,
+    repository: ArtifactRepository,
+    plan: RevisionRetestTaskPlan,
+    created_at: datetime,
+    shadow_window_start: datetime | None,
+    shadow_window_end: datetime | None,
+    shadow_observed_return: float | None,
+    shadow_benchmark_return: float | None,
+    shadow_max_adverse_excursion: float | None,
+    shadow_turnover: float | None,
+    shadow_note: str | None,
+) -> list[str]:
+    if plan.leaderboard_entry_id is None:
+        raise ValueError("revision_retest_leaderboard_entry_missing")
+    missing = []
+    if shadow_window_start is None:
+        missing.append("shadow_window_start")
+    if shadow_window_end is None:
+        missing.append("shadow_window_end")
+    if shadow_observed_return is None:
+        missing.append("shadow_observed_return")
+    if shadow_benchmark_return is None:
+        missing.append("shadow_benchmark_return")
+    if missing:
+        raise ValueError(f"revision_retest_shadow_observation_inputs_missing:{','.join(missing)}")
+    assert shadow_window_start is not None
+    assert shadow_window_end is not None
+    assert shadow_observed_return is not None
+    assert shadow_benchmark_return is not None
+    if shadow_window_end <= shadow_window_start:
+        raise ValueError("revision_retest_shadow_window_invalid")
+    if shadow_window_end > created_at:
+        raise ValueError("revision_retest_shadow_window_not_complete")
+    outcome = record_paper_shadow_outcome(
+        repository=repository,
+        created_at=created_at,
+        leaderboard_entry_id=plan.leaderboard_entry_id,
+        window_start=shadow_window_start,
+        window_end=shadow_window_end,
+        observed_return=shadow_observed_return,
+        benchmark_return=shadow_benchmark_return,
+        max_adverse_excursion=shadow_max_adverse_excursion,
+        turnover=shadow_turnover,
+        note=shadow_note,
+    )
+    return [outcome.outcome_id]
 
 
 def _execute_lock_evaluation_protocol(

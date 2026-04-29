@@ -6,6 +6,7 @@ import pytest
 from forecast_loop.cli import main
 from forecast_loop.lineage_agenda import create_lineage_research_agenda
 from forecast_loop.lineage_research_plan import build_lineage_research_task_plan
+from forecast_loop.lineage_research_run_log import record_lineage_research_task_run
 from forecast_loop.models import PaperShadowOutcome, StrategyCard
 from forecast_loop.storage import JsonFileRepository
 
@@ -111,6 +112,19 @@ def _outcome(
         notes=[],
         decision_basis="test",
     )
+
+
+def _jsonl_snapshot(storage_dir) -> dict[str, str]:
+    return {
+        path.name: path.read_text(encoding="utf-8")
+        for path in storage_dir.glob("*.jsonl")
+        if path.is_file()
+    }
+
+
+def _changed_jsonl_files(before: dict[str, str], after: dict[str, str]) -> set[str]:
+    names = set(before) | set(after)
+    return {name for name in names if before.get(name) != after.get(name)}
 
 
 def test_lineage_research_task_plan_builds_ready_revision_command_for_revise_action(tmp_path):
@@ -289,6 +303,69 @@ def test_lineage_research_task_plan_routes_insufficient_evidence_to_shadow_colle
     assert next_task.blocked_reason == "paper_shadow_outcome_missing"
 
 
+def test_record_lineage_research_task_run_logs_ready_task_plan_without_executing(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    parent = _card("strategy-card:parent")
+    repository.save_strategy_card(parent)
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:parent-fail",
+            card_id=parent.card_id,
+            created_at=now,
+            action="REVISE_STRATEGY",
+            excess=-0.03,
+            attributions=["negative_excess_return"],
+        )
+    )
+    create_lineage_research_agenda(repository=repository, created_at=now, symbol="BTC-USD")
+    before = _jsonl_snapshot(tmp_path)
+
+    result = record_lineage_research_task_run(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 30, 11, 0, tzinfo=UTC),
+    )
+    after = _jsonl_snapshot(tmp_path)
+
+    run = result.automation_run
+    assert run.status == "LINEAGE_RESEARCH_TASK_READY"
+    assert run.command == "lineage-research-plan"
+    assert run.provider == "research"
+    assert run.decision_basis == "lineage_research_task_plan_run_log"
+    assert result.task_plan.next_task_id == "propose_strategy_revision"
+    assert any(
+        step["name"] == "propose_strategy_revision" and step["status"] == "ready" and step["artifact_id"] is None
+        for step in run.steps
+    )
+    assert _changed_jsonl_files(before, after) == {"automation_runs.jsonl"}
+    assert JsonFileRepository(tmp_path).load_automation_runs() == [run]
+
+
+def test_record_lineage_research_task_run_logs_blocked_evidence_plan(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    repository.save_strategy_card(_card("strategy-card:parent"))
+    create_lineage_research_agenda(repository=repository, created_at=now, symbol="BTC-USD")
+
+    result = record_lineage_research_task_run(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 30, 11, 0, tzinfo=UTC),
+    )
+
+    assert result.automation_run.status == "LINEAGE_RESEARCH_TASK_BLOCKED"
+    assert result.task_plan.next_task_id == "collect_lineage_shadow_evidence"
+    assert any(
+        step["name"] == "collect_lineage_shadow_evidence"
+        and step["status"] == "blocked"
+        and step["artifact_id"] is None
+        for step in result.automation_run.steps
+    )
+
+
 def test_lineage_research_plan_cli_prints_machine_readable_next_task(tmp_path, capsys):
     now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
     repository = JsonFileRepository(tmp_path)
@@ -311,6 +388,41 @@ def test_lineage_research_plan_cli_prints_machine_readable_next_task(tmp_path, c
 
     assert payload["lineage_research_task_plan"]["next_task_id"] == "propose_strategy_revision"
     assert payload["lineage_research_task_plan"]["tasks"][1]["command_args"][2] == "propose-strategy-revision"
+
+
+def test_cli_record_lineage_research_task_run_outputs_json_and_persists(tmp_path, capsys):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    parent = _card("strategy-card:parent")
+    repository.save_strategy_card(parent)
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:parent-fail",
+            card_id=parent.card_id,
+            created_at=now,
+            action="REVISE_STRATEGY",
+            excess=-0.03,
+            attributions=["negative_excess_return"],
+        )
+    )
+    create_lineage_research_agenda(repository=repository, created_at=now, symbol="BTC-USD")
+
+    assert main(
+        [
+            "record-lineage-research-task-run",
+            "--storage-dir",
+            str(tmp_path),
+            "--symbol",
+            "BTC-USD",
+            "--now",
+            "2026-04-30T11:00:00+00:00",
+        ]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["automation_run"]["status"] == "LINEAGE_RESEARCH_TASK_READY"
+    assert payload["lineage_research_task_plan"]["next_task_id"] == "propose_strategy_revision"
+    assert len(JsonFileRepository(tmp_path).load_automation_runs()) == 1
 
 
 def test_propose_strategy_revision_accepts_lineage_revise_strategy_action(tmp_path, capsys):

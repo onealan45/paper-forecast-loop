@@ -713,6 +713,9 @@ V1 MVP should include:
 - dashboard and operator console visibility for the lineage research task plan,
   so the UX shows the next strategy work item, required artifact, command args,
   worker prompt, and rationale
+- `record-lineage-research-task-run` audit logging that records the current
+  lineage task plan as an `AutomationRun` without executing the task or mutating
+  strategy artifacts
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

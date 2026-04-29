@@ -178,6 +178,9 @@ The PRD follows that decision:
   console now show a concise verdict, improvement/worsening/unknown counts,
   latest delta, latest strategy action, and latest failure focus before the raw
   trajectory rows.
+- PR39 adds Strategy Lineage Next Research Focus: dashboard and operator
+  console now translate the lineage verdict into a concrete next study
+  direction for the self-evolving strategy loop.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -258,6 +261,8 @@ Product implications:
 - Strategy lineage should summarize the trajectory in human terms before raw
   rows so the user can see whether self-evolution is currently improving,
   worsening, stalled, or missing evidence.
+- Strategy lineage should translate the performance verdict into a next
+  research focus so the user can see what the AI should inspect next.
 - The evaluation path must be deterministic, versioned, and auditable.
 - Failed experiments must be retained as evidence, not discarded.
 - Promotion inside the research loop must depend on research evidence, not on
@@ -684,6 +689,8 @@ V1 MVP should include:
   outcome
 - strategy lineage performance verdict summarizing latest trend, counts,
   latest action, and latest failure focus before the raw trajectory rows
+- strategy lineage next research focus translating the verdict into an
+  inspectable next study direction
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,
@@ -773,7 +780,8 @@ correctness defects:
   the UX, PR34 hardens branching/missing-parent/cycle edge cases, and PR35
   exposes revision hypothesis/source/fix summaries, and PR36 adds malicious HTML
   escaping regressions for those fields. PR37 exposes lineage performance
-  trajectory and PR38 adds the human-readable lineage verdict, but
+  trajectory, PR38 adds the human-readable lineage verdict, and PR39 adds the
+  next research focus, but
   strong strategy generation, model training, deeper self-evolving skill loops,
   and optimizers are not included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved

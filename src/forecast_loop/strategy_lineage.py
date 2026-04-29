@@ -50,6 +50,7 @@ class StrategyLineageSummary:
     latest_delta_vs_previous_excess: float | None
     primary_failure_attribution: str | None
     latest_recommended_strategy_action: str | None
+    next_research_focus: str
 
 
 def build_strategy_lineage_summary(
@@ -106,6 +107,7 @@ def build_strategy_lineage_summary(
         latest_delta_vs_previous_excess=verdict["latest_delta_vs_previous_excess"],
         primary_failure_attribution=verdict["primary_failure_attribution"],
         latest_recommended_strategy_action=verdict["latest_recommended_strategy_action"],
+        next_research_focus=verdict["next_research_focus"],
     )
 
 
@@ -210,15 +212,18 @@ def _lineage_performance_verdict(
     unknown = sum(1 for node in outcome_nodes if node.change_label == "未知")
     latest = outcome_nodes[-1] if outcome_nodes else None
     primary_failure = _latest_or_primary_failure_attribution(latest, failure_attribution_counts)
+    performance_verdict = _performance_verdict_label(outcome_nodes, improved, worsened, unknown, latest)
+    latest_action = latest.recommended_strategy_action if latest else None
     return {
-        "performance_verdict": _performance_verdict_label(outcome_nodes, improved, worsened, unknown, latest),
+        "performance_verdict": performance_verdict,
         "improved_outcome_count": improved,
         "worsened_outcome_count": worsened,
         "unknown_outcome_count": unknown,
         "latest_change_label": latest.change_label if latest else "證據不足",
         "latest_delta_vs_previous_excess": latest.delta_vs_previous_excess if latest else None,
         "primary_failure_attribution": primary_failure,
-        "latest_recommended_strategy_action": latest.recommended_strategy_action if latest else None,
+        "latest_recommended_strategy_action": latest_action,
+        "next_research_focus": _next_research_focus(performance_verdict, latest_action, primary_failure),
     }
 
 
@@ -249,6 +254,23 @@ def _latest_or_primary_failure_attribution(
     if failure_attribution_counts:
         return max(failure_attribution_counts.items(), key=lambda item: (item[1], item[0]))[0]
     return None
+
+
+def _next_research_focus(
+    performance_verdict: str,
+    latest_recommended_strategy_action: str | None,
+    primary_failure_attribution: str | None,
+) -> str:
+    failure = primary_failure_attribution or "主要失敗"
+    if performance_verdict == "證據不足":
+        return "先補齊 paper-shadow outcome 證據，再判斷修正方向。"
+    if latest_recommended_strategy_action == "QUARANTINE_STRATEGY":
+        return f"停止加碼此 lineage，優先研究 {failure} 的修正或新策略。"
+    if latest_recommended_strategy_action == "REVISE_STRATEGY" or performance_verdict in {"惡化", "偏弱"}:
+        return f"優先修正 {failure}，再重跑 locked retest。"
+    if performance_verdict in {"改善", "偏強"}:
+        return "保留此 lineage，下一步驗證改善是否能跨樣本持續。"
+    return "維持觀察，等待更多 paper-shadow outcome。"
 
 
 def _delta(current: float | None, previous: float | None) -> float | None:

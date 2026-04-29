@@ -1000,6 +1000,7 @@ def _render_strategy_lineage_summary(summary: StrategyLineageSummary | None) -> 
           <dt>Revision Cards</dt><dd>{_dashboard_list_inline(summary.revision_card_ids)}</dd>
           <dt>Revision Tree</dt><dd>{_dashboard_revision_tree(summary)}</dd>
           <dt>表現結論</dt><dd>{_dashboard_performance_verdict(summary)}</dd>
+          <dt>下一步研究焦點</dt><dd>{escape(summary.next_research_focus)}</dd>
           <dt>表現軌跡</dt><dd>{_dashboard_performance_trajectory(summary)}</dd>
           <dt>Shadow Outcomes</dt><dd>{summary.outcome_count}</dd>
           <dt>Actions</dt><dd>{_dashboard_dict_inline(summary.action_counts)}</dd>

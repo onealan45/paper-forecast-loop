@@ -124,6 +124,9 @@ factory:
 - PR20 adds the first narrow retest executor: it can execute the ready
   `lock_evaluation_protocol` task directly through domain code, write a cost
   model, record an execution `AutomationRun`, and return before/after plans.
+- PR21 extends the same executor to `generate_baseline_evaluation`, allowing
+  the retest chain to advance from protocol locking to baseline evidence while
+  still rejecting backtest and later tasks.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -784,6 +787,13 @@ PR20 starts artifact-producing retest execution:
 - it calls repository/domain code directly rather than shelling out;
 - unsupported ready tasks are rejected until implemented one at a time.
 
+PR21 adds the next executor step:
+
+- `generate_baseline_evaluation` builds and saves a baseline through existing
+  domain code;
+- the executor records the baseline id and an execution `AutomationRun`;
+- `run_backtest` and later tasks remain explicitly unsupported.
+
 ### Strategy-Visible UX
 
 PR10 promotes concrete strategy context from raw artifacts into the inspection
@@ -1382,9 +1392,9 @@ Execute the next whitelisted retest task:
 python run_forecast_loop.py execute-revision-retest-next-task --storage-dir .\paper_storage\manual-research --revision-card-id strategy-card:example-revision --symbol BTC-USD --now 2026-04-29T10:00:00+00:00
 ```
 
-Currently this supports only `lock_evaluation_protocol`. It writes a cost model
-snapshot plus an execution `AutomationRun`, then returns before/after task
-plans.
+Currently this supports `lock_evaluation_protocol` and
+`generate_baseline_evaluation`. It writes the created artifact plus an execution
+`AutomationRun`, then returns before/after task plans.
 
 Generate a Markdown research report from existing artifacts:
 

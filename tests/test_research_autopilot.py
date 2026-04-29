@@ -1487,12 +1487,22 @@ def test_execute_revision_retest_next_task_rejects_unsupported_ready_task(tmp_pa
         holdout_end=datetime(2026, 4, 1, tzinfo=UTC),
     )
 
-    with pytest.raises(ValueError, match="unsupported_revision_retest_task_execution"):
+    baseline_result = execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 10, 0, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+
+    assert baseline_result.executed_task_id == "generate_baseline_evaluation"
+    assert baseline_result.after_plan.next_task_id == "run_backtest"
+    with pytest.raises(ValueError, match="unsupported_revision_retest_task_execution:run_backtest"):
         execute_revision_retest_next_task(
             repository=repository,
             storage_dir=tmp_path,
             symbol="BTC-USD",
-            created_at=datetime(2026, 4, 29, 10, 0, tzinfo=UTC),
+            created_at=datetime(2026, 4, 29, 10, 5, tzinfo=UTC),
             revision_card_id=revision.card_id,
         )
 
@@ -1557,6 +1567,97 @@ def test_cli_execute_revision_retest_next_task_outputs_json_and_persists(tmp_pat
     assert payload["after_plan"]["next_task_id"] == "generate_baseline_evaluation"
     assert len(JsonFileRepository(tmp_path).load_automation_runs()) == 1
     assert len(JsonFileRepository(tmp_path).load_cost_model_snapshots()) == 1
+
+
+def test_execute_revision_retest_baseline_next_task_writes_baseline(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 2, 1, tzinfo=UTC),
+        validation_start=datetime(2026, 2, 2, tzinfo=UTC),
+        validation_end=datetime(2026, 3, 1, tzinfo=UTC),
+        holdout_start=datetime(2026, 3, 2, tzinfo=UTC),
+        holdout_end=datetime(2026, 4, 1, tzinfo=UTC),
+    )
+
+    result = execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 10, 30, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+
+    assert result.executed_task_id == "generate_baseline_evaluation"
+    assert result.before_plan.next_task_id == "generate_baseline_evaluation"
+    assert result.after_plan.next_task_id == "run_backtest"
+    assert result.automation_run.status == "RETEST_TASK_EXECUTED"
+    assert len(repository.load_baseline_evaluations()) == 1
+    assert result.created_artifact_ids == [repository.load_baseline_evaluations()[0].baseline_id]
+    assert repository.load_automation_runs() == [result.automation_run]
+
+
+def test_cli_execute_revision_retest_baseline_next_task_outputs_json(tmp_path, capsys):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 2, 1, tzinfo=UTC),
+        validation_start=datetime(2026, 2, 2, tzinfo=UTC),
+        validation_end=datetime(2026, 3, 1, tzinfo=UTC),
+        holdout_start=datetime(2026, 3, 2, tzinfo=UTC),
+        holdout_end=datetime(2026, 4, 1, tzinfo=UTC),
+    )
+
+    assert main(
+        [
+            "execute-revision-retest-next-task",
+            "--storage-dir",
+            str(tmp_path),
+            "--revision-card-id",
+            revision.card_id,
+            "--symbol",
+            "BTC-USD",
+            "--now",
+            "2026-04-29T10:30:00+00:00",
+        ]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["executed_task_id"] == "generate_baseline_evaluation"
+    assert payload["automation_run"]["status"] == "RETEST_TASK_EXECUTED"
+    assert payload["before_plan"]["next_task_id"] == "generate_baseline_evaluation"
+    assert payload["after_plan"]["next_task_id"] == "run_backtest"
+    assert len(JsonFileRepository(tmp_path).load_baseline_evaluations()) == 1
 
 
 def test_cli_creates_research_agenda_and_autopilot_run(tmp_path, capsys):

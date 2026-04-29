@@ -572,7 +572,7 @@ def _seed_visible_second_generation_strategy_lineage(repository: JsonFileReposit
         risk_rules=["Block promotion until recursive lineage shows repaired failure attributions."],
         parameters={
             "revision_source_outcome_id": "paper-shadow-outcome:visible-revision-quarantine",
-            "revision_failure_attributions": ["drawdown_breach"],
+            "revision_failure_attributions": ["drawdown_breach", "weak_baseline_edge"],
             "minimum_after_cost_edge": 0.015,
         },
         data_requirements=["market_candles:BTC-USD:1h"],
@@ -1136,6 +1136,10 @@ def test_operator_console_strategy_lineage_includes_multi_generation_revisions(t
         assert "Revision Tree" in html
         assert "Depth 2" in html
         assert "Parent strategy-card:visible-revision" in html
+        assert "Name BTC strategy visibility second revision" in html
+        assert "Hypothesis Second revision should inherit the original visible strategy lineage." in html
+        assert "Source paper-shadow-outcome:visible-revision-quarantine" in html
+        assert "Fixes drawdown_breach, weak_baseline_edge" in html
         assert "weak_baseline_edge" in html
         assert "paper-shadow-outcome:visible-second-revision-quarantine" in html
         assert "-0.1100" in html

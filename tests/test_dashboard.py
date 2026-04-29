@@ -368,7 +368,7 @@ def _seed_dashboard_second_generation_strategy_lineage(repository: JsonFileRepos
         risk_rules=["Block promotion until recursive lineage shows repaired failure attributions."],
         parameters={
             "revision_source_outcome_id": "paper-shadow-outcome:dashboard-revision-quarantine",
-            "revision_failure_attributions": ["drawdown_breach"],
+            "revision_failure_attributions": ["drawdown_breach", "weak_baseline_edge"],
             "minimum_after_cost_edge": 0.015,
         },
         data_requirements=["market_candles:BTC-USD:1h"],
@@ -1335,6 +1335,10 @@ def test_dashboard_strategy_lineage_includes_multi_generation_revisions(tmp_path
     assert "Revision Tree" in html
     assert "Depth 2" in html
     assert "Parent strategy-card:dashboard-revision" in html
+    assert "Name Dashboard BTC breakout candidate second revision" in html
+    assert "Hypothesis Second revision should inherit the original strategy lineage." in html
+    assert "Source paper-shadow-outcome:dashboard-revision-quarantine" in html
+    assert "Fixes drawdown_breach；weak_baseline_edge" in html
     assert "weak_baseline_edge" in html
     assert "paper-shadow-outcome:dashboard-second-revision-quarantine" in html
     assert "-0.1100" in html

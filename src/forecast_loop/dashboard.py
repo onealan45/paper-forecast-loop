@@ -1014,6 +1014,10 @@ def _dashboard_revision_tree(summary: StrategyLineageSummary) -> str:
         return "none"
     return "<br>".join(
         f"Depth {node.depth} / Parent {escape(node.parent_card_id)} / <code>{escape(node.card_id)}</code>"
+        f" / {escape(node.status)} / Name {escape(node.strategy_name)}"
+        f" / Hypothesis {escape(node.hypothesis)}"
+        f" / Source {escape(node.source_outcome_id or 'none')}"
+        f" / Fixes {escape('；'.join(node.failure_attributions) if node.failure_attributions else 'none')}"
         for node in summary.revision_nodes
     )
 

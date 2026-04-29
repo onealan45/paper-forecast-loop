@@ -897,6 +897,10 @@ def _strategy_lineage_tree(summary: StrategyLineageSummary | None) -> str:
     return _plain_list(
         [
             f"Depth {node.depth} / Parent {node.parent_card_id} / {node.card_id}"
+            f" / {node.status} / Name {node.strategy_name}"
+            f" / Hypothesis {node.hypothesis}"
+            f" / Source {node.source_outcome_id or 'none'}"
+            f" / Fixes {', '.join(node.failure_attributions) if node.failure_attributions else 'none'}"
             for node in summary.revision_nodes
         ]
     )

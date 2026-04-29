@@ -167,6 +167,9 @@ factory:
   collapse into an ambiguous flat list.
 - PR34 hardens lineage edge cases with committed regressions for branching
   revision trees, missing parents, and parent cycles.
+- PR35 adds revision change summaries to lineage nodes: the UX now shows each
+  revision's strategy name, status, hypothesis, source outcome, and intended
+  failure attributions to repair.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

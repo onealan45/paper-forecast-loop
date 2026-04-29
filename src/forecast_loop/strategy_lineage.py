@@ -11,6 +11,11 @@ class StrategyLineageRevisionNode:
     card_id: str
     parent_card_id: str
     depth: int
+    strategy_name: str
+    status: str
+    hypothesis: str
+    source_outcome_id: str | None
+    failure_attributions: list[str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,7 +119,28 @@ def _lineage_revision_tree(
                 card_id=card.card_id,
                 parent_card_id=card.parent_card_id or root_card.card_id,
                 depth=depth,
+                strategy_name=card.strategy_name,
+                status=card.status,
+                hypothesis=card.hypothesis,
+                source_outcome_id=_string_parameter(card, "revision_source_outcome_id"),
+                failure_attributions=_string_list_parameter(card, "revision_failure_attributions"),
             )
         )
         stack.extend((child, depth + 1) for child in reversed(children_by_parent.get(card.card_id, [])))
     return revision_cards, revision_nodes
+
+
+def _string_parameter(card: StrategyCard, key: str) -> str | None:
+    value = card.parameters.get(key)
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def _string_list_parameter(card: StrategyCard, key: str) -> list[str]:
+    value = card.parameters.get(key)
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item)]
+    if isinstance(value, str) and value:
+        return [value]
+    return []

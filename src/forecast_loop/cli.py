@@ -34,6 +34,7 @@ from forecast_loop.experiment_registry import record_experiment_trial, register_
 from forecast_loop.health import run_health_check
 from forecast_loop.lineage_agenda import create_lineage_research_agenda
 from forecast_loop.lineage_research_plan import build_lineage_research_task_plan
+from forecast_loop.lineage_research_run_log import record_lineage_research_task_run
 from forecast_loop.locked_evaluation import evaluate_leaderboard_gate, lock_evaluation_protocol
 from forecast_loop.macro_events import import_macro_events, macro_calendar
 from forecast_loop.market_reaction import build_market_reactions
@@ -128,6 +129,11 @@ def main(argv: list[str] | None = None) -> int:
     lineage_plan_cmd = subparsers.add_parser("lineage-research-plan")
     lineage_plan_cmd.add_argument("--storage-dir", required=True)
     lineage_plan_cmd.add_argument("--symbol", default="BTC-USD")
+
+    lineage_task_run_cmd = subparsers.add_parser("record-lineage-research-task-run")
+    lineage_task_run_cmd.add_argument("--storage-dir", required=True)
+    lineage_task_run_cmd.add_argument("--symbol", default="BTC-USD")
+    lineage_task_run_cmd.add_argument("--now")
 
     operator_control = subparsers.add_parser("operator-control")
     operator_control.add_argument("--storage-dir", required=True)
@@ -547,6 +553,8 @@ def main(argv: list[str] | None = None) -> int:
             return _create_lineage_research_agenda(args)
         if args.command == "lineage-research-plan":
             return _lineage_research_plan(args)
+        if args.command == "record-lineage-research-task-run":
+            return _record_lineage_research_task_run(args)
         if args.command == "operator-control":
             return _operator_control(args)
         if args.command == "repair-storage":
@@ -1044,6 +1052,23 @@ def _lineage_research_plan(args) -> int:
             ensure_ascii=False,
         )
     )
+    return 0
+
+
+def _record_lineage_research_task_run(args) -> int:
+    storage_dir = Path(args.storage_dir)
+    if not storage_dir.exists():
+        raise ValueError(f"storage directory does not exist: {storage_dir}")
+    if not storage_dir.is_dir():
+        raise ValueError(f"storage path is not a directory: {storage_dir}")
+    created_at = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    result = record_lineage_research_task_run(
+        repository=JsonFileRepository(storage_dir),
+        storage_dir=storage_dir,
+        symbol=args.symbol,
+        created_at=created_at,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0
 
 

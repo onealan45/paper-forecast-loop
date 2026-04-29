@@ -199,6 +199,9 @@ factory:
 - PR44 makes that lineage next-task plan visible in dashboard and operator
   console strategy research pages, including task id, required artifact,
   command args when available, worker prompt, and rationale.
+- PR45 adds `record-lineage-research-task-run`, which records the current
+  lineage task plan as an `AutomationRun` audit artifact without executing the
+  task or mutating strategy artifacts.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -279,6 +282,7 @@ This version intentionally includes:
   - `strategy-lineage`
   - `create-lineage-research-agenda`
   - `lineage-research-plan`
+  - `record-lineage-research-task-run`
   - `operator-control`
   - `repair-storage`
   - `decide`
@@ -1245,6 +1249,18 @@ hypothesis when the lineage is quarantined, collect missing paper-shadow
 evidence, or verify cross-sample persistence after improvement. When it emits a
 command, the command is intended to be directly runnable by the next research
 worker.
+
+Record the current lineage research task plan as an audit-visible automation
+run without executing the task:
+
+```powershell
+python run_forecast_loop.py record-lineage-research-task-run --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD
+```
+
+`record-lineage-research-task-run` writes only `automation_runs.jsonl`. It
+records the current lineage agenda, root strategy, latest lineage outcome, task
+statuses, and next-task readiness so later UX and automation passes can see
+which strategy research work item was inspected.
 
 Create a local paper order from the latest strategy decision:
 

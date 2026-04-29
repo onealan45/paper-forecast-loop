@@ -167,6 +167,9 @@ The PRD follows that decision:
 - PR35 adds Strategy Revision Change Summary: lineage nodes now expose the
   revision's name, status, hypothesis, source outcome, and intended failure
   attributions so strategy self-evolution is readable without raw JSON.
+- PR36 adds Strategy Revision Escaping Regressions: strategy names,
+  hypotheses, source outcomes, and intended fixes are regression-tested against
+  malicious HTML in dashboard and operator console outputs.
 - ChatGPT Pro Controller should be represented by artifacts, docs, prompts,
   agendas, acceptance gates, and digests, not a fake runtime service.
 - Strategy generation can be broad, but evaluation protocol and leaderboard
@@ -240,6 +243,8 @@ Product implications:
   the UX anchor to an arbitrary cycle member.
 - Revision lineage should explain what changed: each visible revision should
   show the hypothesis and failure mode it was intended to repair.
+- Natural-language strategy content should remain display-safe in read-only UX,
+  because user- or agent-authored hypotheses may contain arbitrary text.
 - The evaluation path must be deterministic, versioned, and auditable.
 - Failed experiments must be retained as evidence, not discarded.
 - Promotion inside the research loop must depend on research evidence, not on
@@ -659,6 +664,8 @@ V1 MVP should include:
   latest shadow outcome
 - strategy lineage revision-change rows showing name, status, hypothesis,
   source outcome, and intended failure attributions
+- regression coverage proving strategy revision natural-language fields are
+  HTML-escaped in dashboard and operator console views
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,
@@ -746,7 +753,8 @@ correctness defects:
   parent/revision shadow evidence, PR32 makes those summaries recursive across
   multi-generation revision trees, PR33 exposes revision parent/depth rows in
   the UX, PR34 hardens branching/missing-parent/cycle edge cases, and PR35
-  exposes revision hypothesis/source/fix summaries, but
+  exposes revision hypothesis/source/fix summaries, and PR36 adds malicious HTML
+  escaping regressions for those fields, but
   strong strategy generation, model training, deeper self-evolving skill loops,
   and optimizers are not included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved

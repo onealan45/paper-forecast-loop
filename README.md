@@ -318,6 +318,8 @@ factory:
 - PR81 adds a shared strategy research conclusion line, so dashboard and
   operator console summarize strategy state, paper-shadow result, failure
   attribution, and next research action before the detailed artifact tables.
+- PR82 makes the strategy research conclusion's failure attribution readable in
+  Traditional Chinese while preserving the raw attribution code for traceability.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

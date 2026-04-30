@@ -563,6 +563,11 @@ V1 can produce simulated strategy decisions such as:
 Directional actions must be blocked when evidence is weak, stale, unhealthy, or
 not better than baseline.
 
+Strategy research UX must expose the concrete current conclusion in human terms:
+paper-shadow grade, after-cost edge, failure attribution, and next research
+action should be readable first, with raw machine codes retained beside the
+human labels for audit and rerun traceability.
+
 ## 10.3 Data Scope
 
 The project accepts any useful information source for research when it improves

@@ -4,9 +4,8 @@ from forecast_loop.models import PaperShadowOutcome, ResearchAutopilotRun, Strat
 from forecast_loop.strategy_research_display import build_strategy_research_conclusion
 
 
-def test_build_strategy_research_conclusion_summarizes_shadow_failure():
-    now = datetime(2026, 5, 1, tzinfo=UTC)
-    card = StrategyCard(
+def _strategy_card(now: datetime) -> StrategyCard:
+    return StrategyCard(
         card_id="strategy-card:test",
         created_at=now,
         strategy_name="BTC breakout candidate",
@@ -29,6 +28,11 @@ def test_build_strategy_research_conclusion_summarizes_shadow_failure():
         author="test",
         decision_basis="test",
     )
+
+
+def test_build_strategy_research_conclusion_summarizes_shadow_failure():
+    now = datetime(2026, 5, 1, tzinfo=UTC)
+    card = _strategy_card(now)
     outcome = PaperShadowOutcome(
         outcome_id="paper-shadow-outcome:test",
         created_at=now,
@@ -72,7 +76,34 @@ def test_build_strategy_research_conclusion_summarizes_shadow_failure():
 
     assert build_strategy_research_conclusion(card=card, outcome=outcome, autopilot=autopilot) == (
         "目前策略 BTC breakout candidate：paper-shadow FAIL，after-cost excess -2.50%，"
-        "失敗歸因 負超額報酬 (negative_excess_return)；下一步 REVISE_STRATEGY。"
+        "失敗歸因 負超額報酬 (negative_excess_return)；下一步 修訂策略 (REVISE_STRATEGY)。"
+    )
+
+
+def test_build_strategy_research_conclusion_formats_next_action_without_outcome():
+    now = datetime(2026, 5, 1, tzinfo=UTC)
+    card = _strategy_card(now)
+    autopilot = ResearchAutopilotRun(
+        run_id="research-autopilot-run:test",
+        created_at=now,
+        symbol="BTC-USD",
+        agenda_id="research-agenda:test",
+        strategy_card_id=card.card_id,
+        experiment_trial_id=None,
+        locked_evaluation_id=None,
+        leaderboard_entry_id=None,
+        strategy_decision_id=None,
+        paper_shadow_outcome_id=None,
+        steps=[],
+        loop_status="REPAIR_REQUIRED",
+        next_research_action="REPAIR_EVIDENCE_CHAIN",
+        blocked_reasons=["missing_evidence"],
+        decision_basis="test",
+    )
+
+    assert (
+        build_strategy_research_conclusion(card=card, outcome=None, autopilot=autopilot)
+        == "目前策略 BTC breakout candidate：尚未有 paper-shadow 結果；下一步 修復證據鏈 (REPAIR_EVIDENCE_CHAIN)。"
     )
 
 

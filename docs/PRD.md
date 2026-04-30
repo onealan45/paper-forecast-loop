@@ -567,6 +567,8 @@ Strategy research UX must expose the concrete current conclusion in human terms:
 paper-shadow grade, after-cost edge, failure attribution, and next research
 action should be readable first, with raw machine codes retained beside the
 human labels for audit and rerun traceability.
+The next research action in that conclusion should also be readable before the
+machine action code, because it is the operator's immediate follow-up cue.
 
 ## 10.3 Data Scope
 

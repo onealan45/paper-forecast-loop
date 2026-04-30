@@ -861,7 +861,7 @@ def test_research_page_surfaces_strategy_hypothesis_gates_shadow_and_autopilot(t
     assert "策略研究結論" in html
     assert (
         "目前策略 BTC strategy visibility candidate：paper-shadow FAIL，after-cost excess -2.50%，"
-        "失敗歸因 負超額報酬 (negative_excess_return), 突破後反轉 (breakout_reversed)；下一步 REVISE_STRATEGY。"
+        "失敗歸因 負超額報酬 (negative_excess_return), 突破後反轉 (breakout_reversed)；下一步 修訂策略 (REVISE_STRATEGY)。"
     ) in html
     assert "BTC strategy visibility candidate" in html
     assert "Breakout continuation should beat the baseline after costs." in html

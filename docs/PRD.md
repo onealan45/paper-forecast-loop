@@ -571,6 +571,8 @@ The next research action in that conclusion should also be readable before the
 machine action code, because it is the operator's immediate follow-up cue.
 Outcome grades and core metric labels should follow the same rule: human label
 first, raw grade code retained when the raw code is operationally meaningful.
+Detailed paper-shadow attribution panels should reuse the same readable labels
+as the headline conclusion so the UX does not switch back to raw-only codes.
 
 ## 10.3 Data Scope
 

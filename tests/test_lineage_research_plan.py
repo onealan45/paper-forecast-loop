@@ -10,7 +10,7 @@ from forecast_loop.lineage_research_run_log import (
     automation_run_matches_lineage_research_plan,
     record_lineage_research_task_run,
 )
-from forecast_loop.models import PaperShadowOutcome, StrategyCard
+from forecast_loop.models import PaperShadowOutcome, ResearchAgenda, StrategyCard
 from forecast_loop.storage import JsonFileRepository
 
 
@@ -322,8 +322,71 @@ def test_lineage_research_task_plan_routes_improving_lineage_to_cross_sample_ver
     assert plan.next_task_id == "verify_cross_sample_persistence"
     next_task = plan.task_by_id("verify_cross_sample_persistence")
     assert next_task.status == "ready"
-    assert next_task.required_artifact == "locked_evaluation"
+    assert next_task.required_artifact == "research_agenda"
     assert next_task.blocked_reason is None
+
+
+def test_lineage_research_task_plan_marks_cross_sample_task_complete_when_agenda_exists(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    parent = _card("strategy-card:parent")
+    repository.save_strategy_card(parent)
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:baseline",
+            card_id=parent.card_id,
+            created_at=now,
+            action="CONTINUE_SHADOW",
+            excess=0.01,
+            attributions=[],
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:improved",
+            card_id=parent.card_id,
+            created_at=now + timedelta(hours=1),
+            action="CONTINUE_SHADOW",
+            excess=0.04,
+            attributions=[],
+        )
+    )
+    create_lineage_research_agenda(repository=repository, created_at=now, symbol="BTC-USD")
+    title = "Cross-sample validation for lineage strategy-card:parent"
+    hypothesis = "Validate latest improving lineage on a fresh sample before raising confidence."
+    cross_sample_agenda = ResearchAgenda(
+        agenda_id=ResearchAgenda.build_id(
+            symbol="BTC-USD",
+            title=title,
+            hypothesis=hypothesis,
+            target_strategy_family="lineage_cross_sample_validation",
+            strategy_card_ids=[parent.card_id],
+        ),
+        created_at=now + timedelta(hours=2),
+        symbol="BTC-USD",
+        title=title,
+        hypothesis=hypothesis,
+        priority="MEDIUM",
+        status="OPEN",
+        target_strategy_family="lineage_cross_sample_validation",
+        strategy_card_ids=[parent.card_id],
+        expected_artifacts=["locked_evaluation", "walk_forward_validation", "paper_shadow_outcome"],
+        acceptance_criteria=[
+            "latest_lineage_outcome=paper-shadow-outcome:improved",
+            "fresh-sample evidence is linked before confidence increases",
+        ],
+        blocked_actions=["real_order_submission", "automatic_live_execution"],
+        decision_basis="lineage_cross_sample_validation_agenda",
+    )
+    repository.save_research_agenda(cross_sample_agenda)
+
+    plan = build_lineage_research_task_plan(repository=repository, storage_dir=tmp_path, symbol="BTC-USD")
+
+    task = plan.task_by_id("verify_cross_sample_persistence")
+    assert plan.next_task_id is None
+    assert task.status == "completed"
+    assert task.required_artifact == "research_agenda"
+    assert task.artifact_id == cross_sample_agenda.agenda_id
 
 
 def test_lineage_research_task_plan_includes_replacement_context_for_improving_replacement(tmp_path):

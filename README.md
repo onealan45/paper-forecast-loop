@@ -242,6 +242,11 @@ factory:
 - PR57 persists the next lineage task prompt and rationale in automation run
   steps, so replacement-aware research instructions survive JSONL reload and
   are visible to dashboard/operator-console inspection.
+- PR58 makes the improving-lineage cross-sample task executable: the executor
+  now creates a `lineage_cross_sample_validation_agenda` handoff artifact that
+  names the latest lineage outcome and requires locked evaluation,
+  walk-forward validation, and a fresh paper-shadow outcome before confidence
+  can increase.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -1309,10 +1314,14 @@ Execute the next supported lineage research task:
 python run_forecast_loop.py execute-lineage-research-next-task --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD --now 2026-04-30T13:00:00+00:00
 ```
 
-Currently this executes only `draft_replacement_strategy_hypothesis`. It creates
-an idempotent DRAFT replacement `strategy_cards.jsonl` row linked to the
-quarantined lineage root and latest paper-shadow outcome, then records an
-`AutomationRun`. It does not run the replacement strategy, place an order,
+This currently executes two lineage tasks. For quarantined lineages it executes
+`draft_replacement_strategy_hypothesis`, creating an idempotent DRAFT
+replacement `strategy_cards.jsonl` row linked to the quarantined lineage root
+and latest paper-shadow outcome. For improving lineages it executes
+`verify_cross_sample_persistence`, creating a
+`lineage_cross_sample_validation_agenda` in `research_agendas.jsonl` so the next
+research worker has an explicit fresh-sample validation handoff. It records an
+`AutomationRun`; it does not run the replacement strategy, place an order,
 promote a card, or call any broker/exchange adapter.
 
 Start a locked retest scaffold for that replacement card:

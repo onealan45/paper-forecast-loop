@@ -779,6 +779,9 @@ V1 MVP should include:
 - cross-sample UX validity filtering, so dashboard and operator console panels
   do not present blocked, missing-outcome, stale-outcome, or unrelated
   same-symbol autopilot runs as valid fresh-sample lineage evidence
+- shared research-UX selectors, so dashboard and operator console apply the
+  same cross-sample and retest evidence filters instead of carrying duplicated
+  selector logic that can drift between surfaces
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

@@ -274,6 +274,9 @@ factory:
   console now show linked fresh-sample runs only when the run is unblocked,
   points to an existing paper-shadow outcome, matches the current lineage
   latest outcome, and belongs to the current root/revision/replacement lineage.
+- PR66 extracts the shared research-UX selector rules used by dashboard and
+  operator console, so cross-sample and retest evidence filtering stays
+  consistent across both read-only surfaces.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

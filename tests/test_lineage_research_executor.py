@@ -269,6 +269,7 @@ def test_execute_lineage_research_next_task_creates_cross_sample_validation_agen
     assert result.after_plan.task_by_id("verify_cross_sample_persistence").status == "completed"
     assert result.after_plan.next_task_id is None
     assert result.created_artifact_ids == [cross_sample.agenda_id]
+    assert cross_sample.strategy_card_ids == ["strategy-card:parent", replacement_card_id]
     assert replacement_card_id in cross_sample.hypothesis
     assert "paper-shadow-outcome:replacement-pass" in cross_sample.hypothesis
     assert "latest_lineage_outcome=paper-shadow-outcome:replacement-pass" in cross_sample.acceptance_criteria

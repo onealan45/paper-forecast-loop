@@ -7,7 +7,7 @@ from pathlib import Path
 from forecast_loop.lineage_research_plan import LineageResearchTaskPlan, build_lineage_research_task_plan
 from forecast_loop.models import AutomationRun, ResearchAgenda
 from forecast_loop.storage import ArtifactRepository
-from forecast_loop.strategy_evolution import draft_replacement_strategy_hypothesis
+from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS, draft_replacement_strategy_hypothesis
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,13 +132,14 @@ def _execute_verify_cross_sample_persistence(
         f"Latest lineage outcome: {plan.latest_outcome_id or 'none'}. "
         f"Performance verdict: {plan.performance_verdict}."
     )
+    strategy_card_ids = _cross_sample_strategy_card_ids(repository, plan)
     agenda = ResearchAgenda(
         agenda_id=ResearchAgenda.build_id(
             symbol=plan.symbol,
             title=title,
             hypothesis=hypothesis,
             target_strategy_family="lineage_cross_sample_validation",
-            strategy_card_ids=[plan.root_card_id],
+            strategy_card_ids=strategy_card_ids,
         ),
         created_at=created_at,
         symbol=plan.symbol,
@@ -147,7 +148,7 @@ def _execute_verify_cross_sample_persistence(
         priority="MEDIUM",
         status="OPEN",
         target_strategy_family="lineage_cross_sample_validation",
-        strategy_card_ids=[plan.root_card_id],
+        strategy_card_ids=strategy_card_ids,
         expected_artifacts=[
             "locked_evaluation",
             "walk_forward_validation",
@@ -164,6 +165,37 @@ def _execute_verify_cross_sample_persistence(
     )
     repository.save_research_agenda(agenda)
     return [agenda.agenda_id]
+
+
+def _cross_sample_strategy_card_ids(
+    repository: ArtifactRepository,
+    plan: LineageResearchTaskPlan,
+) -> list[str]:
+    card_ids = [plan.root_card_id]
+    if plan.latest_outcome_id is None:
+        return card_ids
+    latest_outcome = next(
+        (
+            outcome
+            for outcome in repository.load_paper_shadow_outcomes()
+            if outcome.outcome_id == plan.latest_outcome_id
+        ),
+        None,
+    )
+    if latest_outcome is None:
+        return card_ids
+    latest_card = next(
+        (card for card in repository.load_strategy_cards() if card.card_id == latest_outcome.strategy_card_id),
+        None,
+    )
+    if (
+        latest_card is not None
+        and latest_card.decision_basis == REPLACEMENT_DECISION_BASIS
+        and latest_card.parameters.get("replacement_source_lineage_root_card_id") == plan.root_card_id
+        and latest_card.card_id not in card_ids
+    ):
+        card_ids.append(latest_card.card_id)
+    return card_ids
 
 
 def _automation_steps(

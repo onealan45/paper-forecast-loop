@@ -220,6 +220,9 @@ factory:
   for those replacement cards when a research dataset is already available,
   keeping the same retest chain instead of adding a parallel replacement-only
   runner.
+- PR51 makes that replacement retest scaffold visible in dashboard and operator
+  console, including pending trial id, dataset id, scaffold status, retest kind,
+  next task, and latest executor run.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

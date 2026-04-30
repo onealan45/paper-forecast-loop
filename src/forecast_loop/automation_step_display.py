@@ -3,6 +3,9 @@ from __future__ import annotations
 
 def display_step_name(name: str) -> str:
     labels = {
+        "revision_card": "修正策略卡",
+        "source_outcome": "來源 paper-shadow 結果",
+        "lock_evaluation_protocol": "鎖定評估協議",
         "next_task_blocked_reason": "下一個任務阻擋原因",
         "next_task_missing_inputs": "缺少證據輸入",
         "next_task_required_artifact": "下一個任務要求產物",

@@ -1517,6 +1517,35 @@ def test_dashboard_run_steps_translate_lineage_blocked_context():
     assert "next_task_missing_inputs" not in html
 
 
+def test_dashboard_run_steps_translate_revision_retest_context():
+    from forecast_loop.dashboard import _dashboard_run_step_list
+
+    run = AutomationRun(
+        automation_run_id="automation-run:revision-retest",
+        started_at=datetime(2026, 5, 1, 9, 0, tzinfo=UTC),
+        completed_at=datetime(2026, 5, 1, 9, 0, tzinfo=UTC),
+        status="RETEST_TASK_READY",
+        symbol="BTC-USD",
+        provider="research",
+        command="revision-retest-plan",
+        steps=[
+            {"name": "revision_card", "status": "completed", "artifact_id": "strategy-card:test"},
+            {"name": "source_outcome", "status": "completed", "artifact_id": "paper-shadow-outcome:test"},
+            {"name": "lock_evaluation_protocol", "status": "ready", "artifact_id": "split-manifest:test"},
+        ],
+        health_check_id=None,
+        decision_id=None,
+        repair_request_id=None,
+        decision_basis="test",
+    )
+
+    html = _dashboard_run_step_list(run)
+
+    assert "修正策略卡" in html
+    assert "來源 paper-shadow 結果" in html
+    assert "鎖定評估協議" in html
+
+
 def test_dashboard_lineage_task_plan_translates_missing_inputs():
     from forecast_loop.dashboard import _render_lineage_research_task_plan
     from forecast_loop.lineage_research_plan import LineageResearchTask, LineageResearchTaskPlan

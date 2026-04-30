@@ -9,6 +9,9 @@ def test_display_step_name_translates_lineage_blocked_context():
     assert display_step_name("next_task_blocked_reason") == "下一個任務阻擋原因"
     assert display_step_name("next_task_missing_inputs") == "缺少證據輸入"
     assert display_step_name("next_task_required_artifact") == "下一個任務要求產物"
+    assert display_step_name("revision_card") == "修正策略卡"
+    assert display_step_name("source_outcome") == "來源 paper-shadow 結果"
+    assert display_step_name("lock_evaluation_protocol") == "鎖定評估協議"
     assert display_step_name("unknown_step") == "unknown_step"
 
 

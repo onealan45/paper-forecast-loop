@@ -33,6 +33,7 @@ from forecast_loop.event_reliability import build_event_reliability
 from forecast_loop.experiment_registry import record_experiment_trial, register_strategy_card
 from forecast_loop.health import run_health_check
 from forecast_loop.lineage_agenda import create_lineage_research_agenda
+from forecast_loop.lineage_research_executor import execute_lineage_research_next_task
 from forecast_loop.lineage_research_plan import build_lineage_research_task_plan
 from forecast_loop.lineage_research_run_log import record_lineage_research_task_run
 from forecast_loop.locked_evaluation import evaluate_leaderboard_gate, lock_evaluation_protocol
@@ -134,6 +135,12 @@ def main(argv: list[str] | None = None) -> int:
     lineage_task_run_cmd.add_argument("--storage-dir", required=True)
     lineage_task_run_cmd.add_argument("--symbol", default="BTC-USD")
     lineage_task_run_cmd.add_argument("--now")
+
+    execute_lineage_task_cmd = subparsers.add_parser("execute-lineage-research-next-task")
+    execute_lineage_task_cmd.add_argument("--storage-dir", required=True)
+    execute_lineage_task_cmd.add_argument("--symbol", default="BTC-USD")
+    execute_lineage_task_cmd.add_argument("--now")
+    execute_lineage_task_cmd.add_argument("--author", default="codex-strategy-evolution")
 
     operator_control = subparsers.add_parser("operator-control")
     operator_control.add_argument("--storage-dir", required=True)
@@ -555,6 +562,8 @@ def main(argv: list[str] | None = None) -> int:
             return _lineage_research_plan(args)
         if args.command == "record-lineage-research-task-run":
             return _record_lineage_research_task_run(args)
+        if args.command == "execute-lineage-research-next-task":
+            return _execute_lineage_research_next_task(args)
         if args.command == "operator-control":
             return _operator_control(args)
         if args.command == "repair-storage":
@@ -1067,6 +1076,24 @@ def _record_lineage_research_task_run(args) -> int:
         storage_dir=storage_dir,
         symbol=args.symbol,
         created_at=created_at,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _execute_lineage_research_next_task(args) -> int:
+    storage_dir = Path(args.storage_dir)
+    if not storage_dir.exists():
+        raise ValueError(f"storage directory does not exist: {storage_dir}")
+    if not storage_dir.is_dir():
+        raise ValueError(f"storage path is not a directory: {storage_dir}")
+    created_at = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    result = execute_lineage_research_next_task(
+        repository=JsonFileRepository(storage_dir),
+        storage_dir=storage_dir,
+        symbol=args.symbol,
+        created_at=created_at,
+        author=args.author,
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0

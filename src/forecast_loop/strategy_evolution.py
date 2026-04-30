@@ -11,12 +11,19 @@ from forecast_loop.strategy_research import REVISION_REQUIRED_ACTIONS
 REVISION_AUTHOR = "codex-strategy-evolution"
 REVISION_DECISION_BASIS = "paper_shadow_strategy_revision_candidate"
 REVISION_AGENDA_BASIS = "paper_shadow_strategy_revision_agenda"
+REPLACEMENT_AUTHOR = "codex-strategy-evolution"
+REPLACEMENT_DECISION_BASIS = "lineage_replacement_strategy_hypothesis"
 
 
 @dataclass(frozen=True, slots=True)
 class StrategyRevisionResult:
     strategy_card: StrategyCard
     research_agenda: ResearchAgenda
+
+
+@dataclass(frozen=True, slots=True)
+class StrategyReplacementResult:
+    strategy_card: StrategyCard
 
 
 def propose_strategy_revision(
@@ -117,6 +124,99 @@ def propose_strategy_revision(
     )
 
     return StrategyRevisionResult(strategy_card=revision, research_agenda=agenda)
+
+
+def draft_replacement_strategy_hypothesis(
+    *,
+    repository: ArtifactRepository,
+    created_at: datetime,
+    root_card_id: str,
+    paper_shadow_outcome_id: str,
+    author: str = REPLACEMENT_AUTHOR,
+) -> StrategyReplacementResult:
+    outcome = _find_required(
+        repository.load_paper_shadow_outcomes(),
+        attr="outcome_id",
+        value=paper_shadow_outcome_id,
+        artifact_name="paper shadow outcome",
+    )
+    assert isinstance(outcome, PaperShadowOutcome)
+    root = _find_required(
+        repository.load_strategy_cards(),
+        attr="card_id",
+        value=root_card_id,
+        artifact_name="strategy card",
+    )
+    assert isinstance(root, StrategyCard)
+    existing = _existing_replacement_for_outcome(repository.load_strategy_cards(), outcome.outcome_id)
+    if existing is not None:
+        return StrategyReplacementResult(strategy_card=existing)
+
+    attributions = _failure_attributions(outcome)
+    strategy_name = f"Replacement for {root.strategy_name}"
+    hypothesis = (
+        f"Replacement hypothesis after lineage {root.card_id} was quarantined by {outcome.outcome_id}. "
+        f"Do not recursively tune the failed rules; test a distinct signal stack focused on "
+        f"{', '.join(attributions)}."
+    )
+    parameters: dict[str, object] = {
+        "replacement_source_lineage_root_card_id": root.card_id,
+        "replacement_source_outcome_id": outcome.outcome_id,
+        "replacement_failure_attributions": attributions,
+        "replacement_required_research": ["locked_backtest", "walk_forward", "paper_shadow"],
+        "replacement_not_child_revision": True,
+        "minimum_after_cost_edge": max(float(root.parameters.get("minimum_after_cost_edge", 0.0)), 0.015),
+    }
+    card_id = StrategyCard.build_id(
+        strategy_name=strategy_name,
+        strategy_family=root.strategy_family,
+        version=f"{root.version}.replacement1",
+        symbols=list(root.symbols),
+        hypothesis=hypothesis,
+        parameters=parameters,
+    )
+    existing_by_id = _find_optional(repository.load_strategy_cards(), "card_id", card_id)
+    if existing_by_id is not None:
+        assert isinstance(existing_by_id, StrategyCard)
+        return StrategyReplacementResult(strategy_card=existing_by_id)
+
+    replacement = StrategyCard(
+        card_id=card_id,
+        created_at=created_at,
+        strategy_name=strategy_name,
+        strategy_family=root.strategy_family,
+        version=f"{root.version}.replacement1",
+        status="DRAFT",
+        symbols=list(root.symbols),
+        hypothesis=hypothesis,
+        signal_description=(
+            "Research an alternative signal stack for the same symbol instead of a child revision of the "
+            "quarantined lineage."
+        ),
+        entry_rules=[
+            "Define a replacement entry signal that does not reuse the quarantined lineage as its primary trigger.",
+            "Require explicit baseline-edge evidence before any simulated BUY/SELL action.",
+        ],
+        exit_rules=[
+            "Exit the simulated hypothesis when the replacement signal loses its baseline edge.",
+            "Stop the paper-shadow test if the invalidation condition tied to the source failure appears.",
+        ],
+        risk_rules=[
+            "Keep the replacement in DRAFT until locked backtest, walk-forward, and paper-shadow evidence exist.",
+            f"Prioritize mitigation of {', '.join(attributions)} before any promotion attempt.",
+        ],
+        parameters=parameters,
+        data_requirements=list(root.data_requirements),
+        feature_snapshot_ids=[],
+        backtest_result_ids=[],
+        walk_forward_validation_ids=[],
+        event_edge_evaluation_ids=[],
+        parent_card_id=None,
+        author=author,
+        decision_basis=REPLACEMENT_DECISION_BASIS,
+    )
+    repository.save_strategy_card(replacement)
+    return StrategyReplacementResult(strategy_card=replacement)
 
 
 def _revision_mutation(
@@ -250,6 +350,18 @@ def _existing_agenda_for_revision(agendas: list[ResearchAgenda], revision: Strat
             agenda
             for agenda in agendas
             if agenda.decision_basis == REVISION_AGENDA_BASIS and agenda.strategy_card_ids == [revision.card_id]
+        ),
+        None,
+    )
+
+
+def _existing_replacement_for_outcome(cards: list[StrategyCard], outcome_id: str) -> StrategyCard | None:
+    return next(
+        (
+            card
+            for card in cards
+            if card.decision_basis == REPLACEMENT_DECISION_BASIS
+            and card.parameters.get("replacement_source_outcome_id") == outcome_id
         ),
         None,
     )

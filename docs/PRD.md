@@ -718,6 +718,9 @@ V1 MVP should include:
   strategy artifacts
 - dashboard and operator console visibility for the latest lineage task run
   log, including run status, run id, command, completed time, and step list
+- `execute-lineage-research-next-task` support for the quarantined-lineage
+  `draft_replacement_strategy_hypothesis` task, producing a DRAFT replacement
+  strategy card with lineage/outcome links and an execution `AutomationRun`
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

@@ -251,6 +251,10 @@ factory:
   operator console, so the strategy UX shows the concrete hypothesis,
   acceptance criteria, and required evidence artifacts for the next fresh-sample
   validation pass.
+- PR60 links improving replacement cards structurally into cross-sample
+  validation agendas, so downstream research tools can trace both the lineage
+  root and the exact replacement hypothesis without parsing natural-language
+  prompts.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

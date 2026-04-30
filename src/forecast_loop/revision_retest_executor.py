@@ -10,7 +10,7 @@ from forecast_loop.experiment_registry import record_experiment_trial
 from forecast_loop.locked_evaluation import evaluate_leaderboard_gate, lock_evaluation_protocol
 from forecast_loop.models import AutomationRun
 from forecast_loop.paper_shadow import record_paper_shadow_outcome
-from forecast_loop.revision_retest import RETEST_PROTOCOL_VERSION
+from forecast_loop.revision_retest import RETEST_PROTOCOL_VERSION, create_revision_retest_scaffold
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.storage import ArtifactRepository
 from forecast_loop.walk_forward import run_walk_forward_validation
@@ -70,7 +70,13 @@ def execute_revision_retest_next_task(
     )
     if task.status != "ready" and not shadow_observation_override:
         raise ValueError(f"revision_retest_next_task_not_ready:{task.task_id}:{task.blocked_reason or task.status}")
-    if task.task_id == "lock_evaluation_protocol":
+    if task.task_id == "create_revision_retest_scaffold":
+        created_artifact_ids = _execute_create_revision_retest_scaffold(
+            repository=repository,
+            plan=before_plan,
+            created_at=created_at,
+        )
+    elif task.task_id == "lock_evaluation_protocol":
         created_artifact_ids = _execute_lock_evaluation_protocol(
             repository=repository,
             plan=before_plan,
@@ -174,6 +180,25 @@ def execute_revision_retest_next_task(
         automation_run=run,
         created_artifact_ids=created_artifact_ids,
     )
+
+
+def _execute_create_revision_retest_scaffold(
+    *,
+    repository: ArtifactRepository,
+    plan: RevisionRetestTaskPlan,
+    created_at: datetime,
+) -> list[str]:
+    if plan.dataset_id is None:
+        raise ValueError("revision_retest_dataset_missing")
+    scaffold = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=created_at,
+        symbol=plan.symbol,
+        revision_card_id=plan.strategy_card_id,
+        dataset_id=plan.dataset_id,
+        max_trials=20,
+    )
+    return [scaffold.experiment_trial.trial_id]
 
 
 def _execute_generate_baseline_evaluation(

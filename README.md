@@ -216,6 +216,10 @@ factory:
   `create-revision-retest-scaffold` and `revision-retest-plan` now accept
   `lineage_replacement_strategy_hypothesis` DRAFT cards while preserving the
   locked backtest / walk-forward / paper-shadow research chain.
+- PR50 lets `execute-revision-retest-next-task` execute the first scaffold step
+  for those replacement cards when a research dataset is already available,
+  keeping the same retest chain instead of adding a parallel replacement-only
+  runner.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -1300,6 +1304,17 @@ and DRAFT lineage replacement cards. Replacement retests keep compatibility with
 the existing `revision-retest-plan` and `execute-revision-retest-next-task`
 chain, but trial parameters include `revision_retest_kind =
 lineage_replacement` and the source lineage root id.
+
+If the replacement card already has a latest research dataset in storage, the
+same executor can advance the first retest task:
+
+```powershell
+python run_forecast_loop.py execute-revision-retest-next-task --storage-dir .\paper_storage\manual-coingecko --revision-card-id strategy-card:replacement-example --symbol BTC-USD
+```
+
+This records only the pending retest scaffold and an `AutomationRun`. It does
+not run a backtest, pass a trial, promote a strategy, create a paper order, or
+touch broker/exchange adapters.
 
 Create a local paper order from the latest strategy decision:
 

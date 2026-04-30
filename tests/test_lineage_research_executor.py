@@ -6,8 +6,9 @@ import pytest
 from forecast_loop.cli import main
 from forecast_loop.lineage_agenda import create_lineage_research_agenda
 from forecast_loop.lineage_research_executor import execute_lineage_research_next_task
-from forecast_loop.models import PaperShadowOutcome, StrategyCard
+from forecast_loop.models import PaperShadowOutcome, ResearchDataset, StrategyCard
 from forecast_loop.revision_retest import create_revision_retest_scaffold
+from forecast_loop.revision_retest_executor import execute_revision_retest_next_task
 from forecast_loop.revision_retest_plan import build_revision_retest_task_plan
 from forecast_loop.storage import JsonFileRepository
 
@@ -348,3 +349,95 @@ def test_cli_create_revision_retest_scaffold_accepts_lineage_replacement_card(tm
     assert payload["revision_retest_scaffold"]["strategy_card_id"] == replacement_result.created_artifact_ids[0]
     assert payload["revision_retest_scaffold"]["source_outcome_id"] == "paper-shadow-outcome:revision-fail"
     assert JsonFileRepository(tmp_path).load_experiment_trials()[0].parameters["revision_retest_kind"] == "lineage_replacement"
+
+
+def test_execute_revision_retest_next_task_scaffolds_lineage_replacement_card(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_quarantined_lineage(repository, now)
+    replacement_result = execute_lineage_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(hours=3),
+    )
+    repository.save_research_dataset(
+        ResearchDataset(
+            dataset_id="research-dataset:replacement-retest",
+            created_at=now + timedelta(hours=3, minutes=30),
+            symbol="BTC-USD",
+            row_count=0,
+            leakage_status="passed",
+            leakage_findings=[],
+            forecast_ids=[],
+            score_ids=[],
+            rows=[],
+            decision_basis="test",
+        )
+    )
+
+    result = execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(hours=4),
+        revision_card_id=replacement_result.created_artifact_ids[0],
+    )
+
+    trial = repository.load_experiment_trials()[0]
+    assert result.executed_task_id == "create_revision_retest_scaffold"
+    assert result.before_plan.next_task_id == "create_revision_retest_scaffold"
+    assert result.after_plan.next_task_id == "lock_evaluation_protocol"
+    assert result.created_artifact_ids == [trial.trial_id]
+    assert trial.dataset_id == "research-dataset:replacement-retest"
+    assert trial.strategy_card_id == replacement_result.created_artifact_ids[0]
+    assert trial.parameters["revision_retest_kind"] == "lineage_replacement"
+    assert trial.parameters["replacement_source_lineage_root_card_id"] == "strategy-card:parent"
+
+
+def test_cli_execute_revision_retest_next_task_scaffolds_lineage_replacement_card(tmp_path, capsys):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_quarantined_lineage(repository, now)
+    replacement_result = execute_lineage_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(hours=3),
+    )
+    repository.save_research_dataset(
+        ResearchDataset(
+            dataset_id="research-dataset:replacement-retest",
+            created_at=now + timedelta(hours=3, minutes=30),
+            symbol="BTC-USD",
+            row_count=0,
+            leakage_status="passed",
+            leakage_findings=[],
+            forecast_ids=[],
+            score_ids=[],
+            rows=[],
+            decision_basis="test",
+        )
+    )
+
+    assert main(
+        [
+            "execute-revision-retest-next-task",
+            "--storage-dir",
+            str(tmp_path),
+            "--revision-card-id",
+            replacement_result.created_artifact_ids[0],
+            "--symbol",
+            "BTC-USD",
+            "--now",
+            "2026-04-30T14:00:00+00:00",
+        ]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+    trial = JsonFileRepository(tmp_path).load_experiment_trials()[0]
+
+    assert payload["executed_task_id"] == "create_revision_retest_scaffold"
+    assert payload["before_plan"]["next_task_id"] == "create_revision_retest_scaffold"
+    assert payload["after_plan"]["next_task_id"] == "lock_evaluation_protocol"
+    assert payload["created_artifact_ids"] == [trial.trial_id]
+    assert trial.parameters["revision_retest_kind"] == "lineage_replacement"

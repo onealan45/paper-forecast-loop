@@ -230,6 +230,9 @@ factory:
 - PR53 surfaces that completed replacement retest autopilot run in dashboard and
   operator console, showing loop status, run id, next research action,
   paper-shadow outcome, blockers, and steps beside the replacement strategy.
+- PR54 folds root-linked replacement strategy paper-shadow outcomes into the
+  source strategy lineage summary, so replacement retest results can update the
+  lineage verdict instead of staying invisible to lineage performance counts.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

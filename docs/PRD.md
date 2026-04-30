@@ -740,6 +740,9 @@ V1 MVP should include:
 - dashboard and operator console visibility for completed replacement retest
   autopilot runs, so the UX shows whether the replacement hypothesis completed
   the research audit loop and what research action comes next
+- lineage verdict updates from replacement retest outcomes, so source lineages
+  count root-linked replacement strategy paper-shadow outcomes in performance
+  summaries
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

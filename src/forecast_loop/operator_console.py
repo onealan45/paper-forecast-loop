@@ -176,6 +176,7 @@ def build_operator_console_snapshot(
         lineage_research_agenda = _latest_lineage_research_agenda(research_agendas, lineage_summary)
     lineage_replacement_card = _latest_lineage_replacement_strategy_card(
         strategy_cards,
+        paper_shadow_outcomes,
         lineage_research_task_plan,
     )
     lineage_replacement_retest_task_plan = _safe_revision_retest_task_plan(
@@ -327,10 +328,24 @@ def _lineage_research_agenda_for_plan(
 
 def _latest_lineage_replacement_strategy_card(
     cards: list[StrategyCard],
+    paper_shadow_outcomes: list[PaperShadowOutcome],
     task_plan: LineageResearchTaskPlan | None,
 ) -> StrategyCard | None:
     if task_plan is None or task_plan.latest_outcome_id is None:
         return None
+    cards_by_id = {card.card_id: card for card in cards}
+    latest_outcome = next(
+        (outcome for outcome in paper_shadow_outcomes if outcome.outcome_id == task_plan.latest_outcome_id),
+        None,
+    )
+    if latest_outcome is not None:
+        outcome_card = cards_by_id.get(latest_outcome.strategy_card_id)
+        if (
+            outcome_card is not None
+            and outcome_card.decision_basis == REPLACEMENT_DECISION_BASIS
+            and outcome_card.parameters.get("replacement_source_lineage_root_card_id") == task_plan.root_card_id
+        ):
+            return outcome_card
     matches = [
         card
         for card in cards

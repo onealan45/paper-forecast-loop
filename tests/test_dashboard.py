@@ -1563,10 +1563,42 @@ def test_dashboard_shows_lineage_replacement_retest_scaffold(tmp_path):
             decision_basis="research_paper_autopilot_loop",
         )
     )
+    repository.save_paper_shadow_outcome(
+        PaperShadowOutcome(
+            outcome_id="paper-shadow-outcome:dashboard-replacement-retest",
+            created_at=now + timedelta(minutes=75),
+            leaderboard_entry_id="leaderboard-entry:dashboard-replacement-retest",
+            evaluation_id="locked-evaluation:dashboard-replacement-retest",
+            strategy_card_id=executed.created_artifact_ids[0],
+            trial_id=scaffolded.created_artifact_ids[0],
+            symbol="BTC-USD",
+            window_start=now - timedelta(hours=24),
+            window_end=now,
+            observed_return=0.06,
+            benchmark_return=0.01,
+            excess_return_after_costs=0.04,
+            max_adverse_excursion=0.03,
+            turnover=1.1,
+            outcome_grade="PASS",
+            failure_attributions=[],
+            recommended_promotion_stage="PAPER_SHADOW_PASSED",
+            recommended_strategy_action="PROMOTION_READY",
+            blocked_reasons=[],
+            notes=["Replacement retest passed its paper-shadow window."],
+            decision_basis="test",
+        )
+    )
 
     snapshot = build_dashboard_snapshot(tmp_path)
     html = render_dashboard_html(snapshot)
 
+    assert snapshot.latest_strategy_lineage_summary is not None
+    assert (
+        snapshot.latest_strategy_lineage_summary.latest_outcome_id
+        == "paper-shadow-outcome:dashboard-replacement-retest"
+    )
+    assert snapshot.latest_lineage_replacement_strategy_card is not None
+    assert snapshot.latest_lineage_replacement_strategy_card.card_id == executed.created_artifact_ids[0]
     assert snapshot.latest_lineage_replacement_retest_task_plan is not None
     assert snapshot.latest_lineage_replacement_retest_task_plan.pending_trial_id == scaffolded.created_artifact_ids[0]
     assert snapshot.latest_lineage_replacement_retest_task_run is not None

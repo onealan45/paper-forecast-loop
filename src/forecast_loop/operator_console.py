@@ -70,6 +70,7 @@ class OperatorConsoleSnapshot:
     latest_lineage_research_agenda: ResearchAgenda | None
     latest_lineage_research_task_plan: LineageResearchTaskPlan | None
     latest_lineage_research_task_run: AutomationRun | None
+    latest_lineage_cross_sample_agenda: ResearchAgenda | None
     latest_lineage_replacement_strategy_card: StrategyCard | None
     latest_lineage_replacement_retest_task_plan: RevisionRetestTaskPlan | None
     latest_lineage_replacement_retest_task_run: AutomationRun | None
@@ -174,6 +175,10 @@ def build_operator_console_snapshot(
     lineage_research_agenda = _lineage_research_agenda_for_plan(research_agendas, lineage_research_task_plan)
     if lineage_research_agenda is None:
         lineage_research_agenda = _latest_lineage_research_agenda(research_agendas, lineage_summary)
+    lineage_cross_sample_agenda = _lineage_cross_sample_agenda_for_plan(
+        research_agendas,
+        lineage_research_task_plan,
+    )
     lineage_replacement_card = _latest_lineage_replacement_strategy_card(
         strategy_cards,
         paper_shadow_outcomes,
@@ -212,6 +217,7 @@ def build_operator_console_snapshot(
             automation_runs,
             lineage_research_task_plan,
         ),
+        latest_lineage_cross_sample_agenda=lineage_cross_sample_agenda,
         latest_lineage_replacement_strategy_card=lineage_replacement_card,
         latest_lineage_replacement_retest_task_plan=lineage_replacement_retest_task_plan,
         latest_lineage_replacement_retest_task_run=_latest_revision_retest_executor_run(
@@ -324,6 +330,29 @@ def _lineage_research_agenda_for_plan(
     if task_plan is None:
         return None
     return next((agenda for agenda in agendas if agenda.agenda_id == task_plan.agenda_id), None)
+
+
+def _lineage_cross_sample_agenda_for_plan(
+    agendas: list[ResearchAgenda],
+    task_plan: LineageResearchTaskPlan | None,
+) -> ResearchAgenda | None:
+    if task_plan is None:
+        return None
+    try:
+        task = task_plan.task_by_id("verify_cross_sample_persistence")
+    except KeyError:
+        return None
+    if not task.artifact_id:
+        return None
+    return next(
+        (
+            agenda
+            for agenda in agendas
+            if agenda.agenda_id == task.artifact_id
+            and agenda.decision_basis == "lineage_cross_sample_validation_agenda"
+        ),
+        None,
+    )
 
 
 def _latest_lineage_replacement_strategy_card(
@@ -948,6 +977,7 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
   {_lineage_research_agenda_panel(snapshot.latest_lineage_research_agenda)}
   {_lineage_research_task_plan_panel(snapshot.latest_lineage_research_task_plan)}
   {_lineage_research_task_run_panel(snapshot.latest_lineage_research_task_run)}
+  {_lineage_cross_sample_agenda_panel(snapshot.latest_lineage_cross_sample_agenda)}
   {replacement_panel}
   <article class="panel">
     <h3>Leaderboard</h3>
@@ -1084,6 +1114,26 @@ def _lineage_research_task_run_panel(run: AutomationRun | None) -> str:
     <p>Completed：{escape(run.completed_at.isoformat())}</p>
     {_automation_steps(run)}
     <p class="muted">這是 lineage research task plan 的稽核紀錄；只顯示，不執行。</p>
+  </article>
+"""
+
+
+def _lineage_cross_sample_agenda_panel(agenda: ResearchAgenda | None) -> str:
+    if agenda is None or agenda.decision_basis != "lineage_cross_sample_validation_agenda":
+        return ""
+    return f"""
+  <article class="panel wide">
+    <h3>Lineage cross-sample validation agenda</h3>
+    <p>ID：{_artifact_id(agenda, "agenda_id")}</p>
+    <p>Priority：{escape(agenda.priority)}</p>
+    <p>Basis：{escape(agenda.decision_basis)}</p>
+    <h4>Hypothesis</h4>
+    <p>{escape(agenda.hypothesis)}</p>
+    <h4>Expected artifacts</h4>
+    {_plain_list(agenda.expected_artifacts)}
+    <h4>Acceptance</h4>
+    {_plain_list(agenda.acceptance_criteria)}
+    <p class="muted">這是 fresh sample 驗證交接，不代表 locked evaluation、walk-forward 或 paper-shadow 已通過。</p>
   </article>
 """
 

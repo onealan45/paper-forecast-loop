@@ -247,6 +247,10 @@ factory:
   names the latest lineage outcome and requires locked evaluation,
   walk-forward validation, and a fresh paper-shadow outcome before confidence
   can increase.
+- PR59 surfaces that cross-sample validation agenda in the dashboard and local
+  operator console, so the strategy UX shows the concrete hypothesis,
+  acceptance criteria, and required evidence artifacts for the next fresh-sample
+  validation pass.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

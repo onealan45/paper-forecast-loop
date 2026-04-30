@@ -71,6 +71,7 @@ class DashboardSnapshot:
     latest_lineage_research_agenda: ResearchAgenda | None
     latest_lineage_research_task_plan: LineageResearchTaskPlan | None
     latest_lineage_research_task_run: AutomationRun | None
+    latest_lineage_cross_sample_agenda: ResearchAgenda | None
     latest_lineage_replacement_strategy_card: StrategyCard | None
     latest_lineage_replacement_retest_task_plan: RevisionRetestTaskPlan | None
     latest_lineage_replacement_retest_task_run: AutomationRun | None
@@ -196,6 +197,10 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
     lineage_research_agenda = _lineage_research_agenda_for_plan(research_agendas, lineage_research_task_plan)
     if lineage_research_agenda is None:
         lineage_research_agenda = _latest_lineage_research_agenda(research_agendas, lineage_summary)
+    lineage_cross_sample_agenda = _lineage_cross_sample_agenda_for_plan(
+        research_agendas,
+        lineage_research_task_plan,
+    )
     lineage_replacement_card = _latest_lineage_replacement_strategy_card(
         strategy_cards,
         paper_shadow_outcomes,
@@ -235,6 +240,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
             automation_runs,
             lineage_research_task_plan,
         ),
+        latest_lineage_cross_sample_agenda=lineage_cross_sample_agenda,
         latest_lineage_replacement_strategy_card=lineage_replacement_card,
         latest_lineage_replacement_retest_task_plan=lineage_replacement_retest_task_plan,
         latest_lineage_replacement_retest_task_run=_latest_revision_retest_executor_run(
@@ -345,6 +351,29 @@ def _lineage_research_agenda_for_plan(
     if task_plan is None:
         return None
     return next((agenda for agenda in agendas if agenda.agenda_id == task_plan.agenda_id), None)
+
+
+def _lineage_cross_sample_agenda_for_plan(
+    agendas: list[ResearchAgenda],
+    task_plan: LineageResearchTaskPlan | None,
+) -> ResearchAgenda | None:
+    if task_plan is None:
+        return None
+    try:
+        task = task_plan.task_by_id("verify_cross_sample_persistence")
+    except KeyError:
+        return None
+    if not task.artifact_id:
+        return None
+    return next(
+        (
+            agenda
+            for agenda in agendas
+            if agenda.agenda_id == task.artifact_id
+            and agenda.decision_basis == "lineage_cross_sample_validation_agenda"
+        ),
+        None,
+    )
 
 
 def _latest_lineage_replacement_strategy_card(
@@ -1039,6 +1068,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
     lineage_agenda_block = _render_lineage_research_agenda(snapshot.latest_lineage_research_agenda)
     lineage_task_plan_block = _render_lineage_research_task_plan(snapshot.latest_lineage_research_task_plan)
     lineage_task_run_block = _render_lineage_research_task_run(snapshot.latest_lineage_research_task_run)
+    lineage_cross_sample_block = _render_lineage_cross_sample_agenda(snapshot.latest_lineage_cross_sample_agenda)
     lineage_replacement_block = _render_lineage_replacement_strategy(
         snapshot.latest_lineage_replacement_strategy_card,
         snapshot.latest_lineage_replacement_retest_task_plan,
@@ -1075,6 +1105,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
       {lineage_agenda_block}
       {lineage_task_plan_block}
       {lineage_task_run_block}
+      {lineage_cross_sample_block}
       {lineage_replacement_block}
       <div class="evidence-grid">
         <div class="evidence-block">
@@ -1208,6 +1239,25 @@ def _render_lineage_research_task_run(run: AutomationRun | None) -> str:
           <dt>Steps</dt><dd>{_dashboard_run_step_list(run)}</dd>
         </dl>
         <p class="micro-copy">這是 lineage research task plan 的稽核紀錄；只顯示，不執行。</p>
+      </div>
+    """
+
+
+def _render_lineage_cross_sample_agenda(agenda: ResearchAgenda | None) -> str:
+    if agenda is None or agenda.decision_basis != "lineage_cross_sample_validation_agenda":
+        return ""
+    return f"""
+      <div class="evidence-block">
+        <h3>Lineage cross-sample validation agenda</h3>
+        <dl>
+          <dt>Agenda</dt><dd>{_dashboard_artifact_id(agenda, "agenda_id")}</dd>
+          <dt>Priority</dt><dd>{escape(agenda.priority)}</dd>
+          <dt>Basis</dt><dd>{escape(agenda.decision_basis)}</dd>
+          <dt>Hypothesis</dt><dd>{escape(agenda.hypothesis)}</dd>
+          <dt>Expected artifacts</dt><dd>{_dashboard_list_inline(agenda.expected_artifacts)}</dd>
+          <dt>Acceptance</dt><dd>{_dashboard_list_inline(agenda.acceptance_criteria)}</dd>
+        </dl>
+        <p class="micro-copy">這是 fresh sample 驗證交接，不代表 locked evaluation、walk-forward 或 paper-shadow 已通過。</p>
       </div>
     """
 

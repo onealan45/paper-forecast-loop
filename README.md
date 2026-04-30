@@ -262,6 +262,10 @@ factory:
   `lineage_cross_sample_validation_agenda` when that agenda names the
   replacement card, so fresh-sample validation evidence closes under the
   handoff agenda instead of falling back to the older lineage agenda.
+- PR63 shows the linked cross-sample autopilot run in dashboard and operator
+  console panels, so the UX keeps the validation agenda visible after the task
+  plan advances and exposes the completed fresh-sample run, outcome, and next
+  research action.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

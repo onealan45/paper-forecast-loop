@@ -72,6 +72,7 @@ class DashboardSnapshot:
     latest_lineage_research_task_plan: LineageResearchTaskPlan | None
     latest_lineage_research_task_run: AutomationRun | None
     latest_lineage_cross_sample_agenda: ResearchAgenda | None
+    latest_lineage_cross_sample_autopilot_run: ResearchAutopilotRun | None
     latest_lineage_replacement_strategy_card: StrategyCard | None
     latest_lineage_replacement_retest_task_plan: RevisionRetestTaskPlan | None
     latest_lineage_replacement_retest_task_run: AutomationRun | None
@@ -201,6 +202,22 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         research_agendas,
         lineage_research_task_plan,
     )
+    lineage_cross_sample_autopilot_run = _latest_autopilot_run_for_agenda(
+        research_autopilot_runs,
+        lineage_cross_sample_agenda,
+    )
+    if lineage_cross_sample_agenda is None:
+        lineage_cross_sample_autopilot_run = _latest_cross_sample_autopilot_run(
+            research_autopilot_runs,
+            research_agendas,
+            lineage_summary,
+            lineage_research_task_plan,
+        )
+    if lineage_cross_sample_autopilot_run is not None and lineage_cross_sample_agenda is None:
+        lineage_cross_sample_agenda = _research_agenda_by_id(
+            research_agendas,
+            lineage_cross_sample_autopilot_run.agenda_id,
+        )
     lineage_replacement_card = _latest_lineage_replacement_strategy_card(
         strategy_cards,
         paper_shadow_outcomes,
@@ -241,6 +258,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
             lineage_research_task_plan,
         ),
         latest_lineage_cross_sample_agenda=lineage_cross_sample_agenda,
+        latest_lineage_cross_sample_autopilot_run=lineage_cross_sample_autopilot_run,
         latest_lineage_replacement_strategy_card=lineage_replacement_card,
         latest_lineage_replacement_retest_task_plan=lineage_replacement_retest_task_plan,
         latest_lineage_replacement_retest_task_run=_latest_revision_retest_executor_run(
@@ -476,6 +494,71 @@ def _latest_revision_retest_autopilot_run(
         and run.paper_shadow_outcome_id is not None
     ]
     return max(matches, key=lambda run: run.created_at) if matches else None
+
+
+def _latest_cross_sample_autopilot_run(
+    runs: list[ResearchAutopilotRun],
+    agendas: list[ResearchAgenda],
+    summary: StrategyLineageSummary | None,
+    task_plan: LineageResearchTaskPlan | None,
+) -> ResearchAutopilotRun | None:
+    cross_sample_agenda_ids = {
+        agenda.agenda_id
+        for agenda in _cross_sample_agendas_for_lineage(agendas, summary, task_plan)
+    }
+    matches = [
+        run
+        for run in runs
+        if run.agenda_id in cross_sample_agenda_ids
+        and run.decision_basis == "research_paper_autopilot_loop"
+        and run.paper_shadow_outcome_id is not None
+    ]
+    return max(matches, key=lambda run: run.created_at) if matches else None
+
+
+def _cross_sample_agendas_for_lineage(
+    agendas: list[ResearchAgenda],
+    summary: StrategyLineageSummary | None,
+    task_plan: LineageResearchTaskPlan | None,
+) -> list[ResearchAgenda]:
+    candidates = [
+        agenda
+        for agenda in agendas
+        if agenda.decision_basis == "lineage_cross_sample_validation_agenda"
+    ]
+    lineage_ids: set[str] = set()
+    if summary is not None:
+        lineage_ids.update([summary.root_card_id, *summary.revision_card_ids, *summary.replacement_card_ids])
+    if task_plan is not None:
+        lineage_ids.add(task_plan.root_card_id)
+    if not lineage_ids:
+        return []
+    return [
+        agenda
+        for agenda in candidates
+        if lineage_ids.intersection(agenda.strategy_card_ids)
+    ]
+
+
+def _latest_autopilot_run_for_agenda(
+    runs: list[ResearchAutopilotRun],
+    agenda: ResearchAgenda | None,
+) -> ResearchAutopilotRun | None:
+    if agenda is None:
+        return None
+    matches = [
+        run
+        for run in runs
+        if run.agenda_id == agenda.agenda_id
+        and run.decision_basis == "research_paper_autopilot_loop"
+    ]
+    return max(matches, key=lambda run: run.created_at) if matches else None
+
+
+def _research_agenda_by_id(agendas: list[ResearchAgenda], agenda_id: str | None) -> ResearchAgenda | None:
+    if agenda_id is None:
+        return None
+    return next((agenda for agenda in agendas if agenda.agenda_id == agenda_id), None)
 
 
 def _latest_lineage_research_agenda(
@@ -1068,7 +1151,10 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
     lineage_agenda_block = _render_lineage_research_agenda(snapshot.latest_lineage_research_agenda)
     lineage_task_plan_block = _render_lineage_research_task_plan(snapshot.latest_lineage_research_task_plan)
     lineage_task_run_block = _render_lineage_research_task_run(snapshot.latest_lineage_research_task_run)
-    lineage_cross_sample_block = _render_lineage_cross_sample_agenda(snapshot.latest_lineage_cross_sample_agenda)
+    lineage_cross_sample_block = _render_lineage_cross_sample_agenda(
+        snapshot.latest_lineage_cross_sample_agenda,
+        snapshot.latest_lineage_cross_sample_autopilot_run,
+    )
     lineage_replacement_block = _render_lineage_replacement_strategy(
         snapshot.latest_lineage_replacement_strategy_card,
         snapshot.latest_lineage_replacement_retest_task_plan,
@@ -1243,7 +1329,10 @@ def _render_lineage_research_task_run(run: AutomationRun | None) -> str:
     """
 
 
-def _render_lineage_cross_sample_agenda(agenda: ResearchAgenda | None) -> str:
+def _render_lineage_cross_sample_agenda(
+    agenda: ResearchAgenda | None,
+    autopilot_run: ResearchAutopilotRun | None,
+) -> str:
     if agenda is None or agenda.decision_basis != "lineage_cross_sample_validation_agenda":
         return ""
     return f"""
@@ -1257,6 +1346,9 @@ def _render_lineage_cross_sample_agenda(agenda: ResearchAgenda | None) -> str:
           <dt>Hypothesis</dt><dd>{escape(agenda.hypothesis)}</dd>
           <dt>Expected artifacts</dt><dd>{_dashboard_list_inline(agenda.expected_artifacts)}</dd>
           <dt>Acceptance</dt><dd>{_dashboard_list_inline(agenda.acceptance_criteria)}</dd>
+          <dt>Linked autopilot run</dt><dd>{_dashboard_artifact_id(autopilot_run, "run_id")} / {escape(autopilot_run.loop_status if autopilot_run else "尚未記錄")}</dd>
+          <dt>Linked shadow outcome</dt><dd><code>{escape(autopilot_run.paper_shadow_outcome_id if autopilot_run and autopilot_run.paper_shadow_outcome_id else "none")}</code></dd>
+          <dt>Next research action</dt><dd>{escape(autopilot_run.next_research_action if autopilot_run else "等待 fresh-sample 驗證完成")}</dd>
         </dl>
         <p class="micro-copy">這是 fresh sample 驗證交接，不代表 locked evaluation、walk-forward 或 paper-shadow 已通過。</p>
       </div>

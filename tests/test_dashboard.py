@@ -1551,18 +1551,107 @@ def test_dashboard_shows_lineage_cross_sample_validation_agenda(tmp_path):
         symbol="BTC-USD",
         created_at=now + timedelta(minutes=70),
     )
+    repository.save_paper_shadow_outcome(
+        PaperShadowOutcome(
+            outcome_id="paper-shadow-outcome:dashboard-cross-sample-pass",
+            created_at=now + timedelta(minutes=80),
+            leaderboard_entry_id="leaderboard-entry:dashboard-cross-sample-pass",
+            evaluation_id="locked-evaluation:dashboard-cross-sample-pass",
+            strategy_card_id=replacement.created_artifact_ids[0],
+            trial_id="experiment-trial:dashboard-cross-sample-pass",
+            symbol="BTC-USD",
+            window_start=now,
+            window_end=now + timedelta(hours=24),
+            observed_return=0.04,
+            benchmark_return=0.01,
+            excess_return_after_costs=0.02,
+            max_adverse_excursion=0.01,
+            turnover=0.9,
+            outcome_grade="PASS",
+            failure_attributions=[],
+            recommended_promotion_stage="PAPER_SHADOW_PASSED",
+            recommended_strategy_action="PROMOTION_READY",
+            blocked_reasons=[],
+            notes=["Cross-sample validation stayed positive."],
+            decision_basis="test",
+        )
+    )
+    repository.save_research_autopilot_run(
+        ResearchAutopilotRun(
+            run_id="research-autopilot-run:dashboard-cross-sample",
+            created_at=now + timedelta(minutes=90),
+            symbol="BTC-USD",
+            agenda_id=cross_sample.created_artifact_ids[0],
+            strategy_card_id=replacement.created_artifact_ids[0],
+            experiment_trial_id="experiment-trial:dashboard-cross-sample-pass",
+            locked_evaluation_id="locked-evaluation:dashboard-cross-sample-pass",
+            leaderboard_entry_id="leaderboard-entry:dashboard-cross-sample-pass",
+            strategy_decision_id=None,
+            paper_shadow_outcome_id="paper-shadow-outcome:dashboard-cross-sample-pass",
+            steps=[
+                {"name": "cross_sample_agenda", "status": "completed", "artifact_id": cross_sample.created_artifact_ids[0]},
+                {"name": "paper_shadow_outcome", "status": "completed", "artifact_id": "paper-shadow-outcome:dashboard-cross-sample-pass"},
+            ],
+            loop_status="CROSS_SAMPLE_VALIDATION_COMPLETE",
+            next_research_action="COMPARE_FRESH_SAMPLE_EDGE",
+            blocked_reasons=[],
+            decision_basis="research_paper_autopilot_loop",
+        )
+    )
+    repository.save_research_agenda(
+        ResearchAgenda(
+            agenda_id="research-agenda:dashboard-unrelated-cross-sample",
+            created_at=now + timedelta(minutes=95),
+            symbol="BTC-USD",
+            title="Unrelated cross-sample validation",
+            hypothesis="A different same-symbol lineage should not override the visible lineage.",
+            priority="HIGH",
+            status="OPEN",
+            target_strategy_family="other_lineage",
+            strategy_card_ids=["strategy-card:dashboard-unrelated-root"],
+            expected_artifacts=["paper_shadow_outcome"],
+            acceptance_criteria=["Remain isolated from the current lineage panel."],
+            blocked_actions=[],
+            decision_basis="lineage_cross_sample_validation_agenda",
+        )
+    )
+    repository.save_research_autopilot_run(
+        ResearchAutopilotRun(
+            run_id="research-autopilot-run:dashboard-unrelated-cross-sample",
+            created_at=now + timedelta(minutes=100),
+            symbol="BTC-USD",
+            agenda_id="research-agenda:dashboard-unrelated-cross-sample",
+            strategy_card_id="strategy-card:dashboard-unrelated-root",
+            experiment_trial_id="experiment-trial:dashboard-unrelated",
+            locked_evaluation_id="locked-evaluation:dashboard-unrelated",
+            leaderboard_entry_id="leaderboard-entry:dashboard-unrelated",
+            strategy_decision_id=None,
+            paper_shadow_outcome_id="paper-shadow-outcome:dashboard-unrelated",
+            steps=[],
+            loop_status="UNRELATED_COMPLETE",
+            next_research_action="IGNORE_FOR_CURRENT_LINEAGE",
+            blocked_reasons=[],
+            decision_basis="research_paper_autopilot_loop",
+        )
+    )
 
     snapshot = build_dashboard_snapshot(tmp_path)
     html = render_dashboard_html(snapshot)
 
     assert snapshot.latest_lineage_cross_sample_agenda is not None
     assert snapshot.latest_lineage_cross_sample_agenda.agenda_id == cross_sample.created_artifact_ids[0]
+    assert snapshot.latest_lineage_cross_sample_autopilot_run is not None
+    assert snapshot.latest_lineage_cross_sample_autopilot_run.run_id == "research-autopilot-run:dashboard-cross-sample"
     assert "Lineage cross-sample validation agenda" in html
     assert "Strategy cards" in html
     assert "strategy-card:dashboard-visible" in html
     assert replacement.created_artifact_ids[0] in html
     assert "lineage_cross_sample_validation_agenda" in html
     assert "paper-shadow-outcome:dashboard-replacement-pass" in html
+    assert "Linked autopilot run" in html
+    assert "research-autopilot-run:dashboard-cross-sample" in html
+    assert "CROSS_SAMPLE_VALIDATION_COMPLETE" in html
+    assert "paper-shadow-outcome:dashboard-cross-sample-pass" in html
     assert "locked_evaluation" in html
     assert "walk_forward_validation" in html
     assert "fresh sample" in html

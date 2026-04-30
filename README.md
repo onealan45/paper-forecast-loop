@@ -308,6 +308,9 @@ factory:
 - PR77 reuses the missing-input display copy in lineage task-plan panels, so
   blocked next research tasks show readable evidence gaps while keeping raw
   codes visible.
+- PR78 extends the same readable artifact and missing-input copy to revision
+  retest task-plan panels, keeping strategy-revision research steps scanable
+  without hiding machine codes.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

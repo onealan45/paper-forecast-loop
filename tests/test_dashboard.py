@@ -1153,9 +1153,51 @@ def test_dashboard_shows_revision_retest_task_plan(tmp_path):
     assert "下一個 retest 研究任務" in html
     assert "lock_evaluation_protocol" in html
     assert "ready" in html
+    assert "<dt>Required Artifact</dt><dd><code>成本模型快照 (cost_model_snapshot)</code></dd>" in html
     assert "cost_model_snapshot" in html
     assert "lock-evaluation-protocol" in html
     assert "--train-start" in html
+
+
+def test_dashboard_revision_retest_task_plan_translates_missing_inputs():
+    from forecast_loop.dashboard import _render_revision_retest_task_plan
+    from forecast_loop.revision_retest_plan import RevisionRetestTask, RevisionRetestTaskPlan
+
+    plan = RevisionRetestTaskPlan(
+        symbol="BTC-USD",
+        strategy_card_id="strategy-card:test",
+        source_outcome_id="paper-shadow-outcome:test",
+        pending_trial_id=None,
+        passed_trial_id=None,
+        dataset_id=None,
+        split_manifest_id=None,
+        cost_model_id=None,
+        baseline_id=None,
+        backtest_result_id=None,
+        walk_forward_validation_id=None,
+        locked_evaluation_id=None,
+        leaderboard_entry_id=None,
+        paper_shadow_outcome_id=None,
+        next_task_id="lock_evaluation_protocol",
+        tasks=[
+            RevisionRetestTask(
+                task_id="lock_evaluation_protocol",
+                title="Lock evaluation protocol",
+                status="blocked",
+                required_artifact="split_manifest",
+                artifact_id=None,
+                command_args=None,
+                blocked_reason="split_window_inputs_required",
+                missing_inputs=["train_start", "validation_end", "storage_dir"],
+                rationale="Split windows are required.",
+            )
+        ],
+    )
+
+    html = _render_revision_retest_task_plan(plan)
+
+    assert "切分清單 (split_manifest)" in html
+    assert "訓練開始, 驗證結束, storage 目錄 (train_start, validation_end, storage_dir)" in html
 
 
 def test_dashboard_shows_revision_retest_task_run_log(tmp_path):

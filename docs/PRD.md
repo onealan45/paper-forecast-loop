@@ -811,6 +811,9 @@ V1 MVP should include:
   next-task view does not lag behind the audit run-log display
 - readable missing-input copy in lineage task-plan panels, so blocked next
   research tasks explain evidence gaps without hiding raw machine codes
+- readable required artifact and missing-input copy in revision retest
+  task-plan panels, so strategy-revision research steps are as readable as
+  lineage tasks
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

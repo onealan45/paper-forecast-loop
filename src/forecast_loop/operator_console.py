@@ -46,7 +46,11 @@ from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_rev
 from forecast_loop.revision_retest_run_log import automation_run_matches_revision_retest_plan
 from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
 from forecast_loop.strategy_lineage import StrategyLineageSummary, build_strategy_lineage_summary
-from forecast_loop.strategy_research_display import build_strategy_research_conclusion, format_failure_attributions
+from forecast_loop.strategy_research_display import (
+    build_strategy_research_conclusion,
+    format_failure_attributions,
+    format_research_action,
+)
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.storage import JsonFileRepository
 
@@ -1310,7 +1314,7 @@ def _strategy_lineage_replacements(summary: StrategyLineageSummary | None) -> st
             f"Replacement {node.card_id}"
             f" / Source {node.source_outcome_id or 'none'}"
             f" / Latest {node.latest_outcome_id or 'none'}"
-            f" / Action {node.latest_recommended_strategy_action or 'none'}"
+            f" / Action {_display_research_action(node.latest_recommended_strategy_action)}"
             f" / Excess {_format_number(node.latest_excess_return_after_costs)}"
             f" / Status {node.status}"
             f" / Hypothesis {node.hypothesis}"
@@ -1331,7 +1335,7 @@ def _strategy_lineage_performance_verdict(summary: StrategyLineageSummary | None
         f" / 最新 {escape(summary.latest_change_label)}"
         f" / Delta {_format_number(summary.latest_delta_vs_previous_excess)}"
         f" / 主要失敗 {escape(_display_failure_attribution_code(summary.primary_failure_attribution))}"
-        f" / 最新動作 {escape(summary.latest_recommended_strategy_action or 'none')}"
+        f" / 最新動作 {escape(_display_research_action(summary.latest_recommended_strategy_action))}"
     )
 
 
@@ -1344,7 +1348,7 @@ def _strategy_lineage_performance_trajectory(summary: StrategyLineageSummary | N
             f" / Excess {_format_number(node.excess_return_after_costs)}"
             f" / Delta {_format_number(node.delta_vs_previous_excess)}"
             f" / {node.change_label}"
-            f" / Action {node.recommended_strategy_action}"
+            f" / Action {_display_research_action(node.recommended_strategy_action)}"
             f" / Failures {_display_failure_attribution_codes(node.failure_attributions)}"
             for node in summary.outcome_nodes
         ]
@@ -1615,6 +1619,12 @@ def _display_failure_attribution_code(attribution: str | None) -> str:
     if not attribution:
         return "none"
     return format_failure_attributions([attribution])
+
+
+def _display_research_action(action: str | None) -> str:
+    if not action:
+        return "none"
+    return format_research_action(action)
 
 
 def _dict_rows(values: dict[str, object]) -> str:

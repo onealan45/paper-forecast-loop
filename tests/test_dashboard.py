@@ -1429,7 +1429,7 @@ def test_dashboard_strategy_lineage_includes_multi_generation_revisions(tmp_path
     assert "表現結論" in html
     assert "改善 0 / 惡化 2 / 未知 0" in html
     assert "主要失敗 回撤超標 (drawdown_breach)" in html
-    assert "最新動作 QUARANTINE_STRATEGY" in html
+    assert "最新動作 隔離策略 (QUARANTINE_STRATEGY)" in html
     assert "下一步研究焦點" in html
     assert "停止加碼此 lineage，優先研究 drawdown_breach 的修正或新策略。" in html
     assert "表現軌跡" in html
@@ -1988,7 +1988,7 @@ def test_dashboard_shows_lineage_replacement_retest_scaffold(tmp_path):
     assert f"Replacement {executed.created_artifact_ids[0]}" in html
     assert "Source paper-shadow-outcome:dashboard-second-revision-quarantine" in html
     assert "Latest paper-shadow-outcome:dashboard-replacement-retest" in html
-    assert "Action PROMOTION_READY" in html
+    assert "Action 可進入下一階段 (PROMOTION_READY)" in html
 
 
 def test_dashboard_lineage_research_agenda_ignores_other_lineage(tmp_path):

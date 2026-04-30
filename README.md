@@ -315,6 +315,9 @@ factory:
   shared artifact copy, so scaffold summaries and task-plan panels stay aligned.
 - PR80 adds readable revision retest run-step labels, so run logs show the
   strategy card, source outcome, and evaluation-lock step in human terms.
+- PR81 adds a shared strategy research conclusion line, so dashboard and
+  operator console summarize strategy state, paper-shadow result, failure
+  attribution, and next research action before the detailed artifact tables.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

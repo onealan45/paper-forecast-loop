@@ -46,6 +46,7 @@ from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_rev
 from forecast_loop.revision_retest_run_log import automation_run_matches_revision_retest_plan
 from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
 from forecast_loop.strategy_lineage import StrategyLineageSummary, build_strategy_lineage_summary
+from forecast_loop.strategy_research_display import build_strategy_research_conclusion
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.storage import JsonFileRepository
 
@@ -993,6 +994,10 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
     <h4>參數</h4>
     {_dict_rows(card.parameters if card else {})}
   </article>
+  <article class="panel wide">
+    <h3>策略研究結論</h3>
+    <p>{escape(build_strategy_research_conclusion(card=card, outcome=outcome, autopilot=autopilot))}</p>
+  </article>
   <article class="panel">
     <h3>下一步研究動作</h3>
     <div class="metric">{escape(autopilot.next_research_action if autopilot else "n/a")}</div>
@@ -1753,6 +1758,8 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
     return f"""
 <p>策略卡：{_artifact_id(card, "card_id")} / {escape(card.strategy_name if card else "n/a")}</p>
 <p>假設：{escape(card.hypothesis if card else "目前沒有 strategy_cards artifact。")}</p>
+<h4>策略研究結論</h4>
+<p>{escape(build_strategy_research_conclusion(card=card, outcome=outcome, autopilot=autopilot))}</p>
 <p>Leaderboard：{_artifact_id(leaderboard, "entry_id")} / alpha_score={_format_number(leaderboard.alpha_score if leaderboard else None)}</p>
 <p>Paper-shadow：{escape(outcome.recommended_strategy_action if outcome else "n/a")} / {escape(outcome.outcome_grade if outcome else "n/a")}</p>
 <p>下一步：{escape(autopilot.next_research_action if autopilot else "n/a")} / Run {_artifact_id(autopilot, "run_id")}</p>

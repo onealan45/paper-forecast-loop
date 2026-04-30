@@ -1056,6 +1056,11 @@ def test_dashboard_surfaces_strategy_research_context_before_raw_metadata(tmp_pa
     assert 'id="strategy-research"' in html
     assert html.index('id="strategy-research"') < html.index('id="raw"')
     assert "策略研究焦點" in html
+    assert "策略研究結論" in html
+    assert (
+        "目前策略 Dashboard BTC breakout candidate：paper-shadow FAIL，after-cost excess -2.50%，"
+        "失敗歸因 negative_excess_return；下一步 REVISE_STRATEGY。"
+    ) in html
     assert "Dashboard BTC breakout candidate" in html
     assert "Dashboard should show concrete strategy logic before raw metadata." in html
     assert "進場規則" in html

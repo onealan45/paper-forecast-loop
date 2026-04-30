@@ -818,6 +818,9 @@ V1 MVP should include:
   and task plans describe required artifacts with the same copy
 - readable revision retest run-step labels, so task run logs expose strategy
   card, source outcome, and evaluation-lock steps in human terms
+- strategy research conclusion copy in dashboard and operator console, so the
+  UX summarizes current strategy state, paper-shadow result, failure
+  attribution, and next research action before raw evidence details
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

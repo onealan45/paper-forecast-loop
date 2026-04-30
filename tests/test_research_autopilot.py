@@ -2858,6 +2858,40 @@ def test_replacement_retest_autopilot_helper_records_latest_completed_chain(tmp_
     assert saved_runs[-1] == result.research_autopilot_run
 
 
+def test_replacement_retest_autopilot_prefers_direct_cross_sample_agenda(tmp_path):
+    repository, replacement_card_id = _seed_lineage_replacement_retest_through_shadow(tmp_path)
+    replacement_card = next(card for card in repository.load_strategy_cards() if card.card_id == replacement_card_id)
+    root_card_id = str(replacement_card.parameters["replacement_source_lineage_root_card_id"])
+    cross_sample_agenda = ResearchAgenda(
+        agenda_id="research-agenda:cross-sample-direct-card",
+        created_at=datetime(2026, 4, 30, 14, 15, tzinfo=UTC),
+        symbol="BTC-USD",
+        title="Validate replacement lineage on fresh cross-sample data",
+        hypothesis="Replacement card should persist beyond its first paper-shadow pass.",
+        priority="HIGH",
+        status="OPEN",
+        target_strategy_family="lineage_replacement_validation",
+        strategy_card_ids=[root_card_id, replacement_card_id],
+        expected_artifacts=["paper_shadow_outcome", "research_autopilot_run"],
+        acceptance_criteria=["Latest replacement retest autopilot run links this handoff agenda."],
+        blocked_actions=["real_order_submission"],
+        decision_basis="lineage_cross_sample_validation_agenda",
+    )
+    repository.save_research_agenda(cross_sample_agenda)
+
+    result = record_revision_retest_autopilot_run(
+        repository=repository,
+        storage_dir=tmp_path,
+        created_at=datetime(2026, 4, 30, 14, 30, tzinfo=UTC),
+        symbol="BTC-USD",
+        revision_card_id=replacement_card_id,
+    )
+
+    assert result.research_autopilot_run.agenda_id == cross_sample_agenda.agenda_id
+    assert "agenda_strategy_card_mismatch" not in result.research_autopilot_run.blocked_reasons
+    assert "strategy_decision_missing" not in result.research_autopilot_run.blocked_reasons
+
+
 def test_cli_record_replacement_retest_autopilot_run_outputs_json(tmp_path, capsys):
     _repository, replacement_card_id = _seed_lineage_replacement_retest_through_shadow(tmp_path)
 

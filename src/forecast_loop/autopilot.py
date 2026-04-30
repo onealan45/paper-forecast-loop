@@ -223,7 +223,13 @@ def _revision_retest_agenda(
 ) -> ResearchAgenda:
     if card is None:
         raise ValueError("missing revision retest strategy card")
-    candidates = _replacement_lineage_agendas(agendas, card) if _is_replacement_card(card) else _revision_agendas(agendas, card)
+    if _is_replacement_card(card):
+        direct_cross_sample = _replacement_cross_sample_agendas(agendas, card)
+        if direct_cross_sample:
+            return _latest(direct_cross_sample)
+        candidates = _replacement_lineage_agendas(agendas, card)
+    else:
+        candidates = _revision_agendas(agendas, card)
     if not candidates:
         raise ValueError(f"missing revision retest agenda for strategy card: {card.card_id}")
     candidates_with_source = [
@@ -241,6 +247,17 @@ def _revision_agendas(agendas: list[ResearchAgenda], card: StrategyCard) -> list
         for agenda in agendas
         if card.card_id in agenda.strategy_card_ids
         and agenda.decision_basis == "paper_shadow_strategy_revision_agenda"
+    ]
+
+
+def _replacement_cross_sample_agendas(agendas: list[ResearchAgenda], card: StrategyCard) -> list[ResearchAgenda]:
+    if not _is_replacement_card(card):
+        return []
+    return [
+        agenda
+        for agenda in agendas
+        if card.card_id in agenda.strategy_card_ids
+        and agenda.decision_basis == "lineage_cross_sample_validation_agenda"
     ]
 
 

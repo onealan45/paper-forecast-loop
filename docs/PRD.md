@@ -773,6 +773,9 @@ V1 MVP should include:
 - dashboard and operator console visibility for linked cross-sample autopilot
   runs, so the agenda stays visible after task-plan completion and the UX shows
   the completed fresh-sample run, shadow outcome, and next research action
+- lineage research task planning for linked cross-sample autopilot runs, so an
+  agenda handoff is not treated as the end of validation until a completed
+  fresh-sample research autopilot run is linked
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

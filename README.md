@@ -266,6 +266,10 @@ factory:
   console panels, so the UX keeps the validation agenda visible after the task
   plan advances and exposes the completed fresh-sample run, outcome, and next
   research action.
+- PR64 extends the lineage research task plan so cross-sample validation does
+  not stop at agenda creation: once the agenda exists, the plan requires a
+  linked `research_autopilot_run` before the fresh-sample validation task chain
+  is treated as fully complete.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

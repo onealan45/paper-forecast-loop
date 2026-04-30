@@ -73,6 +73,7 @@ class OperatorConsoleSnapshot:
     latest_lineage_replacement_strategy_card: StrategyCard | None
     latest_lineage_replacement_retest_task_plan: RevisionRetestTaskPlan | None
     latest_lineage_replacement_retest_task_run: AutomationRun | None
+    latest_lineage_replacement_retest_autopilot_run: ResearchAutopilotRun | None
     latest_strategy_revision_card: StrategyCard | None
     latest_strategy_revision_agenda: ResearchAgenda | None
     latest_strategy_revision_source_outcome: PaperShadowOutcome | None
@@ -215,6 +216,10 @@ def build_operator_console_snapshot(
         latest_lineage_replacement_retest_task_run=_latest_revision_retest_executor_run(
             automation_runs,
             lineage_replacement_retest_task_plan,
+        ),
+        latest_lineage_replacement_retest_autopilot_run=_latest_revision_retest_autopilot_run(
+            research_autopilot_runs,
+            lineage_replacement_card,
         ),
         latest_strategy_revision_card=revision_card,
         latest_strategy_revision_agenda=(
@@ -897,6 +902,7 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
         snapshot.latest_lineage_replacement_strategy_card,
         snapshot.latest_lineage_replacement_retest_task_plan,
         snapshot.latest_lineage_replacement_retest_task_run,
+        snapshot.latest_lineage_replacement_retest_autopilot_run,
     )
     return f"""
 <section class="grid">
@@ -1071,6 +1077,7 @@ def _lineage_replacement_strategy_panel(
     card: StrategyCard | None,
     retest_plan: RevisionRetestTaskPlan | None,
     retest_run: AutomationRun | None,
+    autopilot_run: ResearchAutopilotRun | None,
 ) -> str:
     if card is None:
         return ""
@@ -1106,6 +1113,15 @@ def _lineage_replacement_strategy_panel(
     <p>Next task：<code>{escape(next_task.task_id if next_task else "none")}</code> / {escape(next_task.status if next_task else "completed")}</p>
     <p>Latest executor run：{_artifact_id(retest_run, "automation_run_id")} / {escape(retest_run.status if retest_run else "尚未執行")}</p>
     <p class="muted">這裡只顯示替代策略是否已進入 retest scaffold；不代表策略通過、晉級或下單。</p>
+    <h4>替代策略 Retest Autopilot Run</h4>
+    <p>Status：<span class="{_automation_status_class(autopilot_run.loop_status) if autopilot_run else "status-muted"}">{escape(autopilot_run.loop_status if autopilot_run else "尚未記錄")}</span></p>
+    <p>Run ID：<code>{escape(autopilot_run.run_id if autopilot_run else "none")}</code></p>
+    <p>Next action：{escape(autopilot_run.next_research_action if autopilot_run else "n/a")}</p>
+    <p>Paper-shadow outcome：<code>{escape(autopilot_run.paper_shadow_outcome_id if autopilot_run and autopilot_run.paper_shadow_outcome_id else "none")}</code></p>
+    <p>Blocked：</p>
+    {_plain_list(autopilot_run.blocked_reasons if autopilot_run else [])}
+    {_autopilot_steps(autopilot_run) if autopilot_run else '<p class="muted">尚無 completed replacement retest chain 紀錄。</p>'}
+    <p class="muted">這是替代策略 retest 完成後的 research autopilot 閉環紀錄；只顯示，不代表實盤或自動晉級。</p>
   </article>
 """
 

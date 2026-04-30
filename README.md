@@ -331,6 +331,8 @@ factory:
   replacement contributions, performance verdicts, and trajectories.
 - PR87 reuses readable research-action copy in lineage performance verdicts,
   trajectories, and replacement contributions.
+- PR88 renders lineage next-research-focus sentences with readable failure
+  attribution labels while leaving the underlying summary artifact unchanged.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

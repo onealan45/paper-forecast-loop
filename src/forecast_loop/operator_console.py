@@ -1277,7 +1277,7 @@ def _strategy_lineage_panel(summary: StrategyLineageSummary | None) -> str:
     <h4>表現結論</h4>
     <p>{_strategy_lineage_performance_verdict(summary)}</p>
     <h4>下一步研究焦點</h4>
-    <p>{escape(summary.next_research_focus)}</p>
+    <p>{escape(_display_lineage_next_research_focus(summary))}</p>
     <h4>表現軌跡</h4>
     {_strategy_lineage_performance_trajectory(summary)}
     <p>Shadow outcomes：{summary.outcome_count}</p>
@@ -1627,6 +1627,14 @@ def _display_research_action(action: str | None) -> str:
     return format_research_action(action)
 
 
+def _display_lineage_next_research_focus(summary: StrategyLineageSummary) -> str:
+    focus = summary.next_research_focus
+    failure = summary.primary_failure_attribution
+    if not failure or failure not in focus:
+        return focus
+    return focus.replace(failure, _display_failure_attribution_code(failure))
+
+
 def _dict_rows(values: dict[str, object]) -> str:
     if not values:
         return '<p class="muted">none</p>'
@@ -1800,7 +1808,7 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
 <p>表現結論</p>
 <p>{_strategy_lineage_performance_verdict(lineage)}</p>
 <p>下一步研究焦點</p>
-<p>{escape(lineage.next_research_focus if lineage else "目前沒有 lineage 下一步研究焦點。")}</p>
+<p>{escape(_display_lineage_next_research_focus(lineage) if lineage else "目前沒有 lineage 下一步研究焦點。")}</p>
 <p>表現軌跡</p>
 {_strategy_lineage_performance_trajectory(lineage)}
 {_plain_list(list(lineage.action_counts.keys()) if lineage else [], empty="目前沒有 lineage action")}

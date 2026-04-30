@@ -1405,7 +1405,7 @@ def _render_strategy_lineage_summary(summary: StrategyLineageSummary | None) -> 
           <dt>Replacement Cards</dt><dd>{_dashboard_list_inline(summary.replacement_card_ids)}</dd>
           <dt>Replacement Contributions</dt><dd>{_dashboard_replacement_contributions(summary)}</dd>
           <dt>表現結論</dt><dd>{_dashboard_performance_verdict(summary)}</dd>
-          <dt>下一步研究焦點</dt><dd>{escape(summary.next_research_focus)}</dd>
+          <dt>下一步研究焦點</dt><dd>{escape(_display_lineage_next_research_focus(summary))}</dd>
           <dt>表現軌跡</dt><dd>{_dashboard_performance_trajectory(summary)}</dd>
           <dt>Shadow Outcomes</dt><dd>{summary.outcome_count}</dd>
           <dt>Actions</dt><dd>{_dashboard_dict_inline(summary.action_counts)}</dd>
@@ -2473,6 +2473,14 @@ def _display_research_action(action: str | None) -> str:
     if not action:
         return "none"
     return format_research_action(action)
+
+
+def _display_lineage_next_research_focus(summary: StrategyLineageSummary) -> str:
+    focus = summary.next_research_focus
+    failure = summary.primary_failure_attribution
+    if not failure or failure not in focus:
+        return focus
+    return focus.replace(failure, _display_failure_attribution_code(failure))
 
 
 def _dashboard_list_inline(items: list[str]) -> str:

@@ -577,6 +577,9 @@ Lineage views should follow the same rule for revision fixes, replacement
 failures, performance verdicts, and trajectories.
 Lineage action labels should also be readable first, with raw action codes kept
 beside them for auditability.
+Lineage next-research-focus copy should translate embedded failure attribution
+tokens in the UI while preserving the raw artifact value for downstream
+automation and CLI consumers.
 
 ## 10.3 Data Scope
 

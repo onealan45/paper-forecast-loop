@@ -72,7 +72,7 @@ def test_build_strategy_research_conclusion_summarizes_shadow_failure():
 
     assert build_strategy_research_conclusion(card=card, outcome=outcome, autopilot=autopilot) == (
         "目前策略 BTC breakout candidate：paper-shadow FAIL，after-cost excess -2.50%，"
-        "失敗歸因 negative_excess_return；下一步 REVISE_STRATEGY。"
+        "失敗歸因 負超額報酬 (negative_excess_return)；下一步 REVISE_STRATEGY。"
     )
 
 

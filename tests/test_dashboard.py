@@ -1541,6 +1541,28 @@ def test_dashboard_shows_lineage_replacement_retest_scaffold(tmp_path):
         created_at=now + timedelta(minutes=60),
         revision_card_id=executed.created_artifact_ids[0],
     )
+    repository.save_research_autopilot_run(
+        ResearchAutopilotRun(
+            run_id="research-autopilot-run:dashboard-replacement-retest",
+            created_at=now + timedelta(minutes=70),
+            symbol="BTC-USD",
+            agenda_id="research-agenda:dashboard-lineage",
+            strategy_card_id=executed.created_artifact_ids[0],
+            experiment_trial_id=scaffolded.created_artifact_ids[0],
+            locked_evaluation_id="locked-evaluation:dashboard-replacement-retest",
+            leaderboard_entry_id="leaderboard-entry:dashboard-replacement-retest",
+            strategy_decision_id=None,
+            paper_shadow_outcome_id="paper-shadow-outcome:dashboard-replacement-retest",
+            steps=[
+                {"name": "strategy_card", "status": "completed", "artifact_id": executed.created_artifact_ids[0]},
+                {"name": "paper_shadow_outcome", "status": "completed", "artifact_id": "paper-shadow-outcome:dashboard-replacement-retest"},
+            ],
+            loop_status="COMPLETE",
+            next_research_action="UPDATE_LINEAGE_VERDICT",
+            blocked_reasons=[],
+            decision_basis="research_paper_autopilot_loop",
+        )
+    )
 
     snapshot = build_dashboard_snapshot(tmp_path)
     html = render_dashboard_html(snapshot)
@@ -1549,9 +1571,14 @@ def test_dashboard_shows_lineage_replacement_retest_scaffold(tmp_path):
     assert snapshot.latest_lineage_replacement_retest_task_plan.pending_trial_id == scaffolded.created_artifact_ids[0]
     assert snapshot.latest_lineage_replacement_retest_task_run is not None
     assert snapshot.latest_lineage_replacement_retest_task_run.automation_run_id == scaffolded.automation_run.automation_run_id
+    assert snapshot.latest_lineage_replacement_retest_autopilot_run is not None
+    assert snapshot.latest_lineage_replacement_retest_autopilot_run.run_id == "research-autopilot-run:dashboard-replacement-retest"
     assert "替代策略 Retest Scaffold" in html
+    assert "替代策略 Retest Autopilot Run" in html
     assert "research-dataset:dashboard-replacement-retest" in html
     assert scaffolded.created_artifact_ids[0] in html
+    assert "research-autopilot-run:dashboard-replacement-retest" in html
+    assert "UPDATE_LINEAGE_VERDICT" in html
     assert "lineage_replacement" in html
 
 

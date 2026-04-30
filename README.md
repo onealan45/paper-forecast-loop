@@ -227,6 +227,9 @@ factory:
   `record-revision-retest-autopilot-run` artifact by using the source lineage
   research agenda, so replacement strategies can complete the same research
   audit loop without requiring a separate paper decision artifact.
+- PR53 surfaces that completed replacement retest autopilot run in dashboard and
+  operator console, showing loop status, run id, next research action,
+  paper-shadow outcome, blockers, and steps beside the replacement strategy.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

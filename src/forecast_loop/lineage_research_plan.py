@@ -6,7 +6,11 @@ from pathlib import Path
 from forecast_loop.models import PaperShadowOutcome, ResearchAgenda, StrategyCard
 from forecast_loop.storage import ArtifactRepository
 from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
-from forecast_loop.strategy_lineage import StrategyLineageSummary, build_strategy_lineage_summary
+from forecast_loop.strategy_lineage import (
+    StrategyLineageReplacementNode,
+    StrategyLineageSummary,
+    build_strategy_lineage_summary,
+)
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 
 
@@ -310,6 +314,25 @@ def _replacement_strategy_task(
 
 
 def _cross_sample_task(summary: StrategyLineageSummary) -> LineageResearchTask:
+    replacement_context = _latest_replacement_context(summary)
+    replacement_prompt = (
+        ""
+        if replacement_context is None
+        else (
+            f" Replacement {replacement_context.card_id} produced "
+            f"{replacement_context.latest_outcome_id or 'no latest outcome'}"
+            f" with excess {replacement_context.latest_excess_return_after_costs}. "
+            f"Source outcome: {replacement_context.source_outcome_id or 'none'}."
+        )
+    )
+    replacement_rationale = (
+        ""
+        if replacement_context is None
+        else (
+            f" Latest improvement came from replacement {replacement_context.card_id}; "
+            "cross-sample validation should test that hypothesis directly."
+        )
+    )
     return LineageResearchTask(
         task_id="verify_cross_sample_persistence",
         title="Verify cross-sample persistence",
@@ -319,12 +342,22 @@ def _cross_sample_task(summary: StrategyLineageSummary) -> LineageResearchTask:
         command_args=None,
         worker_prompt=(
             "Lineage is improving. Extend validation across a fresh sample before increasing confidence. "
+            f"{replacement_prompt}"
             f"Current focus: {summary.next_research_focus}"
         ),
         blocked_reason=None,
         missing_inputs=[],
-        rationale="Improving lineage evidence still needs cross-sample confirmation.",
+        rationale=f"Improving lineage evidence still needs cross-sample confirmation.{replacement_rationale}",
     )
+
+
+def _latest_replacement_context(summary: StrategyLineageSummary) -> StrategyLineageReplacementNode | None:
+    if not summary.replacement_nodes or summary.latest_change_label != "改善":
+        return None
+    for node in reversed(summary.replacement_nodes):
+        if node.latest_outcome_id == summary.latest_outcome_id:
+            return node
+    return None
 
 
 def _evidence_task(summary: StrategyLineageSummary) -> LineageResearchTask:

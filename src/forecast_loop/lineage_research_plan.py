@@ -117,6 +117,7 @@ def build_lineage_research_task_plan(
         symbol=symbol,
         strategy_cards=strategy_cards,
         paper_shadow_outcomes=paper_shadow_outcomes,
+        research_agendas=research_agendas,
         agenda=agenda,
         summary=summary,
     )
@@ -187,6 +188,7 @@ def _build_tasks(
     symbol: str,
     strategy_cards: list[StrategyCard],
     paper_shadow_outcomes: list[PaperShadowOutcome],
+    research_agendas: list[ResearchAgenda],
     agenda: ResearchAgenda,
     summary: StrategyLineageSummary,
 ) -> list[LineageResearchTask]:
@@ -197,7 +199,7 @@ def _build_tasks(
     elif summary.latest_recommended_strategy_action == "REVISE_STRATEGY" or summary.performance_verdict in {"惡化", "偏弱"}:
         tasks.append(_revision_task(storage, symbol, strategy_cards, summary, latest_outcome))
     elif summary.performance_verdict in {"改善", "偏強"}:
-        tasks.append(_cross_sample_task(summary))
+        tasks.append(_cross_sample_task(summary, research_agendas))
     else:
         tasks.append(_evidence_task(summary))
     return tasks
@@ -313,7 +315,24 @@ def _replacement_strategy_task(
     )
 
 
-def _cross_sample_task(summary: StrategyLineageSummary) -> LineageResearchTask:
+def _cross_sample_task(
+    summary: StrategyLineageSummary,
+    research_agendas: list[ResearchAgenda],
+) -> LineageResearchTask:
+    existing_agenda = _cross_sample_agenda_for_summary(research_agendas, summary)
+    if existing_agenda is not None:
+        return LineageResearchTask(
+            task_id="verify_cross_sample_persistence",
+            title="Verify cross-sample persistence",
+            status="completed",
+            required_artifact="research_agenda",
+            artifact_id=existing_agenda.agenda_id,
+            command_args=None,
+            worker_prompt=f"Cross-sample validation agenda {existing_agenda.agenda_id} already exists.",
+            blocked_reason=None,
+            missing_inputs=[],
+            rationale="A replacement-aware cross-sample validation agenda has been created for this latest lineage outcome.",
+        )
     replacement_context = _latest_replacement_context(summary)
     replacement_prompt = (
         ""
@@ -337,7 +356,7 @@ def _cross_sample_task(summary: StrategyLineageSummary) -> LineageResearchTask:
         task_id="verify_cross_sample_persistence",
         title="Verify cross-sample persistence",
         status="ready",
-        required_artifact="locked_evaluation",
+        required_artifact="research_agenda",
         artifact_id=None,
         command_args=None,
         worker_prompt=(
@@ -349,6 +368,23 @@ def _cross_sample_task(summary: StrategyLineageSummary) -> LineageResearchTask:
         missing_inputs=[],
         rationale=f"Improving lineage evidence still needs cross-sample confirmation.{replacement_rationale}",
     )
+
+
+def _cross_sample_agenda_for_summary(
+    agendas: list[ResearchAgenda],
+    summary: StrategyLineageSummary,
+) -> ResearchAgenda | None:
+    if summary.latest_outcome_id is None:
+        return None
+    marker = f"latest_lineage_outcome={summary.latest_outcome_id}"
+    candidates = [
+        agenda
+        for agenda in agendas
+        if agenda.decision_basis == "lineage_cross_sample_validation_agenda"
+        and summary.root_card_id in agenda.strategy_card_ids
+        and marker in agenda.acceptance_criteria
+    ]
+    return max(candidates, key=lambda agenda: agenda.created_at) if candidates else None
 
 
 def _latest_replacement_context(summary: StrategyLineageSummary) -> StrategyLineageReplacementNode | None:

@@ -752,6 +752,10 @@ V1 MVP should include:
 - lineage task-run logs that persist the next task worker prompt and rationale,
   so automation artifacts preserve the concrete research instruction after
   reload
+- executable cross-sample lineage handoffs, so an improving lineage or improving
+  replacement retest can create a `lineage_cross_sample_validation_agenda` that
+  requires locked evaluation, walk-forward validation, and a fresh paper-shadow
+  outcome before research confidence increases
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

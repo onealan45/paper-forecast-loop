@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 from forecast_loop.lineage_research_plan import LineageResearchTaskPlan, build_lineage_research_task_plan
-from forecast_loop.models import AutomationRun
+from forecast_loop.models import AutomationRun, ResearchAgenda
 from forecast_loop.storage import ArtifactRepository
 from forecast_loop.strategy_evolution import draft_replacement_strategy_hypothesis
 
@@ -55,6 +55,12 @@ def execute_lineage_research_next_task(
             plan=before_plan,
             created_at=created_at,
             author=author,
+        )
+    elif task.task_id == "verify_cross_sample_persistence":
+        created_artifact_ids = _execute_verify_cross_sample_persistence(
+            repository=repository,
+            plan=before_plan,
+            created_at=created_at,
         )
     else:
         raise ValueError(f"unsupported_lineage_research_task_execution:{task.task_id}")
@@ -111,6 +117,53 @@ def _execute_draft_replacement_strategy_hypothesis(
         author=author,
     )
     return [result.strategy_card.card_id]
+
+
+def _execute_verify_cross_sample_persistence(
+    *,
+    repository: ArtifactRepository,
+    plan: LineageResearchTaskPlan,
+    created_at: datetime,
+) -> list[str]:
+    task = plan.task_by_id("verify_cross_sample_persistence")
+    title = f"Cross-sample validation for lineage {plan.root_card_id}"
+    hypothesis = (
+        f"{task.worker_prompt} "
+        f"Latest lineage outcome: {plan.latest_outcome_id or 'none'}. "
+        f"Performance verdict: {plan.performance_verdict}."
+    )
+    agenda = ResearchAgenda(
+        agenda_id=ResearchAgenda.build_id(
+            symbol=plan.symbol,
+            title=title,
+            hypothesis=hypothesis,
+            target_strategy_family="lineage_cross_sample_validation",
+            strategy_card_ids=[plan.root_card_id],
+        ),
+        created_at=created_at,
+        symbol=plan.symbol,
+        title=title,
+        hypothesis=hypothesis,
+        priority="MEDIUM",
+        status="OPEN",
+        target_strategy_family="lineage_cross_sample_validation",
+        strategy_card_ids=[plan.root_card_id],
+        expected_artifacts=[
+            "locked_evaluation",
+            "walk_forward_validation",
+            "paper_shadow_outcome",
+        ],
+        acceptance_criteria=[
+            f"latest_lineage_outcome={plan.latest_outcome_id or 'none'}",
+            "replacement or lineage improvement is validated on a fresh sample",
+            "locked evaluation and walk-forward evidence are linked before confidence increases",
+            task.rationale,
+        ],
+        blocked_actions=["real_order_submission", "automatic_live_execution"],
+        decision_basis="lineage_cross_sample_validation_agenda",
+    )
+    repository.save_research_agenda(agenda)
+    return [agenda.agenda_id]
 
 
 def _automation_steps(

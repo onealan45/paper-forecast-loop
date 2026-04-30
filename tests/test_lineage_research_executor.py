@@ -81,6 +81,7 @@ def _outcome(
     created_at: datetime,
     action: str,
     attributions: list[str],
+    excess: float = -0.11,
 ) -> PaperShadowOutcome:
     return PaperShadowOutcome(
         outcome_id=outcome_id,
@@ -94,7 +95,7 @@ def _outcome(
         window_end=created_at,
         observed_return=-0.08,
         benchmark_return=0.02,
-        excess_return_after_costs=-0.11,
+        excess_return_after_costs=excess,
         max_adverse_excursion=0.18,
         turnover=2.1,
         outcome_grade="FAIL",
@@ -228,6 +229,60 @@ def test_cli_execute_lineage_research_next_task_outputs_json_and_persists(tmp_pa
     assert payload["automation_run"]["command"] == "execute-lineage-research-next-task"
     assert len(JsonFileRepository(tmp_path).load_strategy_cards()) == 3
     assert len(JsonFileRepository(tmp_path).load_automation_runs()) == 1
+
+
+def test_execute_lineage_research_next_task_creates_cross_sample_validation_agenda(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_quarantined_lineage(repository, now)
+    replacement_result = execute_lineage_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(hours=3),
+    )
+    replacement_card_id = replacement_result.created_artifact_ids[0]
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:replacement-pass",
+            card_id=replacement_card_id,
+            created_at=now + timedelta(hours=4),
+            action="PROMOTION_READY",
+            attributions=[],
+            excess=0.04,
+        )
+    )
+
+    result = execute_lineage_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(hours=5),
+    )
+
+    agendas = repository.load_research_agendas()
+    cross_sample = next(
+        agenda for agenda in agendas if agenda.decision_basis == "lineage_cross_sample_validation_agenda"
+    )
+    assert result.executed_task_id == "verify_cross_sample_persistence"
+    assert result.before_plan.next_task_id == "verify_cross_sample_persistence"
+    assert result.after_plan.task_by_id("verify_cross_sample_persistence").status == "completed"
+    assert result.after_plan.next_task_id is None
+    assert result.created_artifact_ids == [cross_sample.agenda_id]
+    assert replacement_card_id in cross_sample.hypothesis
+    assert "paper-shadow-outcome:replacement-pass" in cross_sample.hypothesis
+    assert "latest_lineage_outcome=paper-shadow-outcome:replacement-pass" in cross_sample.acceptance_criteria
+    assert cross_sample.expected_artifacts == [
+        "locked_evaluation",
+        "walk_forward_validation",
+        "paper_shadow_outcome",
+    ]
+    assert any(
+        step["name"] == "verify_cross_sample_persistence"
+        and step["status"] == "executed"
+        and step["artifact_id"] == cross_sample.agenda_id
+        for step in result.automation_run.steps
+    )
 
 
 def test_lineage_replacement_strategy_can_start_retest_scaffold(tmp_path):

@@ -7,6 +7,7 @@ import pytest
 from forecast_loop.cli import main
 from forecast_loop.evaluation import build_evaluation_summary
 from forecast_loop.lineage_agenda import create_lineage_research_agenda
+from forecast_loop.lineage_research_executor import execute_lineage_research_next_task
 from forecast_loop.lineage_research_run_log import record_lineage_research_task_run
 from forecast_loop.models import (
     AutomationRun,
@@ -1460,6 +1461,41 @@ def test_dashboard_lineage_research_task_run_ignores_stale_run_after_new_outcome
     assert "Lineage 下一個研究任務" in html
     assert "最新 lineage task run log" not in html
     assert stale_recorded.automation_run.automation_run_id not in html
+
+
+def test_dashboard_shows_lineage_replacement_strategy_hypothesis(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    _seed_dashboard_strategy_research(repository, now)
+    _seed_dashboard_revision_candidate(repository, now + timedelta(minutes=10))
+    _seed_dashboard_strategy_lineage(repository, now + timedelta(minutes=20))
+    _seed_dashboard_second_generation_strategy_lineage(repository, now + timedelta(minutes=30))
+    create_lineage_research_agenda(
+        repository=repository,
+        created_at=now + timedelta(minutes=40),
+        symbol="BTC-USD",
+    )
+    executed = execute_lineage_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=50),
+    )
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+    html = render_dashboard_html(snapshot)
+
+    assert snapshot.latest_lineage_replacement_strategy_card is not None
+    assert snapshot.latest_lineage_replacement_strategy_card.card_id == executed.created_artifact_ids[0]
+    assert "Lineage 替代策略假說" in html
+    assert executed.created_artifact_ids[0] in html
+    assert "lineage_replacement_strategy_hypothesis" in html
+    assert "paper-shadow-outcome:dashboard-second-revision-quarantine" in html
+    assert "drawdown_breach" in html
+    assert "weak_baseline_edge" in html
+    assert "替代策略" in html
 
 
 def test_dashboard_lineage_research_agenda_ignores_other_lineage(tmp_path):

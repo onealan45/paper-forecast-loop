@@ -36,6 +36,7 @@ from forecast_loop.lineage_research_plan import LineageResearchTaskPlan, build_l
 from forecast_loop.lineage_research_run_log import automation_run_matches_lineage_research_plan
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.revision_retest_run_log import automation_run_matches_revision_retest_plan
+from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
 from forecast_loop.strategy_lineage import StrategyLineageSummary, build_strategy_lineage_summary
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.storage import JsonFileRepository
@@ -69,6 +70,7 @@ class OperatorConsoleSnapshot:
     latest_lineage_research_agenda: ResearchAgenda | None
     latest_lineage_research_task_plan: LineageResearchTaskPlan | None
     latest_lineage_research_task_run: AutomationRun | None
+    latest_lineage_replacement_strategy_card: StrategyCard | None
     latest_strategy_revision_card: StrategyCard | None
     latest_strategy_revision_agenda: ResearchAgenda | None
     latest_strategy_revision_source_outcome: PaperShadowOutcome | None
@@ -160,13 +162,15 @@ def build_operator_console_snapshot(
         strategy_cards=strategy_cards,
         paper_shadow_outcomes=paper_shadow_outcomes,
     )
-    lineage_research_agenda = _latest_lineage_research_agenda(research_agendas, lineage_summary)
     lineage_research_task_plan = _safe_lineage_research_task_plan(
         repository=repository,
         storage_dir=storage_path,
         symbol=symbol,
-        agenda=lineage_research_agenda,
+        has_lineage_agenda=_has_lineage_research_agenda(research_agendas),
     )
+    lineage_research_agenda = _lineage_research_agenda_for_plan(research_agendas, lineage_research_task_plan)
+    if lineage_research_agenda is None:
+        lineage_research_agenda = _latest_lineage_research_agenda(research_agendas, lineage_summary)
 
     return OperatorConsoleSnapshot(
         storage_dir=storage_path,
@@ -192,6 +196,10 @@ def build_operator_console_snapshot(
         latest_lineage_research_task_plan=lineage_research_task_plan,
         latest_lineage_research_task_run=_latest_lineage_research_task_run(
             automation_runs,
+            lineage_research_task_plan,
+        ),
+        latest_lineage_replacement_strategy_card=_latest_lineage_replacement_strategy_card(
+            strategy_cards,
             lineage_research_task_plan,
         ),
         latest_strategy_revision_card=revision_card,
@@ -271,9 +279,9 @@ def _safe_lineage_research_task_plan(
     repository: JsonFileRepository,
     storage_dir: Path,
     symbol: str,
-    agenda: ResearchAgenda | None,
+    has_lineage_agenda: bool,
 ) -> LineageResearchTaskPlan | None:
-    if agenda is None:
+    if not has_lineage_agenda:
         return None
     try:
         return build_lineage_research_task_plan(
@@ -283,6 +291,35 @@ def _safe_lineage_research_task_plan(
         )
     except ValueError:
         return None
+
+
+def _has_lineage_research_agenda(agendas: list[ResearchAgenda]) -> bool:
+    return any(agenda.decision_basis == "strategy_lineage_research_agenda" for agenda in agendas)
+
+
+def _lineage_research_agenda_for_plan(
+    agendas: list[ResearchAgenda],
+    task_plan: LineageResearchTaskPlan | None,
+) -> ResearchAgenda | None:
+    if task_plan is None:
+        return None
+    return next((agenda for agenda in agendas if agenda.agenda_id == task_plan.agenda_id), None)
+
+
+def _latest_lineage_replacement_strategy_card(
+    cards: list[StrategyCard],
+    task_plan: LineageResearchTaskPlan | None,
+) -> StrategyCard | None:
+    if task_plan is None or task_plan.latest_outcome_id is None:
+        return None
+    matches = [
+        card
+        for card in cards
+        if card.decision_basis == REPLACEMENT_DECISION_BASIS
+        and card.parameters.get("replacement_source_outcome_id") == task_plan.latest_outcome_id
+        and card.parameters.get("replacement_source_lineage_root_card_id") == task_plan.root_card_id
+    ]
+    return max(matches, key=lambda card: card.created_at) if matches else None
 
 
 def _latest_revision_retest_task_run(
@@ -844,6 +881,7 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
   {_lineage_research_agenda_panel(snapshot.latest_lineage_research_agenda)}
   {_lineage_research_task_plan_panel(snapshot.latest_lineage_research_task_plan)}
   {_lineage_research_task_run_panel(snapshot.latest_lineage_research_task_run)}
+  {_lineage_replacement_strategy_panel(snapshot.latest_lineage_replacement_strategy_card)}
   <article class="panel">
     <h3>Leaderboard</h3>
     <p>ID：{_artifact_id(leaderboard, "entry_id")}</p>
@@ -979,6 +1017,35 @@ def _lineage_research_task_run_panel(run: AutomationRun | None) -> str:
     <p>Completed：{escape(run.completed_at.isoformat())}</p>
     {_automation_steps(run)}
     <p class="muted">這是 lineage research task plan 的稽核紀錄；只顯示，不執行。</p>
+  </article>
+"""
+
+
+def _lineage_replacement_strategy_panel(card: StrategyCard | None) -> str:
+    if card is None:
+        return ""
+    source_outcome_id = str(card.parameters.get("replacement_source_outcome_id") or "none")
+    root_card_id = str(card.parameters.get("replacement_source_lineage_root_card_id") or "none")
+    attributions = card.parameters.get("replacement_failure_attributions", [])
+    attribution_list = [str(item) for item in attributions] if isinstance(attributions, list) else [str(attributions)]
+    return f"""
+  <article class="panel wide">
+    <h3>Lineage 替代策略假說</h3>
+    <p class="metric">{escape(card.strategy_name)}</p>
+    <p>ID：{_artifact_id(card, "card_id")} / {escape(card.status)}</p>
+    <p>Basis：{escape(card.decision_basis)}</p>
+    <p>來源 lineage：<code>{escape(root_card_id)}</code></p>
+    <p>來源 outcome：<code>{escape(source_outcome_id)}</code></p>
+    <h4>Failure attribution</h4>
+    {_plain_list(attribution_list)}
+    <h4>替代策略假說</h4>
+    <p>{escape(card.hypothesis)}</p>
+    <h4>Signal</h4>
+    <p>{escape(card.signal_description)}</p>
+    <h4>Entry / Exit / Risk</h4>
+    {_plain_list(card.entry_rules + card.exit_rules + card.risk_rules)}
+    <h4>Parameters</h4>
+    {_dict_rows(card.parameters)}
   </article>
 """
 

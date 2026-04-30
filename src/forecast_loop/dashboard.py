@@ -40,6 +40,7 @@ from forecast_loop.lineage_research_plan import LineageResearchTaskPlan, build_l
 from forecast_loop.lineage_research_run_log import automation_run_matches_lineage_research_plan
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.revision_retest_run_log import automation_run_matches_revision_retest_plan
+from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
 from forecast_loop.strategy_lineage import StrategyLineageSummary, build_strategy_lineage_summary
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.storage import JsonFileRepository
@@ -70,6 +71,7 @@ class DashboardSnapshot:
     latest_lineage_research_agenda: ResearchAgenda | None
     latest_lineage_research_task_plan: LineageResearchTaskPlan | None
     latest_lineage_research_task_run: AutomationRun | None
+    latest_lineage_replacement_strategy_card: StrategyCard | None
     latest_strategy_revision_card: StrategyCard | None
     latest_strategy_revision_agenda: ResearchAgenda | None
     latest_strategy_revision_source_outcome: PaperShadowOutcome | None
@@ -182,13 +184,15 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         strategy_cards=strategy_cards,
         paper_shadow_outcomes=paper_shadow_outcomes,
     )
-    lineage_research_agenda = _latest_lineage_research_agenda(research_agendas, lineage_summary)
     lineage_research_task_plan = _safe_lineage_research_task_plan(
         repository=repository,
         storage_dir=storage_dir,
         symbol=dashboard_symbol,
-        agenda=lineage_research_agenda,
+        has_lineage_agenda=_has_lineage_research_agenda(research_agendas),
     )
+    lineage_research_agenda = _lineage_research_agenda_for_plan(research_agendas, lineage_research_task_plan)
+    if lineage_research_agenda is None:
+        lineage_research_agenda = _latest_lineage_research_agenda(research_agendas, lineage_summary)
 
     return DashboardSnapshot(
         storage_dir=storage_dir,
@@ -215,6 +219,10 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         latest_lineage_research_task_plan=lineage_research_task_plan,
         latest_lineage_research_task_run=_latest_lineage_research_task_run(
             automation_runs,
+            lineage_research_task_plan,
+        ),
+        latest_lineage_replacement_strategy_card=_latest_lineage_replacement_strategy_card(
+            strategy_cards,
             lineage_research_task_plan,
         ),
         latest_strategy_revision_card=revision_card,
@@ -292,9 +300,9 @@ def _safe_lineage_research_task_plan(
     repository: JsonFileRepository,
     storage_dir: Path,
     symbol: str,
-    agenda: ResearchAgenda | None,
+    has_lineage_agenda: bool,
 ) -> LineageResearchTaskPlan | None:
-    if agenda is None:
+    if not has_lineage_agenda:
         return None
     try:
         return build_lineage_research_task_plan(
@@ -304,6 +312,35 @@ def _safe_lineage_research_task_plan(
         )
     except ValueError:
         return None
+
+
+def _has_lineage_research_agenda(agendas: list[ResearchAgenda]) -> bool:
+    return any(agenda.decision_basis == "strategy_lineage_research_agenda" for agenda in agendas)
+
+
+def _lineage_research_agenda_for_plan(
+    agendas: list[ResearchAgenda],
+    task_plan: LineageResearchTaskPlan | None,
+) -> ResearchAgenda | None:
+    if task_plan is None:
+        return None
+    return next((agenda for agenda in agendas if agenda.agenda_id == task_plan.agenda_id), None)
+
+
+def _latest_lineage_replacement_strategy_card(
+    cards: list[StrategyCard],
+    task_plan: LineageResearchTaskPlan | None,
+) -> StrategyCard | None:
+    if task_plan is None or task_plan.latest_outcome_id is None:
+        return None
+    matches = [
+        card
+        for card in cards
+        if card.decision_basis == REPLACEMENT_DECISION_BASIS
+        and card.parameters.get("replacement_source_outcome_id") == task_plan.latest_outcome_id
+        and card.parameters.get("replacement_source_lineage_root_card_id") == task_plan.root_card_id
+    ]
+    return max(matches, key=lambda card: card.created_at) if matches else None
 
 
 def _latest_revision_retest_task_run(
@@ -941,6 +978,9 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
     lineage_agenda_block = _render_lineage_research_agenda(snapshot.latest_lineage_research_agenda)
     lineage_task_plan_block = _render_lineage_research_task_plan(snapshot.latest_lineage_research_task_plan)
     lineage_task_run_block = _render_lineage_research_task_run(snapshot.latest_lineage_research_task_run)
+    lineage_replacement_block = _render_lineage_replacement_strategy(
+        snapshot.latest_lineage_replacement_strategy_card,
+    )
     if (
         card is None
         and evaluation is None
@@ -971,6 +1011,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
       {lineage_agenda_block}
       {lineage_task_plan_block}
       {lineage_task_run_block}
+      {lineage_replacement_block}
       <div class="evidence-grid">
         <div class="evidence-block">
           <h3>目前策略假設</h3>
@@ -1103,6 +1144,39 @@ def _render_lineage_research_task_run(run: AutomationRun | None) -> str:
           <dt>Steps</dt><dd>{_dashboard_run_step_list(run)}</dd>
         </dl>
         <p class="micro-copy">這是 lineage research task plan 的稽核紀錄；只顯示，不執行。</p>
+      </div>
+    """
+
+
+def _render_lineage_replacement_strategy(card: StrategyCard | None) -> str:
+    if card is None:
+        return ""
+    source_outcome_id = str(card.parameters.get("replacement_source_outcome_id") or "none")
+    root_card_id = str(card.parameters.get("replacement_source_lineage_root_card_id") or "none")
+    attributions = card.parameters.get("replacement_failure_attributions", [])
+    attribution_list = [str(item) for item in attributions] if isinstance(attributions, list) else [str(attributions)]
+    return f"""
+      <div class="evidence-grid">
+        <div class="evidence-block">
+          <h3>Lineage 替代策略假說</h3>
+          <p class="decision-emphasis">{escape(card.strategy_name)}</p>
+          <dl>
+            <dt>Replacement</dt><dd>{_dashboard_artifact_id(card, "card_id")} / {escape(card.status)}</dd>
+            <dt>Basis</dt><dd>{escape(card.decision_basis)}</dd>
+            <dt>來源 lineage</dt><dd><code>{escape(root_card_id)}</code></dd>
+            <dt>來源 outcome</dt><dd><code>{escape(source_outcome_id)}</code></dd>
+            <dt>Failure attribution</dt><dd>{_dashboard_list_inline(attribution_list)}</dd>
+          </dl>
+        </div>
+        <div class="evidence-block">
+          <h3>替代策略研究內容</h3>
+          <dl>
+            <dt>假說</dt><dd>{escape(card.hypothesis)}</dd>
+            <dt>Signal</dt><dd>{escape(card.signal_description)}</dd>
+            <dt>Entry / Exit / Risk</dt><dd>{_dashboard_list_inline(card.entry_rules + card.exit_rules + card.risk_rules)}</dd>
+            <dt>Parameters</dt><dd>{_dashboard_dict_inline(card.parameters)}</dd>
+          </dl>
+        </div>
       </div>
     """
 

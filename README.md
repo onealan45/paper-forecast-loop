@@ -209,6 +209,9 @@ factory:
   replacement path. It turns `draft_replacement_strategy_hypothesis` into a
   new DRAFT replacement strategy card and records the execution as an
   `AutomationRun`.
+- PR48 makes replacement strategy hypotheses visible in dashboard and operator
+  console research pages, including source lineage, source outcome, failure
+  attributions, hypothesis, signal, rules, and parameters.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

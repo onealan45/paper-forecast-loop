@@ -291,6 +291,9 @@ factory:
   instead of raw `next_task_*` step names.
 - PR71 adds readable blocked-reason copy for cross-sample run-log blockers while
   preserving the raw reason code for traceability.
+- PR72 adds readable missing-input copy for lineage run-log blockers, translating
+  core evidence codes such as locked evaluation and walk-forward validation
+  while keeping the raw code list visible.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

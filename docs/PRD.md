@@ -796,6 +796,9 @@ V1 MVP should include:
   than raw automation step names
 - readable blocked-reason copy for cross-sample run-log blockers, while keeping
   the original machine reason code visible for traceability
+- readable missing-input copy for lineage run-log blockers, so required
+  evidence artifacts are understandable to humans while raw machine codes stay
+  visible
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

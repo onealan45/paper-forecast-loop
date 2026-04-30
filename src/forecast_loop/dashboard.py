@@ -1604,7 +1604,20 @@ def _dashboard_run_step_artifact(name: str, artifact_id: str | None) -> str:
         return "none"
     if name == "next_task_blocked_reason" and artifact_id == "cross_sample_autopilot_run_missing":
         return f"缺少 cross-sample autopilot run ({artifact_id})"
+    if name == "next_task_missing_inputs":
+        return f"{_dashboard_missing_input_copy(artifact_id)} ({artifact_id})"
     return artifact_id
+
+
+def _dashboard_missing_input_copy(artifact_id: str) -> str:
+    labels = {
+        "locked_evaluation": "鎖定評估",
+        "walk_forward_validation": "walk-forward 驗證",
+        "paper_shadow_outcome": "paper-shadow outcome",
+        "research_autopilot_run": "research autopilot run",
+    }
+    inputs = [item.strip() for item in artifact_id.split(",") if item.strip()]
+    return ", ".join(labels.get(item, item) for item in inputs) or artifact_id
 
 
 def _dashboard_automation_status_class(status: str) -> str:

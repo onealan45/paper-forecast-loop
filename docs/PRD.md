@@ -801,6 +801,9 @@ V1 MVP should include:
   visible
 - shared automation step display copy for dashboard and operator console, so
   lineage blocker labels and values cannot drift between read-only UX surfaces
+- explicit next required artifact entries in lineage task run logs, so
+  downstream research workers can tell which artifact type to produce without
+  reconstructing the task plan
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

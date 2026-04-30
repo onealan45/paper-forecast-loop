@@ -939,6 +939,12 @@ def test_record_lineage_research_task_run_logs_replacement_next_task_context(tmp
         for step in reloaded.steps
     )
     assert any(
+        step["name"] == "next_task_required_artifact"
+        and step["status"] == "ready"
+        and step["artifact_id"] == "research_agenda"
+        for step in reloaded.steps
+    )
+    assert any(
         step["name"] == "next_task_rationale"
         and step["status"] == "ready"
         and "Latest improvement came from replacement strategy-card:replacement" in str(step["artifact_id"])
@@ -1010,6 +1016,12 @@ def test_record_lineage_research_task_run_logs_blocked_next_task_context(tmp_pat
 
     assert result.task_plan.next_task_id == "record_cross_sample_autopilot_run"
     assert result.automation_run.status == "LINEAGE_RESEARCH_TASK_BLOCKED"
+    assert any(
+        step["name"] == "next_task_required_artifact"
+        and step["status"] == "blocked"
+        and step["artifact_id"] == "research_autopilot_run"
+        for step in reloaded.steps
+    )
     assert any(
         step["name"] == "next_task_blocked_reason"
         and step["status"] == "blocked"

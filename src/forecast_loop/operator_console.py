@@ -1212,7 +1212,7 @@ def _lineage_replacement_strategy_panel(
     <p>來源 lineage：<code>{escape(root_card_id)}</code></p>
     <p>來源 outcome：<code>{escape(source_outcome_id)}</code></p>
     <h4>Failure attribution</h4>
-    {_plain_list(attribution_list)}
+    {_plain_list([_display_failure_attribution_codes(attribution_list)])}
     <h4>替代策略假說</h4>
     <p>{escape(card.hypothesis)}</p>
     <h4>Signal</h4>
@@ -1296,7 +1296,7 @@ def _strategy_lineage_tree(summary: StrategyLineageSummary | None) -> str:
             f" / {node.status} / Name {node.strategy_name}"
             f" / Hypothesis {node.hypothesis}"
             f" / Source {node.source_outcome_id or 'none'}"
-            f" / Fixes {', '.join(node.failure_attributions) if node.failure_attributions else 'none'}"
+            f" / Fixes {_display_failure_attribution_codes(node.failure_attributions)}"
             for node in summary.revision_nodes
         ]
     )
@@ -1314,7 +1314,7 @@ def _strategy_lineage_replacements(summary: StrategyLineageSummary | None) -> st
             f" / Excess {_format_number(node.latest_excess_return_after_costs)}"
             f" / Status {node.status}"
             f" / Hypothesis {node.hypothesis}"
-            f" / Failures {', '.join(node.failure_attributions) if node.failure_attributions else 'none'}"
+            f" / Failures {_display_failure_attribution_codes(node.failure_attributions)}"
             for node in summary.replacement_nodes
         ]
     )
@@ -1330,7 +1330,7 @@ def _strategy_lineage_performance_verdict(summary: StrategyLineageSummary | None
         f" / 未知 {summary.unknown_outcome_count}"
         f" / 最新 {escape(summary.latest_change_label)}"
         f" / Delta {_format_number(summary.latest_delta_vs_previous_excess)}"
-        f" / 主要失敗 {escape(summary.primary_failure_attribution or 'none')}"
+        f" / 主要失敗 {escape(_display_failure_attribution_code(summary.primary_failure_attribution))}"
         f" / 最新動作 {escape(summary.latest_recommended_strategy_action or 'none')}"
     )
 
@@ -1345,7 +1345,7 @@ def _strategy_lineage_performance_trajectory(summary: StrategyLineageSummary | N
             f" / Delta {_format_number(node.delta_vs_previous_excess)}"
             f" / {node.change_label}"
             f" / Action {node.recommended_strategy_action}"
-            f" / Failures {', '.join(node.failure_attributions) if node.failure_attributions else 'none'}"
+            f" / Failures {_display_failure_attribution_codes(node.failure_attributions)}"
             for node in summary.outcome_nodes
         ]
     )
@@ -1602,7 +1602,19 @@ def _plain_list(items: list[str], *, empty: str = "none") -> str:
 def _display_failure_attributions(outcome: PaperShadowOutcome | None) -> list[str]:
     if outcome is None or not outcome.failure_attributions:
         return []
-    return [format_failure_attributions(outcome.failure_attributions)]
+    return [_display_failure_attribution_codes(outcome.failure_attributions)]
+
+
+def _display_failure_attribution_codes(attributions: list[str]) -> str:
+    if not attributions:
+        return "none"
+    return format_failure_attributions(attributions)
+
+
+def _display_failure_attribution_code(attribution: str | None) -> str:
+    if not attribution:
+        return "none"
+    return format_failure_attributions([attribution])
 
 
 def _dict_rows(values: dict[str, object]) -> str:

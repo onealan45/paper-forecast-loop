@@ -1425,6 +1425,7 @@ def test_dashboard_lineage_research_agenda_visibility(tmp_path):
     assert recorded.automation_run.automation_run_id in html
     assert "draft_replacement_strategy_hypothesis" in html
     assert "新策略" in html
+    assert "<dt>Required Artifact</dt><dd><code>策略卡 (strategy_card)</code></dd>" in html
     assert "strategy_lineage_research_agenda" in html
     assert "停止加碼此 lineage" in html
     assert "drawdown_breach" in html

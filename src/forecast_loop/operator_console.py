@@ -1113,11 +1113,15 @@ def _lineage_research_task_plan_panel(plan: LineageResearchTaskPlan | None) -> s
         return ""
     next_task = plan.task_by_id(plan.next_task_id) if plan.next_task_id else None
     command = " ".join(next_task.command_args) if next_task and next_task.command_args else "無"
+    required_artifact = display_step_artifact(
+        "next_task_required_artifact",
+        next_task.required_artifact if next_task else None,
+    )
     return f"""
   <article class="panel wide">
     <h3>Lineage 下一個研究任務</h3>
     <p>Task：<code>{escape(next_task.task_id if next_task else "none")}</code> / {escape(next_task.status if next_task else "completed")}</p>
-    <p>Required artifact：<code>{escape(next_task.required_artifact if next_task else "none")}</code></p>
+    <p>Required artifact：<code>{escape(required_artifact)}</code></p>
     <p>Blocked reason：{escape(next_task.blocked_reason if next_task and next_task.blocked_reason else "none")}</p>
     <p>Missing inputs：</p>
     {_plain_list(next_task.missing_inputs if next_task else [])}

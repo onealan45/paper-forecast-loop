@@ -302,6 +302,9 @@ factory:
 - PR75 adds readable Traditional Chinese display copy for those next required
   artifact entries, so dashboard and operator console show the expected output
   artifact without raw-only machine codes.
+- PR76 reuses that display copy in the lineage task-plan panels themselves, so
+  the main next-task view and the run-log view describe required artifacts
+  consistently.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

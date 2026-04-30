@@ -50,6 +50,7 @@ from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_rev
 from forecast_loop.revision_retest_run_log import automation_run_matches_revision_retest_plan
 from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
 from forecast_loop.strategy_lineage import StrategyLineageSummary, build_strategy_lineage_summary
+from forecast_loop.strategy_research_display import build_strategy_research_conclusion
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.storage import JsonFileRepository
 
@@ -1127,6 +1128,10 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
         <span class="tag">Strategy {_dashboard_artifact_id(card, "card_id")}</span>
         <span class="tag">Leaderboard {_dashboard_artifact_id(leaderboard, "entry_id")}</span>
         <span class="tag">下一步 {escape(autopilot.next_research_action if autopilot else "n/a")}</span>
+      </div>
+      <div class="evidence-block">
+        <h3>策略研究結論</h3>
+        <p>{escape(build_strategy_research_conclusion(card=card, outcome=outcome, autopilot=autopilot))}</p>
       </div>
       {revision_block}
       {lineage_block}

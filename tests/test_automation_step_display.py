@@ -1,4 +1,8 @@
-from forecast_loop.automation_step_display import display_step_artifact, display_step_name
+from forecast_loop.automation_step_display import (
+    display_required_artifacts,
+    display_step_artifact,
+    display_step_name,
+)
 
 
 def test_display_step_name_translates_lineage_blocked_context():
@@ -44,3 +48,10 @@ def test_display_step_artifact_adds_readable_copy_without_losing_codes():
     ) == "訓練開始, 驗證結束, storage 目錄 (train_start, validation_end, storage_dir)"
     assert display_step_artifact("other_step", "artifact:test") == "artifact:test"
     assert display_step_artifact("other_step", None) == "none"
+
+
+def test_display_required_artifacts_reuses_artifact_copy():
+    assert display_required_artifacts(["baseline_evaluation", "backtest_result"]) == [
+        "baseline 評估 (baseline_evaluation)",
+        "回測結果 (backtest_result)",
+    ]

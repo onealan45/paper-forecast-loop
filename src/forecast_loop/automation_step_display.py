@@ -22,6 +22,10 @@ def display_step_artifact(name: str, artifact_id: str | None) -> str:
     return artifact_id
 
 
+def display_required_artifacts(artifact_ids: list[str]) -> list[str]:
+    return [display_step_artifact("next_task_required_artifact", artifact_id) for artifact_id in artifact_ids]
+
+
 def _artifact_copy(artifact_id: str) -> str:
     labels = {
         "experiment_trial": "實驗 trial",

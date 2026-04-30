@@ -1058,7 +1058,7 @@ def test_dashboard_surfaces_strategy_research_context_before_raw_metadata(tmp_pa
     assert "策略研究焦點" in html
     assert "策略研究結論" in html
     assert (
-        "目前策略 Dashboard BTC breakout candidate：paper-shadow FAIL，after-cost excess -2.50%，"
+        "目前策略 Dashboard BTC breakout candidate：paper-shadow 失敗 (FAIL)，扣成本超額報酬 -2.50%，"
         "失敗歸因 負超額報酬 (negative_excess_return)；下一步 修訂策略 (REVISE_STRATEGY)。"
     ) in html
     assert "Dashboard BTC breakout candidate" in html

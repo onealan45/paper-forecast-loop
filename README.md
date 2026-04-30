@@ -320,6 +320,8 @@ factory:
   attribution, and next research action before the detailed artifact tables.
 - PR82 makes the strategy research conclusion's failure attribution readable in
   Traditional Chinese while preserving the raw attribution code for traceability.
+- PR83 applies the same readable-copy pattern to the conclusion's next research
+  action, so operators see the next step before the raw action code.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

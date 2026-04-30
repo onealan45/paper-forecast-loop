@@ -766,6 +766,10 @@ V1 MVP should include:
 - dashboard and operator console visibility for those cross-sample agenda
   strategy-card links, so the research UX names the root and replacement
   strategy targets directly
+- replacement retest autopilot agenda anchoring, so completed fresh-sample
+  validation runs prefer a direct `lineage_cross_sample_validation_agenda`
+  that names the replacement card instead of closing under an older lineage
+  agenda
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

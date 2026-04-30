@@ -258,6 +258,10 @@ factory:
 - PR61 shows those cross-sample agenda strategy-card links in dashboard and
   operator console, making the root/replacement strategy targets inspectable
   from the research UX without opening raw JSON.
+- PR62 makes completed replacement retest autopilot runs prefer the direct
+  `lineage_cross_sample_validation_agenda` when that agenda names the
+  replacement card, so fresh-sample validation evidence closes under the
+  handoff agenda instead of falling back to the older lineage agenda.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

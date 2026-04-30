@@ -734,6 +734,9 @@ V1 MVP should include:
 - dashboard and operator console visibility for replacement retest scaffold
   state, so the UX shows that a new replacement hypothesis has entered the
   retest chain and what task/run comes next
+- replacement retest autopilot run recording, allowing a completed replacement
+  chain to close the same research audit loop through the source lineage agenda
+  without requiring a separate strategy decision artifact
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

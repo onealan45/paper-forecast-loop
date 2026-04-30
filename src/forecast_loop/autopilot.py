@@ -10,9 +10,11 @@ from forecast_loop.models import (
     PaperShadowOutcome,
     ResearchAgenda,
     ResearchAutopilotRun,
+    StrategyCard,
 )
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.storage import ArtifactRepository
+from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
 from forecast_loop.strategy_research import REVISION_REQUIRED_ACTIONS
 from forecast_loop.strategy_research import REVISION_CARD_BASIS
 
@@ -179,7 +181,12 @@ def record_revision_retest_autopilot_run(
     missing = _missing_revision_retest_autopilot_inputs(plan)
     if missing:
         raise ValueError(f"revision_retest_autopilot_run_not_ready:{','.join(missing)}")
-    agenda = _revision_retest_agenda(repository.load_research_agendas(), plan.strategy_card_id, plan.source_outcome_id)
+    card = _find(repository.load_strategy_cards(), "card_id", plan.strategy_card_id)
+    agenda = _revision_retest_agenda(
+        repository.load_research_agendas(),
+        card=card if isinstance(card, StrategyCard) else None,
+        source_outcome_id=plan.source_outcome_id,
+    )
     run = record_research_autopilot_run(
         repository=repository,
         created_at=created_at,
@@ -210,17 +217,15 @@ def _missing_revision_retest_autopilot_inputs(plan: RevisionRetestTaskPlan) -> l
 
 def _revision_retest_agenda(
     agendas: list[ResearchAgenda],
-    strategy_card_id: str,
+    *,
+    card: StrategyCard | None,
     source_outcome_id: str,
 ) -> ResearchAgenda:
-    candidates = [
-        agenda
-        for agenda in agendas
-        if strategy_card_id in agenda.strategy_card_ids
-        and agenda.decision_basis == "paper_shadow_strategy_revision_agenda"
-    ]
+    if card is None:
+        raise ValueError("missing revision retest strategy card")
+    candidates = _replacement_lineage_agendas(agendas, card) if _is_replacement_card(card) else _revision_agendas(agendas, card)
     if not candidates:
-        raise ValueError(f"missing revision retest agenda for strategy card: {strategy_card_id}")
+        raise ValueError(f"missing revision retest agenda for strategy card: {card.card_id}")
     candidates_with_source = [
         agenda
         for agenda in candidates
@@ -228,6 +233,31 @@ def _revision_retest_agenda(
         or source_outcome_id in " ".join(agenda.acceptance_criteria)
     ]
     return _latest(candidates_with_source or candidates)
+
+
+def _revision_agendas(agendas: list[ResearchAgenda], card: StrategyCard) -> list[ResearchAgenda]:
+    return [
+        agenda
+        for agenda in agendas
+        if card.card_id in agenda.strategy_card_ids
+        and agenda.decision_basis == "paper_shadow_strategy_revision_agenda"
+    ]
+
+
+def _replacement_lineage_agendas(agendas: list[ResearchAgenda], card: StrategyCard) -> list[ResearchAgenda]:
+    root_card_id = card.parameters.get("replacement_source_lineage_root_card_id")
+    if not isinstance(root_card_id, str) or not root_card_id:
+        return []
+    return [
+        agenda
+        for agenda in agendas
+        if root_card_id in agenda.strategy_card_ids
+        and agenda.decision_basis == "strategy_lineage_research_agenda"
+    ]
+
+
+def _is_replacement_card(card: StrategyCard) -> bool:
+    return card.status == "DRAFT" and card.decision_basis == REPLACEMENT_DECISION_BASIS
 
 
 def _find(items: list[object], attr: str, value: str | None) -> object | None:
@@ -279,7 +309,7 @@ def _blocked_reasons(
             blocked.append("strategy_decision_blocked")
     if paper_shadow_outcome_id and outcome is None:
         blocked.append(f"missing_paper_shadow_outcome:{paper_shadow_outcome_id}")
-    if agenda is not None and strategy_card_id not in agenda.strategy_card_ids:
+    if agenda is not None and strategy_card_id not in agenda.strategy_card_ids and not _agenda_allows_replacement_card(agenda, card):
         blocked.append("agenda_strategy_card_mismatch")
     if trial is not None:
         if trial.strategy_card_id != strategy_card_id:
@@ -331,7 +361,24 @@ def _requires_strategy_decision(card, outcome: PaperShadowOutcome | None) -> boo
         and outcome is not None
         and outcome.strategy_card_id == card.card_id
     )
-    return not is_revision_retest
+    is_replacement_retest = (
+        card.status == "DRAFT"
+        and card.decision_basis == REPLACEMENT_DECISION_BASIS
+        and outcome is not None
+        and outcome.strategy_card_id == card.card_id
+    )
+    return not (is_revision_retest or is_replacement_retest)
+
+
+def _agenda_allows_replacement_card(agenda, card) -> bool:
+    if not isinstance(card, StrategyCard) or not _is_replacement_card(card):
+        return False
+    root_card_id = card.parameters.get("replacement_source_lineage_root_card_id")
+    return (
+        isinstance(root_card_id, str)
+        and root_card_id in agenda.strategy_card_ids
+        and agenda.decision_basis == "strategy_lineage_research_agenda"
+    )
 
 
 def _loop_status_and_action(

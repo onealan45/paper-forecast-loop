@@ -223,6 +223,10 @@ factory:
 - PR51 makes that replacement retest scaffold visible in dashboard and operator
   console, including pending trial id, dataset id, scaffold status, retest kind,
   next task, and latest executor run.
+- PR52 lets completed replacement retest chains record a
+  `record-revision-retest-autopilot-run` artifact by using the source lineage
+  research agenda, so replacement strategies can complete the same research
+  audit loop without requiring a separate paper decision artifact.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

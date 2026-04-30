@@ -277,6 +277,9 @@ factory:
 - PR66 extracts the shared research-UX selector rules used by dashboard and
   operator console, so cross-sample and retest evidence filtering stays
   consistent across both read-only surfaces.
+- PR67 makes blocked cross-sample task plans more actionable by carrying the
+  agenda's expected evidence artifacts in `missing_inputs` before the linked
+  autopilot run is accepted.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

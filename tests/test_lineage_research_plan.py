@@ -411,7 +411,12 @@ def test_lineage_research_task_plan_marks_cross_sample_task_complete_when_agenda
     assert run_task.required_artifact == "research_autopilot_run"
     assert run_task.artifact_id is None
     assert run_task.blocked_reason == "cross_sample_autopilot_run_missing"
-    assert "research_autopilot_run" in run_task.missing_inputs
+    assert run_task.missing_inputs == [
+        "locked_evaluation",
+        "walk_forward_validation",
+        "paper_shadow_outcome",
+        "research_autopilot_run",
+    ]
 
 
 def test_lineage_research_task_plan_marks_cross_sample_autopilot_task_complete(tmp_path):

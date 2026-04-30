@@ -429,9 +429,20 @@ def _cross_sample_autopilot_task(
             "research autopilot run so the lineage can compare the new sample against prior evidence."
         ),
         blocked_reason="cross_sample_autopilot_run_missing",
-        missing_inputs=["research_autopilot_run"],
-        rationale="Cross-sample validation agenda exists, but no linked completed autopilot run is recorded yet.",
+        missing_inputs=_cross_sample_missing_inputs(agenda),
+        rationale=(
+            "Cross-sample validation agenda exists, but no linked completed autopilot run is recorded yet. "
+            "The run must link the agenda's expected fresh-sample evidence before the lineage can treat it as validated."
+        ),
     )
+
+
+def _cross_sample_missing_inputs(agenda: ResearchAgenda | None) -> list[str]:
+    missing: list[str] = []
+    for item in [*(agenda.expected_artifacts if agenda is not None else []), "research_autopilot_run"]:
+        if item not in missing:
+            missing.append(item)
+    return missing
 
 
 def _cross_sample_autopilot_run_for_agenda(

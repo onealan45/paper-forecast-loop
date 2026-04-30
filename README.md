@@ -329,6 +329,8 @@ factory:
   Paper-shadow panel, so details do not fall back to raw-only codes.
 - PR86 reuses readable failure-attribution copy in lineage revision trees,
   replacement contributions, performance verdicts, and trajectories.
+- PR87 reuses readable research-action copy in lineage performance verdicts,
+  trajectories, and replacement contributions.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

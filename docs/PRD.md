@@ -575,6 +575,8 @@ Detailed paper-shadow attribution panels should reuse the same readable labels
 as the headline conclusion so the UX does not switch back to raw-only codes.
 Lineage views should follow the same rule for revision fixes, replacement
 failures, performance verdicts, and trajectories.
+Lineage action labels should also be readable first, with raw action codes kept
+beside them for auditability.
 
 ## 10.3 Data Scope
 

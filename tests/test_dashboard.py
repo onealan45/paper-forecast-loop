@@ -1500,6 +1500,71 @@ def test_dashboard_shows_lineage_replacement_strategy_hypothesis(tmp_path):
     assert "替代策略" in html
 
 
+def test_dashboard_shows_lineage_cross_sample_validation_agenda(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    _seed_dashboard_strategy_research(repository, now)
+    _seed_dashboard_revision_candidate(repository, now + timedelta(minutes=10))
+    _seed_dashboard_strategy_lineage(repository, now + timedelta(minutes=20))
+    _seed_dashboard_second_generation_strategy_lineage(repository, now + timedelta(minutes=30))
+    create_lineage_research_agenda(
+        repository=repository,
+        created_at=now + timedelta(minutes=40),
+        symbol="BTC-USD",
+    )
+    replacement = execute_lineage_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=50),
+    )
+    repository.save_paper_shadow_outcome(
+        PaperShadowOutcome(
+            outcome_id="paper-shadow-outcome:dashboard-replacement-pass",
+            created_at=now + timedelta(minutes=60),
+            leaderboard_entry_id="leaderboard-entry:dashboard-replacement-pass",
+            evaluation_id="locked-evaluation:dashboard-replacement-pass",
+            strategy_card_id=replacement.created_artifact_ids[0],
+            trial_id="experiment-trial:dashboard-replacement-pass",
+            symbol="BTC-USD",
+            window_start=now - timedelta(hours=24),
+            window_end=now,
+            observed_return=0.06,
+            benchmark_return=0.01,
+            excess_return_after_costs=0.04,
+            max_adverse_excursion=0.02,
+            turnover=1.1,
+            outcome_grade="PASS",
+            failure_attributions=[],
+            recommended_promotion_stage="PAPER_SHADOW_PASSED",
+            recommended_strategy_action="PROMOTION_READY",
+            blocked_reasons=[],
+            notes=["Replacement improved on the first retest sample."],
+            decision_basis="test",
+        )
+    )
+    cross_sample = execute_lineage_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=70),
+    )
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+    html = render_dashboard_html(snapshot)
+
+    assert snapshot.latest_lineage_cross_sample_agenda is not None
+    assert snapshot.latest_lineage_cross_sample_agenda.agenda_id == cross_sample.created_artifact_ids[0]
+    assert "Lineage cross-sample validation agenda" in html
+    assert "lineage_cross_sample_validation_agenda" in html
+    assert "paper-shadow-outcome:dashboard-replacement-pass" in html
+    assert "locked_evaluation" in html
+    assert "walk_forward_validation" in html
+    assert "fresh sample" in html
+
+
 def test_dashboard_shows_lineage_replacement_retest_scaffold(tmp_path):
     from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
 

@@ -756,6 +756,10 @@ V1 MVP should include:
   replacement retest can create a `lineage_cross_sample_validation_agenda` that
   requires locked evaluation, walk-forward validation, and a fresh paper-shadow
   outcome before research confidence increases
+- dashboard and operator console visibility for
+  `lineage_cross_sample_validation_agenda`, so the next fresh-sample validation
+  hypothesis, acceptance criteria, and required evidence artifacts are visible
+  instead of hidden behind a task artifact id
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

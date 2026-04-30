@@ -10,7 +10,7 @@ from forecast_loop.lineage_research_run_log import (
     automation_run_matches_lineage_research_plan,
     record_lineage_research_task_run,
 )
-from forecast_loop.models import PaperShadowOutcome, ResearchAgenda, StrategyCard
+from forecast_loop.models import PaperShadowOutcome, ResearchAgenda, ResearchAutopilotRun, StrategyCard
 from forecast_loop.storage import JsonFileRepository
 
 
@@ -379,14 +379,232 @@ def test_lineage_research_task_plan_marks_cross_sample_task_complete_when_agenda
         decision_basis="lineage_cross_sample_validation_agenda",
     )
     repository.save_research_agenda(cross_sample_agenda)
+    repository.save_research_autopilot_run(
+        ResearchAutopilotRun(
+            run_id="research-autopilot-run:cross-sample-blocked",
+            created_at=now + timedelta(hours=3),
+            symbol="BTC-USD",
+            agenda_id=cross_sample_agenda.agenda_id,
+            strategy_card_id=parent.card_id,
+            experiment_trial_id="experiment-trial:cross-sample-blocked",
+            locked_evaluation_id="locked-evaluation:cross-sample-blocked",
+            leaderboard_entry_id="leaderboard-entry:cross-sample-blocked",
+            strategy_decision_id=None,
+            paper_shadow_outcome_id="paper-shadow-outcome:missing-cross-sample",
+            steps=[],
+            loop_status="BLOCKED",
+            next_research_action="REPAIR_EVIDENCE_CHAIN",
+            blocked_reasons=["missing_paper_shadow_outcome"],
+            decision_basis="research_paper_autopilot_loop",
+        )
+    )
 
     plan = build_lineage_research_task_plan(repository=repository, storage_dir=tmp_path, symbol="BTC-USD")
 
     task = plan.task_by_id("verify_cross_sample_persistence")
-    assert plan.next_task_id is None
+    run_task = plan.task_by_id("record_cross_sample_autopilot_run")
+    assert plan.next_task_id == "record_cross_sample_autopilot_run"
     assert task.status == "completed"
     assert task.required_artifact == "research_agenda"
     assert task.artifact_id == cross_sample_agenda.agenda_id
+    assert run_task.status == "blocked"
+    assert run_task.required_artifact == "research_autopilot_run"
+    assert run_task.artifact_id is None
+    assert run_task.blocked_reason == "cross_sample_autopilot_run_missing"
+    assert "research_autopilot_run" in run_task.missing_inputs
+
+
+def test_lineage_research_task_plan_marks_cross_sample_autopilot_task_complete(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    parent = _card("strategy-card:parent")
+    repository.save_strategy_card(parent)
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:baseline",
+            card_id=parent.card_id,
+            created_at=now,
+            action="CONTINUE_SHADOW",
+            excess=0.01,
+            attributions=[],
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:improved",
+            card_id=parent.card_id,
+            created_at=now + timedelta(hours=1),
+            action="CONTINUE_SHADOW",
+            excess=0.04,
+            attributions=[],
+        )
+    )
+    create_lineage_research_agenda(repository=repository, created_at=now, symbol="BTC-USD")
+    title = "Cross-sample validation for lineage strategy-card:parent"
+    hypothesis = "Validate latest improving lineage on a fresh sample before raising confidence."
+    cross_sample_agenda = ResearchAgenda(
+        agenda_id=ResearchAgenda.build_id(
+            symbol="BTC-USD",
+            title=title,
+            hypothesis=hypothesis,
+            target_strategy_family="lineage_cross_sample_validation",
+            strategy_card_ids=[parent.card_id],
+        ),
+        created_at=now + timedelta(hours=2),
+        symbol="BTC-USD",
+        title=title,
+        hypothesis=hypothesis,
+        priority="MEDIUM",
+        status="OPEN",
+        target_strategy_family="lineage_cross_sample_validation",
+        strategy_card_ids=[parent.card_id],
+        expected_artifacts=["locked_evaluation", "walk_forward_validation", "paper_shadow_outcome"],
+        acceptance_criteria=[
+            "latest_lineage_outcome=paper-shadow-outcome:improved",
+            "fresh-sample evidence is linked before confidence increases",
+        ],
+        blocked_actions=["real_order_submission", "automatic_live_execution"],
+        decision_basis="lineage_cross_sample_validation_agenda",
+    )
+    repository.save_research_agenda(cross_sample_agenda)
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:fresh-sample-pass",
+            card_id=parent.card_id,
+            created_at=now + timedelta(hours=3),
+            action="PROMOTION_READY",
+            excess=0.05,
+            attributions=[],
+        )
+    )
+    repository.save_research_autopilot_run(
+        ResearchAutopilotRun(
+            run_id="research-autopilot-run:cross-sample-complete",
+            created_at=now + timedelta(hours=4),
+            symbol="BTC-USD",
+            agenda_id=cross_sample_agenda.agenda_id,
+            strategy_card_id=parent.card_id,
+            experiment_trial_id="experiment-trial:cross-sample",
+            locked_evaluation_id="locked-evaluation:cross-sample",
+            leaderboard_entry_id="leaderboard-entry:cross-sample",
+            strategy_decision_id=None,
+            paper_shadow_outcome_id="paper-shadow-outcome:fresh-sample-pass",
+            steps=[],
+            loop_status="CROSS_SAMPLE_VALIDATION_COMPLETE",
+            next_research_action="COMPARE_FRESH_SAMPLE_EDGE",
+            blocked_reasons=[],
+            decision_basis="research_paper_autopilot_loop",
+        )
+    )
+
+    plan = build_lineage_research_task_plan(repository=repository, storage_dir=tmp_path, symbol="BTC-USD")
+
+    task = plan.task_by_id("record_cross_sample_autopilot_run")
+    assert plan.next_task_id is None
+    assert task.status == "completed"
+    assert task.required_artifact == "research_autopilot_run"
+    assert task.artifact_id == "research-autopilot-run:cross-sample-complete"
+
+
+def test_lineage_research_task_plan_does_not_reuse_stale_cross_sample_run_for_newer_outcome(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    parent = _card("strategy-card:parent")
+    repository.save_strategy_card(parent)
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:baseline",
+            card_id=parent.card_id,
+            created_at=now,
+            action="CONTINUE_SHADOW",
+            excess=0.01,
+            attributions=[],
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:improved",
+            card_id=parent.card_id,
+            created_at=now + timedelta(hours=1),
+            action="CONTINUE_SHADOW",
+            excess=0.04,
+            attributions=[],
+        )
+    )
+    create_lineage_research_agenda(repository=repository, created_at=now, symbol="BTC-USD")
+    title = "Cross-sample validation for lineage strategy-card:parent"
+    hypothesis = "Validate latest improving lineage on a fresh sample before raising confidence."
+    cross_sample_agenda = ResearchAgenda(
+        agenda_id=ResearchAgenda.build_id(
+            symbol="BTC-USD",
+            title=title,
+            hypothesis=hypothesis,
+            target_strategy_family="lineage_cross_sample_validation",
+            strategy_card_ids=[parent.card_id],
+        ),
+        created_at=now + timedelta(hours=2),
+        symbol="BTC-USD",
+        title=title,
+        hypothesis=hypothesis,
+        priority="MEDIUM",
+        status="OPEN",
+        target_strategy_family="lineage_cross_sample_validation",
+        strategy_card_ids=[parent.card_id],
+        expected_artifacts=["locked_evaluation", "walk_forward_validation", "paper_shadow_outcome"],
+        acceptance_criteria=[
+            "latest_lineage_outcome=paper-shadow-outcome:improved",
+            "fresh-sample evidence is linked before confidence increases",
+        ],
+        blocked_actions=["real_order_submission", "automatic_live_execution"],
+        decision_basis="lineage_cross_sample_validation_agenda",
+    )
+    repository.save_research_agenda(cross_sample_agenda)
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:fresh-sample-pass",
+            card_id=parent.card_id,
+            created_at=now + timedelta(hours=3),
+            action="PROMOTION_READY",
+            excess=0.05,
+            attributions=[],
+        )
+    )
+    repository.save_research_autopilot_run(
+        ResearchAutopilotRun(
+            run_id="research-autopilot-run:old-cross-sample-complete",
+            created_at=now + timedelta(hours=4),
+            symbol="BTC-USD",
+            agenda_id=cross_sample_agenda.agenda_id,
+            strategy_card_id=parent.card_id,
+            experiment_trial_id="experiment-trial:old-cross-sample",
+            locked_evaluation_id="locked-evaluation:old-cross-sample",
+            leaderboard_entry_id="leaderboard-entry:old-cross-sample",
+            strategy_decision_id=None,
+            paper_shadow_outcome_id="paper-shadow-outcome:fresh-sample-pass",
+            steps=[],
+            loop_status="CROSS_SAMPLE_VALIDATION_COMPLETE",
+            next_research_action="COMPARE_FRESH_SAMPLE_EDGE",
+            blocked_reasons=[],
+            decision_basis="research_paper_autopilot_loop",
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:newer-improvement",
+            card_id=parent.card_id,
+            created_at=now + timedelta(hours=5),
+            action="CONTINUE_SHADOW",
+            excess=0.07,
+            attributions=[],
+        )
+    )
+
+    plan = build_lineage_research_task_plan(repository=repository, storage_dir=tmp_path, symbol="BTC-USD")
+
+    task = plan.task_by_id("verify_cross_sample_persistence")
+    assert plan.next_task_id == "verify_cross_sample_persistence"
+    assert task.status == "ready"
+    assert task.artifact_id is None
 
 
 def test_lineage_research_task_plan_includes_replacement_context_for_improving_replacement(tmp_path):

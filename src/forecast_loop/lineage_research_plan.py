@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from forecast_loop.models import PaperShadowOutcome, ResearchAgenda, StrategyCard
+from forecast_loop.models import PaperShadowOutcome, ResearchAgenda, ResearchAutopilotRun, StrategyCard
 from forecast_loop.storage import ArtifactRepository
 from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
 from forecast_loop.strategy_lineage import (
@@ -85,6 +85,7 @@ def build_lineage_research_task_plan(
     strategy_cards = [item for item in repository.load_strategy_cards() if symbol in item.symbols]
     paper_shadow_outcomes = [item for item in repository.load_paper_shadow_outcomes() if item.symbol == symbol]
     research_agendas = [item for item in repository.load_research_agendas() if item.symbol == symbol]
+    research_autopilot_runs = [item for item in repository.load_research_autopilot_runs() if item.symbol == symbol]
     agenda, summary = _latest_agenda_anchored_lineage(
         research_agendas=research_agendas,
         strategy_cards=strategy_cards,
@@ -100,7 +101,7 @@ def build_lineage_research_task_plan(
             leaderboard_entries=repository.load_leaderboard_entries(),
             paper_shadow_outcomes=paper_shadow_outcomes,
             research_agendas=research_agendas,
-            research_autopilot_runs=repository.load_research_autopilot_runs(),
+            research_autopilot_runs=research_autopilot_runs,
         )
         summary = build_strategy_lineage_summary(
             root_card=chain.strategy_card,
@@ -118,6 +119,7 @@ def build_lineage_research_task_plan(
         strategy_cards=strategy_cards,
         paper_shadow_outcomes=paper_shadow_outcomes,
         research_agendas=research_agendas,
+        research_autopilot_runs=research_autopilot_runs,
         agenda=agenda,
         summary=summary,
     )
@@ -189,6 +191,7 @@ def _build_tasks(
     strategy_cards: list[StrategyCard],
     paper_shadow_outcomes: list[PaperShadowOutcome],
     research_agendas: list[ResearchAgenda],
+    research_autopilot_runs: list[ResearchAutopilotRun],
     agenda: ResearchAgenda,
     summary: StrategyLineageSummary,
 ) -> list[LineageResearchTask]:
@@ -199,7 +202,7 @@ def _build_tasks(
     elif summary.latest_recommended_strategy_action == "REVISE_STRATEGY" or summary.performance_verdict in {"惡化", "偏弱"}:
         tasks.append(_revision_task(storage, symbol, strategy_cards, summary, latest_outcome))
     elif summary.performance_verdict in {"改善", "偏強"}:
-        tasks.append(_cross_sample_task(summary, research_agendas))
+        tasks.extend(_cross_sample_tasks(summary, research_agendas, research_autopilot_runs, paper_shadow_outcomes))
     else:
         tasks.append(_evidence_task(summary))
     return tasks
@@ -315,11 +318,35 @@ def _replacement_strategy_task(
     )
 
 
+def _cross_sample_tasks(
+    summary: StrategyLineageSummary,
+    research_agendas: list[ResearchAgenda],
+    research_autopilot_runs: list[ResearchAutopilotRun],
+    paper_shadow_outcomes: list[PaperShadowOutcome],
+) -> list[LineageResearchTask]:
+    linked_run = _cross_sample_autopilot_run_for_lineage(
+        summary,
+        research_agendas,
+        research_autopilot_runs,
+        paper_shadow_outcomes,
+    )
+    linked_agenda = _agenda_by_id(research_agendas, linked_run.agenda_id) if linked_run is not None else None
+    agenda_task = _cross_sample_task(summary, research_agendas, existing_agenda=linked_agenda)
+    tasks = [agenda_task]
+    if agenda_task.status == "completed":
+        agenda = _agenda_by_id(research_agendas, agenda_task.artifact_id)
+        tasks.append(_cross_sample_autopilot_task(agenda, research_autopilot_runs, paper_shadow_outcomes, summary))
+    return tasks
+
+
 def _cross_sample_task(
     summary: StrategyLineageSummary,
     research_agendas: list[ResearchAgenda],
+    *,
+    existing_agenda: ResearchAgenda | None = None,
 ) -> LineageResearchTask:
-    existing_agenda = _cross_sample_agenda_for_summary(research_agendas, summary)
+    if existing_agenda is None:
+        existing_agenda = _cross_sample_agenda_for_summary(research_agendas, summary)
     if existing_agenda is not None:
         return LineageResearchTask(
             task_id="verify_cross_sample_persistence",
@@ -368,6 +395,110 @@ def _cross_sample_task(
         missing_inputs=[],
         rationale=f"Improving lineage evidence still needs cross-sample confirmation.{replacement_rationale}",
     )
+
+
+def _cross_sample_autopilot_task(
+    agenda: ResearchAgenda | None,
+    research_autopilot_runs: list[ResearchAutopilotRun],
+    paper_shadow_outcomes: list[PaperShadowOutcome],
+    summary: StrategyLineageSummary,
+) -> LineageResearchTask:
+    run = _cross_sample_autopilot_run_for_agenda(agenda, research_autopilot_runs, paper_shadow_outcomes, summary)
+    if run is not None:
+        return LineageResearchTask(
+            task_id="record_cross_sample_autopilot_run",
+            title="Record cross-sample autopilot run",
+            status="completed",
+            required_artifact="research_autopilot_run",
+            artifact_id=run.run_id,
+            command_args=None,
+            worker_prompt=f"Cross-sample autopilot run {run.run_id} already closes agenda {run.agenda_id}.",
+            blocked_reason=None,
+            missing_inputs=[],
+            rationale="Fresh-sample validation has a linked research autopilot run and paper-shadow outcome.",
+        )
+    return LineageResearchTask(
+        task_id="record_cross_sample_autopilot_run",
+        title="Record cross-sample autopilot run",
+        status="blocked",
+        required_artifact="research_autopilot_run",
+        artifact_id=None,
+        command_args=None,
+        worker_prompt=(
+            "Complete the fresh-sample validation chain for this cross-sample agenda, then record the linked "
+            "research autopilot run so the lineage can compare the new sample against prior evidence."
+        ),
+        blocked_reason="cross_sample_autopilot_run_missing",
+        missing_inputs=["research_autopilot_run"],
+        rationale="Cross-sample validation agenda exists, but no linked completed autopilot run is recorded yet.",
+    )
+
+
+def _cross_sample_autopilot_run_for_agenda(
+    agenda: ResearchAgenda | None,
+    research_autopilot_runs: list[ResearchAutopilotRun],
+    paper_shadow_outcomes: list[PaperShadowOutcome],
+    summary: StrategyLineageSummary,
+) -> ResearchAutopilotRun | None:
+    if agenda is None:
+        return None
+    lineage_ids = _lineage_strategy_ids(summary)
+    matches = [
+        run
+        for run in research_autopilot_runs
+        if run.agenda_id == agenda.agenda_id
+        and _valid_cross_sample_autopilot_run(run, paper_shadow_outcomes, lineage_ids, summary.latest_outcome_id)
+    ]
+    return max(matches, key=lambda run: run.created_at) if matches else None
+
+
+def _cross_sample_autopilot_run_for_lineage(
+    summary: StrategyLineageSummary,
+    agendas: list[ResearchAgenda],
+    research_autopilot_runs: list[ResearchAutopilotRun],
+    paper_shadow_outcomes: list[PaperShadowOutcome],
+) -> ResearchAutopilotRun | None:
+    lineage_ids = _lineage_strategy_ids(summary)
+    cross_sample_agenda_ids = {
+        agenda.agenda_id
+        for agenda in agendas
+        if agenda.decision_basis == "lineage_cross_sample_validation_agenda"
+        and lineage_ids.intersection(agenda.strategy_card_ids)
+    }
+    matches = [
+        run
+        for run in research_autopilot_runs
+        if run.agenda_id in cross_sample_agenda_ids
+        and run.strategy_card_id in lineage_ids
+        and _valid_cross_sample_autopilot_run(run, paper_shadow_outcomes, lineage_ids, summary.latest_outcome_id)
+    ]
+    return max(matches, key=lambda run: run.created_at) if matches else None
+
+
+def _valid_cross_sample_autopilot_run(
+    run: ResearchAutopilotRun,
+    paper_shadow_outcomes: list[PaperShadowOutcome],
+    lineage_ids: set[str],
+    latest_outcome_id: str | None,
+) -> bool:
+    if run.decision_basis != "research_paper_autopilot_loop":
+        return False
+    if run.loop_status == "BLOCKED" or run.blocked_reasons:
+        return False
+    if run.paper_shadow_outcome_id is None or run.paper_shadow_outcome_id != latest_outcome_id:
+        return False
+    outcome = _latest_outcome(run.paper_shadow_outcome_id, paper_shadow_outcomes)
+    return outcome is not None and outcome.strategy_card_id in lineage_ids
+
+
+def _lineage_strategy_ids(summary: StrategyLineageSummary) -> set[str]:
+    return {summary.root_card_id, *summary.revision_card_ids, *summary.replacement_card_ids}
+
+
+def _agenda_by_id(agendas: list[ResearchAgenda], agenda_id: str | None) -> ResearchAgenda | None:
+    if agenda_id is None:
+        return None
+    return next((agenda for agenda in agendas if agenda.agenda_id == agenda_id), None)
 
 
 def _cross_sample_agenda_for_summary(

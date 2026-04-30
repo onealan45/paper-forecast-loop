@@ -299,6 +299,9 @@ factory:
 - PR74 persists each lineage run log's next required artifact explicitly, so a
   downstream research worker can identify the expected output from the run log
   without rebuilding the full task plan.
+- PR75 adds readable Traditional Chinese display copy for those next required
+  artifact entries, so dashboard and operator console show the expected output
+  artifact without raw-only machine codes.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

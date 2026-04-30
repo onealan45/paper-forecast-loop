@@ -305,6 +305,9 @@ factory:
 - PR76 reuses that display copy in the lineage task-plan panels themselves, so
   the main next-task view and the run-log view describe required artifacts
   consistently.
+- PR77 reuses the missing-input display copy in lineage task-plan panels, so
+  blocked next research tasks show readable evidence gaps while keeping raw
+  codes visible.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

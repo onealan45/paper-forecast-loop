@@ -1117,14 +1117,18 @@ def _lineage_research_task_plan_panel(plan: LineageResearchTaskPlan | None) -> s
         "next_task_required_artifact",
         next_task.required_artifact if next_task else None,
     )
+    missing_inputs = (
+        display_step_artifact("next_task_missing_inputs", ", ".join(next_task.missing_inputs))
+        if next_task and next_task.missing_inputs
+        else "無"
+    )
     return f"""
   <article class="panel wide">
     <h3>Lineage 下一個研究任務</h3>
     <p>Task：<code>{escape(next_task.task_id if next_task else "none")}</code> / {escape(next_task.status if next_task else "completed")}</p>
     <p>Required artifact：<code>{escape(required_artifact)}</code></p>
     <p>Blocked reason：{escape(next_task.blocked_reason if next_task and next_task.blocked_reason else "none")}</p>
-    <p>Missing inputs：</p>
-    {_plain_list(next_task.missing_inputs if next_task else [])}
+    <p>Missing inputs：<code>{escape(missing_inputs)}</code></p>
     <p>Command args：<code>{escape(command)}</code></p>
     <h4>Worker Prompt</h4>
     <p>{escape(next_task.worker_prompt if next_task else "none")}</p>

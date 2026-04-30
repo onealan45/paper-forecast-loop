@@ -1241,6 +1241,11 @@ def _render_lineage_research_task_plan(plan: LineageResearchTaskPlan | None) -> 
         "next_task_required_artifact",
         next_task.required_artifact if next_task else None,
     )
+    missing_inputs = (
+        display_step_artifact("next_task_missing_inputs", ", ".join(next_task.missing_inputs))
+        if next_task and next_task.missing_inputs
+        else "無"
+    )
     return f"""
       <div class="evidence-block">
         <h3>Lineage 下一個研究任務</h3>
@@ -1248,7 +1253,7 @@ def _render_lineage_research_task_plan(plan: LineageResearchTaskPlan | None) -> 
           <dt>Task</dt><dd><code>{escape(next_task.task_id if next_task else "none")}</code> / {escape(next_task.status if next_task else "completed")}</dd>
           <dt>Required Artifact</dt><dd><code>{escape(required_artifact)}</code></dd>
           <dt>Blocked Reason</dt><dd>{escape(next_task.blocked_reason if next_task and next_task.blocked_reason else "none")}</dd>
-          <dt>Missing Inputs</dt><dd>{_dashboard_list_inline(next_task.missing_inputs if next_task else [])}</dd>
+          <dt>Missing Inputs</dt><dd><code>{escape(missing_inputs)}</code></dd>
           <dt>Command Args</dt><dd><code>{escape(command)}</code><br><span class="micro-copy">只顯示，不執行。</span></dd>
           <dt>Worker Prompt</dt><dd>{escape(next_task.worker_prompt if next_task else "none")}</dd>
           <dt>Rationale</dt><dd>{escape(next_task.rationale if next_task else "none")}</dd>

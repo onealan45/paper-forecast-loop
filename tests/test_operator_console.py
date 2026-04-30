@@ -1271,6 +1271,47 @@ def test_operator_console_run_steps_translate_lineage_blocked_context():
     assert "next_task_missing_inputs" not in html
 
 
+def test_operator_console_lineage_task_plan_translates_missing_inputs():
+    from forecast_loop.lineage_research_plan import LineageResearchTask, LineageResearchTaskPlan
+    from forecast_loop.operator_console import _lineage_research_task_plan_panel
+
+    plan = LineageResearchTaskPlan(
+        symbol="BTC-USD",
+        agenda_id="research-agenda:test",
+        root_card_id="strategy-card:test",
+        latest_outcome_id="paper-shadow-outcome:test",
+        performance_verdict="needs evidence",
+        latest_recommended_strategy_action="RETEST_REVISION",
+        next_research_focus="Collect missing evidence.",
+        next_task_id="collect_missing_evidence",
+        tasks=[
+            LineageResearchTask(
+                task_id="collect_missing_evidence",
+                title="Collect missing evidence",
+                status="blocked",
+                required_artifact="research_autopilot_run",
+                artifact_id=None,
+                command_args=None,
+                worker_prompt="Collect missing evidence.",
+                blocked_reason="evidence_missing",
+                missing_inputs=[
+                    "locked_evaluation",
+                    "walk_forward_validation",
+                    "paper_shadow_outcome",
+                ],
+                rationale="Missing evidence blocks the next task.",
+            )
+        ],
+    )
+
+    html = _lineage_research_task_plan_panel(plan)
+
+    assert (
+        "鎖定評估, walk-forward 驗證, paper-shadow outcome "
+        "(locked_evaluation, walk_forward_validation, paper_shadow_outcome)"
+    ) in html
+
+
 def test_operator_console_lineage_research_task_run_ignores_stale_run_after_new_outcome(tmp_path):
     now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
     repository = JsonFileRepository(tmp_path)

@@ -809,6 +809,8 @@ V1 MVP should include:
   while raw machine codes stay visible
 - readable required artifact copy in lineage task-plan panels, so the primary
   next-task view does not lag behind the audit run-log display
+- readable missing-input copy in lineage task-plan panels, so blocked next
+  research tasks explain evidence gaps without hiding raw machine codes
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

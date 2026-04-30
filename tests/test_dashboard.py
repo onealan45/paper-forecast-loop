@@ -1598,6 +1598,25 @@ def test_dashboard_shows_lineage_cross_sample_validation_agenda(tmp_path):
             decision_basis="research_paper_autopilot_loop",
         )
     )
+    repository.save_research_autopilot_run(
+        ResearchAutopilotRun(
+            run_id="research-autopilot-run:dashboard-cross-sample-blocked",
+            created_at=now + timedelta(minutes=92),
+            symbol="BTC-USD",
+            agenda_id=cross_sample.created_artifact_ids[0],
+            strategy_card_id=replacement.created_artifact_ids[0],
+            experiment_trial_id="experiment-trial:dashboard-cross-sample-blocked",
+            locked_evaluation_id="locked-evaluation:dashboard-cross-sample-blocked",
+            leaderboard_entry_id="leaderboard-entry:dashboard-cross-sample-blocked",
+            strategy_decision_id=None,
+            paper_shadow_outcome_id="paper-shadow-outcome:dashboard-cross-sample-missing",
+            steps=[],
+            loop_status="BLOCKED",
+            next_research_action="REPAIR_EVIDENCE_CHAIN",
+            blocked_reasons=["missing_paper_shadow_outcome"],
+            decision_basis="research_paper_autopilot_loop",
+        )
+    )
     repository.save_research_agenda(
         ResearchAgenda(
             agenda_id="research-agenda:dashboard-unrelated-cross-sample",
@@ -1642,6 +1661,7 @@ def test_dashboard_shows_lineage_cross_sample_validation_agenda(tmp_path):
     assert snapshot.latest_lineage_cross_sample_agenda.agenda_id == cross_sample.created_artifact_ids[0]
     assert snapshot.latest_lineage_cross_sample_autopilot_run is not None
     assert snapshot.latest_lineage_cross_sample_autopilot_run.run_id == "research-autopilot-run:dashboard-cross-sample"
+    assert snapshot.latest_lineage_cross_sample_autopilot_run.loop_status == "CROSS_SAMPLE_VALIDATION_COMPLETE"
     assert "Lineage cross-sample validation agenda" in html
     assert "Strategy cards" in html
     assert "strategy-card:dashboard-visible" in html
@@ -1652,6 +1672,8 @@ def test_dashboard_shows_lineage_cross_sample_validation_agenda(tmp_path):
     assert "research-autopilot-run:dashboard-cross-sample" in html
     assert "CROSS_SAMPLE_VALIDATION_COMPLETE" in html
     assert "paper-shadow-outcome:dashboard-cross-sample-pass" in html
+    assert "research-autopilot-run:dashboard-cross-sample-blocked" not in html
+    assert "missing_paper_shadow_outcome" not in html
     assert "locked_evaluation" in html
     assert "walk_forward_validation" in html
     assert "fresh sample" in html
@@ -1743,6 +1765,32 @@ def test_dashboard_shows_lineage_replacement_retest_scaffold(tmp_path):
             blocked_reasons=[],
             notes=["Replacement retest passed its paper-shadow window."],
             decision_basis="test",
+        )
+    )
+    repository.save_research_autopilot_run(
+        ResearchAutopilotRun(
+            run_id="research-autopilot-run:dashboard-replacement-generic-cross-sample",
+            created_at=now + timedelta(minutes=80),
+            symbol="BTC-USD",
+            agenda_id="research-agenda:dashboard-cross-sample-generic",
+            strategy_card_id=executed.created_artifact_ids[0],
+            experiment_trial_id="experiment-trial:dashboard-cross-sample-generic",
+            locked_evaluation_id="locked-evaluation:dashboard-cross-sample-generic",
+            leaderboard_entry_id="leaderboard-entry:dashboard-cross-sample-generic",
+            strategy_decision_id=None,
+            paper_shadow_outcome_id="paper-shadow-outcome:dashboard-cross-sample-generic",
+            steps=[
+                {"name": "strategy_card", "status": "completed", "artifact_id": executed.created_artifact_ids[0]},
+                {
+                    "name": "cross_sample_agenda",
+                    "status": "completed",
+                    "artifact_id": "research-agenda:dashboard-cross-sample-generic",
+                },
+            ],
+            loop_status="CROSS_SAMPLE_VALIDATION_COMPLETE",
+            next_research_action="COMPARE_FRESH_SAMPLE_EDGE",
+            blocked_reasons=[],
+            decision_basis="research_paper_autopilot_loop",
         )
     )
 

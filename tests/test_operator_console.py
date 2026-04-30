@@ -1405,6 +1405,11 @@ def test_operator_console_shows_lineage_replacement_retest_scaffold(tmp_path):
     assert "research-autopilot-run:visible-replacement-retest" in html
     assert "UPDATE_LINEAGE_VERDICT" in html
     assert "lineage_replacement" in html
+    assert "Replacement Contributions" in html
+    assert f"Replacement {executed.created_artifact_ids[0]}" in html
+    assert "Source paper-shadow-outcome:visible-second-revision-quarantine" in html
+    assert "Latest paper-shadow-outcome:visible-replacement-retest" in html
+    assert "Action PROMOTION_READY" in html
 
 
 def test_operator_console_lineage_research_agenda_ignores_other_lineage(tmp_path):

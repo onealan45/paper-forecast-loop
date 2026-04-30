@@ -1164,6 +1164,11 @@ def _strategy_lineage_panel(summary: StrategyLineageSummary | None) -> str:
     {_plain_list(summary.revision_card_ids)}
     <h4>Revision Tree</h4>
     {_strategy_lineage_tree(summary)}
+    <p>Replacements：{summary.replacement_count}</p>
+    <p>Replacement cards：</p>
+    {_plain_list(summary.replacement_card_ids)}
+    <h4>Replacement Contributions</h4>
+    {_strategy_lineage_replacements(summary)}
     <h4>表現結論</h4>
     <p>{_strategy_lineage_performance_verdict(summary)}</p>
     <h4>下一步研究焦點</h4>
@@ -1192,6 +1197,24 @@ def _strategy_lineage_tree(summary: StrategyLineageSummary | None) -> str:
             f" / Source {node.source_outcome_id or 'none'}"
             f" / Fixes {', '.join(node.failure_attributions) if node.failure_attributions else 'none'}"
             for node in summary.revision_nodes
+        ]
+    )
+
+
+def _strategy_lineage_replacements(summary: StrategyLineageSummary | None) -> str:
+    if summary is None or not summary.replacement_nodes:
+        return '<p class="muted">目前沒有 replacement contribution。</p>'
+    return _plain_list(
+        [
+            f"Replacement {node.card_id}"
+            f" / Source {node.source_outcome_id or 'none'}"
+            f" / Latest {node.latest_outcome_id or 'none'}"
+            f" / Action {node.latest_recommended_strategy_action or 'none'}"
+            f" / Excess {_format_number(node.latest_excess_return_after_costs)}"
+            f" / Status {node.status}"
+            f" / Hypothesis {node.hypothesis}"
+            f" / Failures {', '.join(node.failure_attributions) if node.failure_attributions else 'none'}"
+            for node in summary.replacement_nodes
         ]
     )
 

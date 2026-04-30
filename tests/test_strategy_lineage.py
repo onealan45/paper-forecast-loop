@@ -218,6 +218,15 @@ def test_strategy_lineage_summary_includes_root_linked_replacement_outcomes():
 
     assert summary.outcome_count == 3
     assert summary.latest_outcome_id == "replacement-pass"
+    assert summary.replacement_count == 1
+    assert summary.replacement_card_ids == [replacement.card_id]
+    assert len(summary.replacement_nodes) == 1
+    replacement_node = summary.replacement_nodes[0]
+    assert replacement_node.card_id == replacement.card_id
+    assert replacement_node.source_outcome_id == "revision-fail"
+    assert replacement_node.latest_outcome_id == "replacement-pass"
+    assert replacement_node.latest_recommended_strategy_action == "PROMOTION_READY"
+    assert replacement_node.latest_excess_return_after_costs == 0.04
     assert summary.action_counts == {
         "PROMOTION_READY": 1,
         "QUARANTINE_STRATEGY": 1,

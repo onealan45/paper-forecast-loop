@@ -289,6 +289,8 @@ factory:
 - PR70 translates those blocked run-log fields in dashboard and operator
   console views, so the UX shows human-readable Traditional Chinese labels
   instead of raw `next_task_*` step names.
+- PR71 adds readable blocked-reason copy for cross-sample run-log blockers while
+  preserving the raw reason code for traceability.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

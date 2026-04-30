@@ -1463,6 +1463,7 @@ def test_dashboard_run_steps_translate_lineage_blocked_context():
 
     assert "下一個任務阻擋原因" in html
     assert "缺少證據輸入" in html
+    assert "缺少 cross-sample autopilot run" in html
     assert "cross_sample_autopilot_run_missing" in html
     assert "locked_evaluation, walk_forward_validation, paper_shadow_outcome, research_autopilot_run" in html
     assert "next_task_blocked_reason" not in html

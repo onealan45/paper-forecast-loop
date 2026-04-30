@@ -1844,7 +1844,7 @@ def _automation_steps(run: AutomationRun) -> str:
     rows = "".join(
         "<li>"
         f"{escape(_automation_step_name(step.get('name') or ''))}: {escape(step.get('status') or '')} "
-        f"<code>{escape(step.get('artifact_id') or 'none')}</code>"
+        f"<code>{escape(_automation_step_artifact(step.get('name') or '', step.get('artifact_id')))}</code>"
         "</li>"
         for step in run.steps
     )
@@ -1857,6 +1857,14 @@ def _automation_step_name(name: str) -> str:
         "next_task_missing_inputs": "缺少證據輸入",
     }
     return labels.get(name, name)
+
+
+def _automation_step_artifact(name: str, artifact_id: str | None) -> str:
+    if artifact_id is None:
+        return "none"
+    if name == "next_task_blocked_reason" and artifact_id == "cross_sample_autopilot_run_missing":
+        return f"缺少 cross-sample autopilot run ({artifact_id})"
+    return artifact_id
 
 
 def _automation_status_class(status: str) -> str:

@@ -322,6 +322,9 @@ factory:
   Traditional Chinese while preserving the raw attribution code for traceability.
 - PR83 applies the same readable-copy pattern to the conclusion's next research
   action, so operators see the next step before the raw action code.
+- PR84 makes the strategy research conclusion's paper-shadow grade and
+  after-cost excess metric readable in Traditional Chinese while keeping raw
+  grade codes visible.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

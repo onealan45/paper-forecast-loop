@@ -30,6 +30,13 @@ _RESEARCH_ACTION_LABELS = {
     "UPDATE_LINEAGE_VERDICT": "更新 lineage 判定",
 }
 
+_OUTCOME_GRADE_LABELS = {
+    "BLOCKED": "已阻擋",
+    "FAIL": "失敗",
+    "INSUFFICIENT": "證據不足",
+    "PASS": "通過",
+}
+
 
 def build_strategy_research_conclusion(
     *,
@@ -45,9 +52,9 @@ def build_strategy_research_conclusion(
         next_action = autopilot.next_research_action if autopilot else "n/a"
         return f"{conclusion}：尚未有 paper-shadow 結果；下一步 {format_research_action(next_action)}。"
 
-    parts = [f"paper-shadow {outcome.outcome_grade}"]
+    parts = [f"paper-shadow {format_outcome_grade(outcome.outcome_grade)}"]
     if outcome.excess_return_after_costs is not None:
-        parts.append(f"after-cost excess {_format_percent(outcome.excess_return_after_costs)}")
+        parts.append(f"扣成本超額報酬 {_format_percent(outcome.excess_return_after_costs)}")
     if outcome.failure_attributions:
         parts.append(f"失敗歸因 {format_failure_attributions(outcome.failure_attributions)}")
 
@@ -64,6 +71,13 @@ def format_research_action(action: str) -> str:
     if label is None:
         return action
     return f"{label} ({action})"
+
+
+def format_outcome_grade(grade: str) -> str:
+    label = _OUTCOME_GRADE_LABELS.get(grade)
+    if label is None:
+        return grade
+    return f"{label} ({grade})"
 
 
 def _format_failure_attribution(attribution: str) -> str:

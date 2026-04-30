@@ -1351,6 +1351,9 @@ def test_operator_console_shows_lineage_cross_sample_validation_agenda(tmp_path)
     assert snapshot.latest_lineage_cross_sample_agenda is not None
     assert snapshot.latest_lineage_cross_sample_agenda.agenda_id == cross_sample.created_artifact_ids[0]
     assert "Lineage cross-sample validation agenda" in html
+    assert "Strategy cards" in html
+    assert "strategy-card:visible" in html
+    assert replacement.created_artifact_ids[0] in html
     assert "lineage_cross_sample_validation_agenda" in html
     assert "paper-shadow-outcome:visible-replacement-pass" in html
     assert "locked_evaluation" in html

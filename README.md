@@ -255,6 +255,9 @@ factory:
   validation agendas, so downstream research tools can trace both the lineage
   root and the exact replacement hypothesis without parsing natural-language
   prompts.
+- PR61 shows those cross-sample agenda strategy-card links in dashboard and
+  operator console, making the root/replacement strategy targets inspectable
+  from the research UX without opening raw JSON.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

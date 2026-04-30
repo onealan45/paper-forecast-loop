@@ -763,6 +763,9 @@ V1 MVP should include:
 - structured replacement-card links in `lineage_cross_sample_validation_agenda`
   artifacts, so research tooling can trace the exact improving replacement
   hypothesis as well as the source lineage root without parsing prompts
+- dashboard and operator console visibility for those cross-sample agenda
+  strategy-card links, so the research UX names the root and replacement
+  strategy targets directly
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

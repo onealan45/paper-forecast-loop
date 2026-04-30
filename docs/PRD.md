@@ -788,6 +788,9 @@ V1 MVP should include:
 - concrete cross-sample worker prompts, so blocked fresh-sample validation tasks
   name the agenda id, strategy cards, latest lineage outcome, and expected
   evidence chain directly in the handoff
+- blocked lineage task context in automation run logs, so research workers can
+  read the blocked reason and missing evidence inputs from
+  `record-lineage-research-task-run` output without reconstructing the plan
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

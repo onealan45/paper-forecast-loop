@@ -946,6 +946,84 @@ def test_record_lineage_research_task_run_logs_replacement_next_task_context(tmp
     )
 
 
+def test_record_lineage_research_task_run_logs_blocked_next_task_context(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    parent = _card("strategy-card:parent")
+    repository.save_strategy_card(parent)
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:baseline",
+            card_id=parent.card_id,
+            created_at=now,
+            action="CONTINUE_SHADOW",
+            excess=0.01,
+            attributions=[],
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:improved",
+            card_id=parent.card_id,
+            created_at=now + timedelta(hours=1),
+            action="CONTINUE_SHADOW",
+            excess=0.04,
+            attributions=[],
+        )
+    )
+    create_lineage_research_agenda(repository=repository, created_at=now, symbol="BTC-USD")
+    title = "Cross-sample validation for lineage strategy-card:parent"
+    hypothesis = "Validate latest improving lineage on a fresh sample before raising confidence."
+    cross_sample_agenda = ResearchAgenda(
+        agenda_id=ResearchAgenda.build_id(
+            symbol="BTC-USD",
+            title=title,
+            hypothesis=hypothesis,
+            target_strategy_family="lineage_cross_sample_validation",
+            strategy_card_ids=[parent.card_id],
+        ),
+        created_at=now + timedelta(hours=2),
+        symbol="BTC-USD",
+        title=title,
+        hypothesis=hypothesis,
+        priority="MEDIUM",
+        status="OPEN",
+        target_strategy_family="lineage_cross_sample_validation",
+        strategy_card_ids=[parent.card_id],
+        expected_artifacts=["locked_evaluation", "walk_forward_validation", "paper_shadow_outcome"],
+        acceptance_criteria=[
+            "latest_lineage_outcome=paper-shadow-outcome:improved",
+            "fresh-sample evidence is linked before confidence increases",
+        ],
+        blocked_actions=["real_order_submission", "automatic_live_execution"],
+        decision_basis="lineage_cross_sample_validation_agenda",
+    )
+    repository.save_research_agenda(cross_sample_agenda)
+
+    result = record_lineage_research_task_run(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 30, 13, 0, tzinfo=UTC),
+    )
+    reloaded = JsonFileRepository(tmp_path).load_automation_runs()[0]
+
+    assert result.task_plan.next_task_id == "record_cross_sample_autopilot_run"
+    assert result.automation_run.status == "LINEAGE_RESEARCH_TASK_BLOCKED"
+    assert any(
+        step["name"] == "next_task_blocked_reason"
+        and step["status"] == "blocked"
+        and step["artifact_id"] == "cross_sample_autopilot_run_missing"
+        for step in reloaded.steps
+    )
+    assert any(
+        step["name"] == "next_task_missing_inputs"
+        and step["status"] == "blocked"
+        and step["artifact_id"] == "locked_evaluation, walk_forward_validation, paper_shadow_outcome, research_autopilot_run"
+        for step in reloaded.steps
+    )
+
+
 def test_lineage_research_plan_cli_prints_machine_readable_next_task(tmp_path, capsys):
     now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
     repository = JsonFileRepository(tmp_path)

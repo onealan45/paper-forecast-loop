@@ -283,6 +283,9 @@ factory:
 - PR68 makes the blocked cross-sample worker handoff concrete by naming the
   agenda id, strategy cards, latest lineage outcome, and expected fresh-sample
   evidence directly in the task prompt.
+- PR69 persists blocked lineage next-task context in automation run logs, so
+  `record-lineage-research-task-run` carries the blocked reason and missing
+  evidence inputs without requiring the next worker to rebuild the task plan.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

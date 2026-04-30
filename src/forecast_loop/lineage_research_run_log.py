@@ -140,4 +140,20 @@ def _steps(task_plan: LineageResearchTaskPlan) -> list[dict[str, str | None]]:
                 },
             ]
         )
+        if next_task.blocked_reason is not None:
+            steps.append(
+                {
+                    "name": "next_task_blocked_reason",
+                    "status": next_task.status,
+                    "artifact_id": next_task.blocked_reason,
+                }
+            )
+        if next_task.missing_inputs:
+            steps.append(
+                {
+                    "name": "next_task_missing_inputs",
+                    "status": next_task.status,
+                    "artifact_id": ", ".join(next_task.missing_inputs),
+                }
+            )
     return steps

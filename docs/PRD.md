@@ -794,6 +794,8 @@ V1 MVP should include:
 - human-readable blocked context labels in dashboard and operator console run
   logs, so lineage research blockers are visible in Traditional Chinese rather
   than raw automation step names
+- readable blocked-reason copy for cross-sample run-log blockers, while keeping
+  the original machine reason code visible for traceability
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

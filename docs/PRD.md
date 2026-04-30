@@ -799,6 +799,8 @@ V1 MVP should include:
 - readable missing-input copy for lineage run-log blockers, so required
   evidence artifacts are understandable to humans while raw machine codes stay
   visible
+- shared automation step display copy for dashboard and operator console, so
+  lineage blocker labels and values cannot drift between read-only UX surfaces
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

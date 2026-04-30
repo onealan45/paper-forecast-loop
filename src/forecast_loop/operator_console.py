@@ -1127,6 +1127,8 @@ def _lineage_cross_sample_agenda_panel(agenda: ResearchAgenda | None) -> str:
     <p>ID：{_artifact_id(agenda, "agenda_id")}</p>
     <p>Priority：{escape(agenda.priority)}</p>
     <p>Basis：{escape(agenda.decision_basis)}</p>
+    <h4>Strategy cards</h4>
+    {_plain_list(agenda.strategy_card_ids)}
     <h4>Hypothesis</h4>
     <p>{escape(agenda.hypothesis)}</p>
     <h4>Expected artifacts</h4>

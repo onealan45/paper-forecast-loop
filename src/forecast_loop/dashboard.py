@@ -1253,6 +1253,7 @@ def _render_lineage_cross_sample_agenda(agenda: ResearchAgenda | None) -> str:
           <dt>Agenda</dt><dd>{_dashboard_artifact_id(agenda, "agenda_id")}</dd>
           <dt>Priority</dt><dd>{escape(agenda.priority)}</dd>
           <dt>Basis</dt><dd>{escape(agenda.decision_basis)}</dd>
+          <dt>Strategy cards</dt><dd>{_dashboard_list_inline(agenda.strategy_card_ids)}</dd>
           <dt>Hypothesis</dt><dd>{escape(agenda.hypothesis)}</dd>
           <dt>Expected artifacts</dt><dd>{_dashboard_list_inline(agenda.expected_artifacts)}</dd>
           <dt>Acceptance</dt><dd>{_dashboard_list_inline(agenda.acceptance_criteria)}</dd>

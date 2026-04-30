@@ -1527,14 +1527,23 @@ def _render_revision_retest_task_plan(plan: RevisionRetestTaskPlan | None) -> st
         """
     next_task = plan.task_by_id(plan.next_task_id) if plan.next_task_id else None
     command = " ".join(next_task.command_args) if next_task and next_task.command_args else "無"
+    required_artifact = display_step_artifact(
+        "next_task_required_artifact",
+        next_task.required_artifact if next_task else None,
+    )
+    missing_inputs = (
+        display_step_artifact("next_task_missing_inputs", ", ".join(next_task.missing_inputs))
+        if next_task and next_task.missing_inputs
+        else "無"
+    )
     return f"""
         <div class="evidence-block subtle">
           <h4>下一個 retest 研究任務</h4>
           <dl>
             <dt>Task</dt><dd><code>{escape(next_task.task_id if next_task else "none")}</code> / {escape(next_task.status if next_task else "completed")}</dd>
-            <dt>Required Artifact</dt><dd><code>{escape(next_task.required_artifact if next_task else "none")}</code></dd>
+            <dt>Required Artifact</dt><dd><code>{escape(required_artifact)}</code></dd>
             <dt>Blocked Reason</dt><dd>{escape(next_task.blocked_reason if next_task and next_task.blocked_reason else "none")}</dd>
-            <dt>Missing Inputs</dt><dd>{_dashboard_list_inline(next_task.missing_inputs if next_task else [])}</dd>
+            <dt>Missing Inputs</dt><dd><code>{escape(missing_inputs)}</code></dd>
             <dt>Command Args</dt><dd><code>{escape(command)}</code><br><span class="micro-copy">只顯示，不執行。</span></dd>
           </dl>
         </div>

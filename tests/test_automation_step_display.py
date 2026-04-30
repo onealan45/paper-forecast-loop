@@ -32,5 +32,15 @@ def test_display_step_artifact_adds_readable_copy_without_losing_codes():
     assert display_step_artifact("next_task_required_artifact", "paper_shadow_outcome") == (
         "paper-shadow 結果 (paper_shadow_outcome)"
     )
+    assert display_step_artifact("next_task_required_artifact", "cost_model_snapshot") == (
+        "成本模型快照 (cost_model_snapshot)"
+    )
+    assert display_step_artifact("next_task_required_artifact", "split_manifest") == (
+        "切分清單 (split_manifest)"
+    )
+    assert display_step_artifact(
+        "next_task_missing_inputs",
+        "train_start, validation_end, storage_dir",
+    ) == "訓練開始, 驗證結束, storage 目錄 (train_start, validation_end, storage_dir)"
     assert display_step_artifact("other_step", "artifact:test") == "artifact:test"
     assert display_step_artifact("other_step", None) == "none"

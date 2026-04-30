@@ -29,11 +29,13 @@ from forecast_loop.models import (
     Proposal,
     ResearchAgenda,
     ResearchAutopilotRun,
+    ResearchDataset,
     Review,
     RiskSnapshot,
     StrategyCard,
     StrategyDecision,
 )
+from forecast_loop.revision_retest_executor import execute_revision_retest_next_task
 from forecast_loop.storage import JsonFileRepository
 
 
@@ -1496,6 +1498,61 @@ def test_dashboard_shows_lineage_replacement_strategy_hypothesis(tmp_path):
     assert "drawdown_breach" in html
     assert "weak_baseline_edge" in html
     assert "替代策略" in html
+
+
+def test_dashboard_shows_lineage_replacement_retest_scaffold(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    _seed_dashboard_strategy_research(repository, now)
+    _seed_dashboard_revision_candidate(repository, now + timedelta(minutes=10))
+    _seed_dashboard_strategy_lineage(repository, now + timedelta(minutes=20))
+    _seed_dashboard_second_generation_strategy_lineage(repository, now + timedelta(minutes=30))
+    create_lineage_research_agenda(
+        repository=repository,
+        created_at=now + timedelta(minutes=40),
+        symbol="BTC-USD",
+    )
+    executed = execute_lineage_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=50),
+    )
+    repository.save_research_dataset(
+        ResearchDataset(
+            dataset_id="research-dataset:dashboard-replacement-retest",
+            created_at=now + timedelta(minutes=55),
+            symbol="BTC-USD",
+            row_count=0,
+            leakage_status="passed",
+            leakage_findings=[],
+            forecast_ids=[],
+            score_ids=[],
+            rows=[],
+            decision_basis="test",
+        )
+    )
+    scaffolded = execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=60),
+        revision_card_id=executed.created_artifact_ids[0],
+    )
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+    html = render_dashboard_html(snapshot)
+
+    assert snapshot.latest_lineage_replacement_retest_task_plan is not None
+    assert snapshot.latest_lineage_replacement_retest_task_plan.pending_trial_id == scaffolded.created_artifact_ids[0]
+    assert snapshot.latest_lineage_replacement_retest_task_run is not None
+    assert snapshot.latest_lineage_replacement_retest_task_run.automation_run_id == scaffolded.automation_run.automation_run_id
+    assert "替代策略 Retest Scaffold" in html
+    assert "research-dataset:dashboard-replacement-retest" in html
+    assert scaffolded.created_artifact_ids[0] in html
+    assert "lineage_replacement" in html
 
 
 def test_dashboard_lineage_research_agenda_ignores_other_lineage(tmp_path):

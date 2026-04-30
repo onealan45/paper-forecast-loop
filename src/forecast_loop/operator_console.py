@@ -71,6 +71,8 @@ class OperatorConsoleSnapshot:
     latest_lineage_research_task_plan: LineageResearchTaskPlan | None
     latest_lineage_research_task_run: AutomationRun | None
     latest_lineage_replacement_strategy_card: StrategyCard | None
+    latest_lineage_replacement_retest_task_plan: RevisionRetestTaskPlan | None
+    latest_lineage_replacement_retest_task_run: AutomationRun | None
     latest_strategy_revision_card: StrategyCard | None
     latest_strategy_revision_agenda: ResearchAgenda | None
     latest_strategy_revision_source_outcome: PaperShadowOutcome | None
@@ -171,6 +173,16 @@ def build_operator_console_snapshot(
     lineage_research_agenda = _lineage_research_agenda_for_plan(research_agendas, lineage_research_task_plan)
     if lineage_research_agenda is None:
         lineage_research_agenda = _latest_lineage_research_agenda(research_agendas, lineage_summary)
+    lineage_replacement_card = _latest_lineage_replacement_strategy_card(
+        strategy_cards,
+        lineage_research_task_plan,
+    )
+    lineage_replacement_retest_task_plan = _safe_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=storage_path,
+        symbol=symbol,
+        revision_card=lineage_replacement_card,
+    )
 
     return OperatorConsoleSnapshot(
         storage_dir=storage_path,
@@ -198,9 +210,11 @@ def build_operator_console_snapshot(
             automation_runs,
             lineage_research_task_plan,
         ),
-        latest_lineage_replacement_strategy_card=_latest_lineage_replacement_strategy_card(
-            strategy_cards,
-            lineage_research_task_plan,
+        latest_lineage_replacement_strategy_card=lineage_replacement_card,
+        latest_lineage_replacement_retest_task_plan=lineage_replacement_retest_task_plan,
+        latest_lineage_replacement_retest_task_run=_latest_revision_retest_executor_run(
+            automation_runs,
+            lineage_replacement_retest_task_plan,
         ),
         latest_strategy_revision_card=revision_card,
         latest_strategy_revision_agenda=(
@@ -334,6 +348,33 @@ def _latest_revision_retest_task_run(
         if automation_run_matches_revision_retest_plan(run, task_plan)
     ]
     return max(matches, key=lambda run: run.completed_at) if matches else None
+
+
+def _latest_revision_retest_executor_run(
+    runs: list[AutomationRun],
+    task_plan: RevisionRetestTaskPlan | None,
+) -> AutomationRun | None:
+    if task_plan is None:
+        return None
+    matches = [
+        run
+        for run in runs
+        if run.symbol == task_plan.symbol
+        and run.provider == "research"
+        and run.command == "execute-revision-retest-next-task"
+        and run.decision_basis == "revision_retest_task_execution"
+        and _automation_step_artifact_id(run, "revision_card") == task_plan.strategy_card_id
+        and _automation_step_artifact_id(run, "source_outcome") == task_plan.source_outcome_id
+    ]
+    return max(matches, key=lambda run: run.completed_at) if matches else None
+
+
+def _automation_step_artifact_id(run: AutomationRun, name: str) -> str | None:
+    for step in run.steps:
+        if step.get("name") == name:
+            artifact_id = step.get("artifact_id")
+            return str(artifact_id) if artifact_id is not None else None
+    return None
 
 
 def _latest_lineage_research_task_run(
@@ -852,6 +893,11 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
     agenda = snapshot.latest_research_agenda
     autopilot = snapshot.latest_research_autopilot_run
     lineage = snapshot.latest_strategy_lineage_summary
+    replacement_panel = _lineage_replacement_strategy_panel(
+        snapshot.latest_lineage_replacement_strategy_card,
+        snapshot.latest_lineage_replacement_retest_task_plan,
+        snapshot.latest_lineage_replacement_retest_task_run,
+    )
     return f"""
 <section class="grid">
   <article class="panel wide">
@@ -881,7 +927,7 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
   {_lineage_research_agenda_panel(snapshot.latest_lineage_research_agenda)}
   {_lineage_research_task_plan_panel(snapshot.latest_lineage_research_task_plan)}
   {_lineage_research_task_run_panel(snapshot.latest_lineage_research_task_run)}
-  {_lineage_replacement_strategy_panel(snapshot.latest_lineage_replacement_strategy_card)}
+  {replacement_panel}
   <article class="panel">
     <h3>Leaderboard</h3>
     <p>ID：{_artifact_id(leaderboard, "entry_id")}</p>
@@ -1021,13 +1067,19 @@ def _lineage_research_task_run_panel(run: AutomationRun | None) -> str:
 """
 
 
-def _lineage_replacement_strategy_panel(card: StrategyCard | None) -> str:
+def _lineage_replacement_strategy_panel(
+    card: StrategyCard | None,
+    retest_plan: RevisionRetestTaskPlan | None,
+    retest_run: AutomationRun | None,
+) -> str:
     if card is None:
         return ""
     source_outcome_id = str(card.parameters.get("replacement_source_outcome_id") or "none")
     root_card_id = str(card.parameters.get("replacement_source_lineage_root_card_id") or "none")
     attributions = card.parameters.get("replacement_failure_attributions", [])
     attribution_list = [str(item) for item in attributions] if isinstance(attributions, list) else [str(attributions)]
+    scaffold_task = retest_plan.task_by_id("create_revision_retest_scaffold") if retest_plan else None
+    next_task = retest_plan.task_by_id(retest_plan.next_task_id) if retest_plan and retest_plan.next_task_id else None
     return f"""
   <article class="panel wide">
     <h3>Lineage 替代策略假說</h3>
@@ -1046,8 +1098,22 @@ def _lineage_replacement_strategy_panel(card: StrategyCard | None) -> str:
     {_plain_list(card.entry_rules + card.exit_rules + card.risk_rules)}
     <h4>Parameters</h4>
     {_dict_rows(card.parameters)}
+    <h4>替代策略 Retest Scaffold</h4>
+    <p>Trial：<code>{escape(retest_plan.pending_trial_id if retest_plan and retest_plan.pending_trial_id else "尚未建立")}</code></p>
+    <p>Dataset：<code>{escape(retest_plan.dataset_id if retest_plan and retest_plan.dataset_id else "n/a")}</code></p>
+    <p>Scaffold status：{escape(scaffold_task.status if scaffold_task else "無 plan")}</p>
+    <p>Retest kind：<code>{escape(_replacement_retest_kind(retest_plan))}</code></p>
+    <p>Next task：<code>{escape(next_task.task_id if next_task else "none")}</code> / {escape(next_task.status if next_task else "completed")}</p>
+    <p>Latest executor run：{_artifact_id(retest_run, "automation_run_id")} / {escape(retest_run.status if retest_run else "尚未執行")}</p>
+    <p class="muted">這裡只顯示替代策略是否已進入 retest scaffold；不代表策略通過、晉級或下單。</p>
   </article>
 """
+
+
+def _replacement_retest_kind(plan: RevisionRetestTaskPlan | None) -> str:
+    if plan is None or plan.pending_trial_id is None:
+        return "not_scaffolded"
+    return "lineage_replacement"
 
 
 def _strategy_lineage_panel(summary: StrategyLineageSummary | None) -> str:

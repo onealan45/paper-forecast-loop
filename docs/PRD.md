@@ -731,6 +731,9 @@ V1 MVP should include:
   `execute-revision-retest-next-task`, limited to creating the pending retest
   scaffold from an available research dataset and recording the research
   automation run
+- dashboard and operator console visibility for replacement retest scaffold
+  state, so the UX shows that a new replacement hypothesis has entered the
+  retest chain and what task/run comes next
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

@@ -1583,12 +1583,20 @@ def _dashboard_run_step_list(run: AutomationRun) -> str:
         return '<span class="micro-copy">沒有 step 記錄。</span>'
     rows = "".join(
         "<li>"
-        f"{escape(step.get('name') or '')}: {escape(step.get('status') or '')} "
+        f"{escape(_dashboard_run_step_name(step.get('name') or ''))}: {escape(step.get('status') or '')} "
         f"<code>{escape(step.get('artifact_id') or 'none')}</code>"
         "</li>"
         for step in run.steps
     )
     return f'<ul class="compact-list">{rows}</ul>'
+
+
+def _dashboard_run_step_name(name: str) -> str:
+    labels = {
+        "next_task_blocked_reason": "下一個任務阻擋原因",
+        "next_task_missing_inputs": "缺少證據輸入",
+    }
+    return labels.get(name, name)
 
 
 def _dashboard_automation_status_class(status: str) -> str:

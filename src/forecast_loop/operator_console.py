@@ -1843,12 +1843,20 @@ def _automation_steps(run: AutomationRun) -> str:
         return '<p class="muted">沒有 step 記錄。</p>'
     rows = "".join(
         "<li>"
-        f"{escape(step.get('name') or '')}: {escape(step.get('status') or '')} "
+        f"{escape(_automation_step_name(step.get('name') or ''))}: {escape(step.get('status') or '')} "
         f"<code>{escape(step.get('artifact_id') or 'none')}</code>"
         "</li>"
         for step in run.steps
     )
     return f'<ul class="conditions">{rows}</ul>'
+
+
+def _automation_step_name(name: str) -> str:
+    labels = {
+        "next_task_blocked_reason": "下一個任務阻擋原因",
+        "next_task_missing_inputs": "缺少證據輸入",
+    }
+    return labels.get(name, name)
 
 
 def _automation_status_class(status: str) -> str:

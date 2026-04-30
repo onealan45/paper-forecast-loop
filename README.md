@@ -286,6 +286,9 @@ factory:
 - PR69 persists blocked lineage next-task context in automation run logs, so
   `record-lineage-research-task-run` carries the blocked reason and missing
   evidence inputs without requiring the next worker to rebuild the task plan.
+- PR70 translates those blocked run-log fields in dashboard and operator
+  console views, so the UX shows human-readable Traditional Chinese labels
+  instead of raw `next_task_*` step names.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

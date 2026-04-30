@@ -1430,6 +1430,45 @@ def test_dashboard_lineage_research_agenda_visibility(tmp_path):
     assert "drawdown_breach" in html
 
 
+def test_dashboard_run_steps_translate_lineage_blocked_context():
+    from forecast_loop.dashboard import _dashboard_run_step_list
+
+    run = AutomationRun(
+        automation_run_id="automation-run:lineage-blocked",
+        started_at=datetime(2026, 5, 1, 9, 0, tzinfo=UTC),
+        completed_at=datetime(2026, 5, 1, 9, 0, tzinfo=UTC),
+        status="LINEAGE_RESEARCH_TASK_BLOCKED",
+        symbol="BTC-USD",
+        provider="research",
+        command="lineage-research-plan",
+        steps=[
+            {
+                "name": "next_task_blocked_reason",
+                "status": "blocked",
+                "artifact_id": "cross_sample_autopilot_run_missing",
+            },
+            {
+                "name": "next_task_missing_inputs",
+                "status": "blocked",
+                "artifact_id": "locked_evaluation, walk_forward_validation, paper_shadow_outcome, research_autopilot_run",
+            },
+        ],
+        health_check_id=None,
+        decision_id=None,
+        repair_request_id=None,
+        decision_basis="test",
+    )
+
+    html = _dashboard_run_step_list(run)
+
+    assert "下一個任務阻擋原因" in html
+    assert "缺少證據輸入" in html
+    assert "cross_sample_autopilot_run_missing" in html
+    assert "locked_evaluation, walk_forward_validation, paper_shadow_outcome, research_autopilot_run" in html
+    assert "next_task_blocked_reason" not in html
+    assert "next_task_missing_inputs" not in html
+
+
 def test_dashboard_lineage_research_task_run_ignores_stale_run_after_new_outcome(tmp_path):
     from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
 

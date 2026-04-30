@@ -791,6 +791,9 @@ V1 MVP should include:
 - blocked lineage task context in automation run logs, so research workers can
   read the blocked reason and missing evidence inputs from
   `record-lineage-research-task-run` output without reconstructing the plan
+- human-readable blocked context labels in dashboard and operator console run
+  logs, so lineage research blockers are visible in Traditional Chinese rather
+  than raw automation step names
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

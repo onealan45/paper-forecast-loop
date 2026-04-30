@@ -6,7 +6,10 @@ import pytest
 from forecast_loop.cli import main
 from forecast_loop.lineage_agenda import create_lineage_research_agenda
 from forecast_loop.lineage_research_plan import build_lineage_research_task_plan
-from forecast_loop.lineage_research_run_log import record_lineage_research_task_run
+from forecast_loop.lineage_research_run_log import (
+    automation_run_matches_lineage_research_plan,
+    record_lineage_research_task_run,
+)
 from forecast_loop.models import PaperShadowOutcome, StrategyCard
 from forecast_loop.storage import JsonFileRepository
 
@@ -336,9 +339,16 @@ def test_record_lineage_research_task_run_logs_ready_task_plan_without_executing
     assert run.decision_basis == "lineage_research_task_plan_run_log"
     assert result.task_plan.next_task_id == "propose_strategy_revision"
     assert any(
+        step["name"] == "latest_lineage_outcome"
+        and step["status"] == "completed"
+        and step["artifact_id"] == "paper-shadow-outcome:parent-fail"
+        for step in run.steps
+    )
+    assert any(
         step["name"] == "propose_strategy_revision" and step["status"] == "ready" and step["artifact_id"] is None
         for step in run.steps
     )
+    assert automation_run_matches_lineage_research_plan(run, result.task_plan)
     assert _changed_jsonl_files(before, after) == {"automation_runs.jsonl"}
     assert JsonFileRepository(tmp_path).load_automation_runs() == [run]
 
@@ -358,12 +368,15 @@ def test_record_lineage_research_task_run_logs_blocked_evidence_plan(tmp_path):
 
     assert result.automation_run.status == "LINEAGE_RESEARCH_TASK_BLOCKED"
     assert result.task_plan.next_task_id == "collect_lineage_shadow_evidence"
+    assert result.task_plan.latest_outcome_id is None
+    assert not any(step["name"] == "latest_lineage_outcome" for step in result.automation_run.steps)
     assert any(
         step["name"] == "collect_lineage_shadow_evidence"
         and step["status"] == "blocked"
         and step["artifact_id"] is None
         for step in result.automation_run.steps
     )
+    assert automation_run_matches_lineage_research_plan(result.automation_run, result.task_plan)
 
 
 def test_lineage_research_plan_cli_prints_machine_readable_next_task(tmp_path, capsys):

@@ -21,6 +21,21 @@ class LineageResearchRunLogResult:
         }
 
 
+def automation_run_matches_lineage_research_plan(
+    run: AutomationRun,
+    task_plan: LineageResearchTaskPlan,
+) -> bool:
+    return (
+        run.symbol == task_plan.symbol
+        and run.provider == "research"
+        and run.command == "lineage-research-plan"
+        and run.decision_basis == "lineage_research_task_plan_run_log"
+        and _step_artifact_id(run, "lineage_agenda") == task_plan.agenda_id
+        and _step_artifact_id(run, "root_strategy") == task_plan.root_card_id
+        and _step_artifact_id(run, "latest_lineage_outcome") == task_plan.latest_outcome_id
+    )
+
+
 def record_lineage_research_task_run(
     *,
     repository: ArtifactRepository,
@@ -60,6 +75,13 @@ def record_lineage_research_task_run(
     )
     repository.save_automation_run(run)
     return LineageResearchRunLogResult(automation_run=run, task_plan=task_plan)
+
+
+def _step_artifact_id(run: AutomationRun, step_name: str) -> str | None:
+    for step in run.steps:
+        if step.get("name") == step_name:
+            return step.get("artifact_id")
+    return None
 
 
 def _run_status(task_plan: LineageResearchTaskPlan) -> str:

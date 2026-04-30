@@ -33,6 +33,7 @@ from forecast_loop.models import (
     WalkForwardValidation,
 )
 from forecast_loop.lineage_research_plan import LineageResearchTaskPlan, build_lineage_research_task_plan
+from forecast_loop.lineage_research_run_log import automation_run_matches_lineage_research_plan
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.revision_retest_run_log import automation_run_matches_revision_retest_plan
 from forecast_loop.strategy_lineage import StrategyLineageSummary, build_strategy_lineage_summary
@@ -67,6 +68,7 @@ class OperatorConsoleSnapshot:
     latest_strategy_lineage_summary: StrategyLineageSummary | None
     latest_lineage_research_agenda: ResearchAgenda | None
     latest_lineage_research_task_plan: LineageResearchTaskPlan | None
+    latest_lineage_research_task_run: AutomationRun | None
     latest_strategy_revision_card: StrategyCard | None
     latest_strategy_revision_agenda: ResearchAgenda | None
     latest_strategy_revision_source_outcome: PaperShadowOutcome | None
@@ -188,6 +190,10 @@ def build_operator_console_snapshot(
         latest_strategy_lineage_summary=lineage_summary,
         latest_lineage_research_agenda=lineage_research_agenda,
         latest_lineage_research_task_plan=lineage_research_task_plan,
+        latest_lineage_research_task_run=_latest_lineage_research_task_run(
+            automation_runs,
+            lineage_research_task_plan,
+        ),
         latest_strategy_revision_card=revision_card,
         latest_strategy_revision_agenda=(
             research_chain.revision_candidate.research_agenda if research_chain.revision_candidate else None
@@ -289,6 +295,20 @@ def _latest_revision_retest_task_run(
         run
         for run in runs
         if automation_run_matches_revision_retest_plan(run, task_plan)
+    ]
+    return max(matches, key=lambda run: run.completed_at) if matches else None
+
+
+def _latest_lineage_research_task_run(
+    runs: list[AutomationRun],
+    task_plan: LineageResearchTaskPlan | None,
+) -> AutomationRun | None:
+    if task_plan is None:
+        return None
+    matches = [
+        run
+        for run in runs
+        if automation_run_matches_lineage_research_plan(run, task_plan)
     ]
     return max(matches, key=lambda run: run.completed_at) if matches else None
 
@@ -823,6 +843,7 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
   {_strategy_lineage_panel(lineage)}
   {_lineage_research_agenda_panel(snapshot.latest_lineage_research_agenda)}
   {_lineage_research_task_plan_panel(snapshot.latest_lineage_research_task_plan)}
+  {_lineage_research_task_run_panel(snapshot.latest_lineage_research_task_run)}
   <article class="panel">
     <h3>Leaderboard</h3>
     <p>ID：{_artifact_id(leaderboard, "entry_id")}</p>
@@ -942,6 +963,22 @@ def _lineage_research_task_plan_panel(plan: LineageResearchTaskPlan | None) -> s
     <h4>Rationale</h4>
     <p>{escape(next_task.rationale if next_task else "none")}</p>
     <p class="muted">只顯示，不執行。</p>
+  </article>
+"""
+
+
+def _lineage_research_task_run_panel(run: AutomationRun | None) -> str:
+    if run is None:
+        return ""
+    return f"""
+  <article class="panel wide">
+    <h3>最新 lineage task run log</h3>
+    <p>Status：<span class="{_automation_status_class(run.status)}">{escape(run.status)}</span></p>
+    <p>Run ID：<code>{escape(run.automation_run_id)}</code></p>
+    <p>Command：<code>{escape(run.command)}</code></p>
+    <p>Completed：{escape(run.completed_at.isoformat())}</p>
+    {_automation_steps(run)}
+    <p class="muted">這是 lineage research task plan 的稽核紀錄；只顯示，不執行。</p>
   </article>
 """
 

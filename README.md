@@ -202,6 +202,9 @@ factory:
 - PR45 adds `record-lineage-research-task-run`, which records the current
   lineage task plan as an `AutomationRun` audit artifact without executing the
   task or mutating strategy artifacts.
+- PR46 surfaces the latest lineage task run log in dashboard and operator
+  console strategy research pages, so the UX shows whether the next strategy
+  work item was inspected by the research loop.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

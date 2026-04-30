@@ -7,6 +7,7 @@ import pytest
 
 from forecast_loop.cli import main
 from forecast_loop.lineage_agenda import create_lineage_research_agenda
+from forecast_loop.lineage_research_run_log import record_lineage_research_task_run
 from forecast_loop.models import (
     AutomationRun,
     ExperimentTrial,
@@ -1200,19 +1201,62 @@ def test_operator_console_lineage_research_agenda_visibility(tmp_path):
         created_at=now + timedelta(minutes=40),
         symbol="BTC-USD",
     )
+    recorded = record_lineage_research_task_run(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=50),
+    )
 
     snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
     html = render_operator_console_page(snapshot, page="research")
 
     assert snapshot.latest_lineage_research_task_plan is not None
     assert snapshot.latest_lineage_research_task_plan.next_task_id == "draft_replacement_strategy_hypothesis"
+    assert snapshot.latest_lineage_research_task_run == recorded.automation_run
     assert "Lineage 研究 agenda" in html
     assert "Lineage 下一個研究任務" in html
+    assert "最新 lineage task run log" in html
+    assert "LINEAGE_RESEARCH_TASK_READY" in html
+    assert recorded.automation_run.automation_run_id in html
     assert "draft_replacement_strategy_hypothesis" in html
     assert "新策略" in html
     assert "strategy_lineage_research_agenda" in html
     assert "停止加碼此 lineage" in html
     assert "drawdown_breach" in html
+
+
+def test_operator_console_lineage_research_task_run_ignores_stale_run_after_new_outcome(tmp_path):
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_visible_strategy_research(repository, now)
+    _seed_visible_revision_candidate(repository, now + timedelta(minutes=10))
+    _seed_visible_strategy_lineage(repository, now + timedelta(minutes=20))
+    create_lineage_research_agenda(
+        repository=repository,
+        created_at=now + timedelta(minutes=30),
+        symbol="BTC-USD",
+    )
+    stale_recorded = record_lineage_research_task_run(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=40),
+    )
+    _seed_visible_second_generation_strategy_lineage(repository, now + timedelta(minutes=50))
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    html = render_operator_console_page(snapshot, page="research")
+
+    assert snapshot.latest_lineage_research_task_plan is not None
+    assert (
+        snapshot.latest_lineage_research_task_plan.latest_outcome_id
+        == "paper-shadow-outcome:visible-second-revision-quarantine"
+    )
+    assert snapshot.latest_lineage_research_task_run is None
+    assert "Lineage 下一個研究任務" in html
+    assert "最新 lineage task run log" not in html
+    assert stale_recorded.automation_run.automation_run_id not in html
 
 
 def test_operator_console_lineage_research_agenda_ignores_other_lineage(tmp_path):

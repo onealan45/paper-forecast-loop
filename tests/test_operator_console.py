@@ -1264,6 +1264,7 @@ def test_operator_console_run_steps_translate_lineage_blocked_context():
     assert "缺少證據輸入" in html
     assert "缺少 cross-sample autopilot run" in html
     assert "cross_sample_autopilot_run_missing" in html
+    assert "鎖定評估, walk-forward 驗證, paper-shadow outcome, research autopilot run" in html
     assert "locked_evaluation, walk_forward_validation, paper_shadow_outcome, research_autopilot_run" in html
     assert "next_task_blocked_reason" not in html
     assert "next_task_missing_inputs" not in html

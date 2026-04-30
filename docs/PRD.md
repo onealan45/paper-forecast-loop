@@ -727,6 +727,10 @@ V1 MVP should include:
 - replacement strategy retest scaffold support, allowing DRAFT
   `lineage_replacement_strategy_hypothesis` cards to enter the existing locked
   retest plan without promotion or execution
+- replacement strategy retest scaffold execution through
+  `execute-revision-retest-next-task`, limited to creating the pending retest
+  scaffold from an available research dataset and recording the research
+  automation run
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from forecast_loop.models import PaperShadowOutcome, ResearchAgenda, StrategyCard
 from forecast_loop.storage import ArtifactRepository
+from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
 from forecast_loop.strategy_lineage import StrategyLineageSummary, build_strategy_lineage_summary
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 
@@ -80,25 +81,31 @@ def build_lineage_research_task_plan(
     strategy_cards = [item for item in repository.load_strategy_cards() if symbol in item.symbols]
     paper_shadow_outcomes = [item for item in repository.load_paper_shadow_outcomes() if item.symbol == symbol]
     research_agendas = [item for item in repository.load_research_agendas() if item.symbol == symbol]
-    chain = resolve_latest_strategy_research_chain(
-        symbol=symbol,
-        strategy_cards=strategy_cards,
-        experiment_trials=repository.load_experiment_trials(),
-        locked_evaluations=repository.load_locked_evaluation_results(),
-        split_manifests=repository.load_split_manifests(),
-        leaderboard_entries=repository.load_leaderboard_entries(),
-        paper_shadow_outcomes=paper_shadow_outcomes,
+    agenda, summary = _latest_agenda_anchored_lineage(
         research_agendas=research_agendas,
-        research_autopilot_runs=repository.load_research_autopilot_runs(),
-    )
-    summary = build_strategy_lineage_summary(
-        root_card=chain.strategy_card,
         strategy_cards=strategy_cards,
         paper_shadow_outcomes=paper_shadow_outcomes,
     )
     if summary is None:
-        raise ValueError(f"strategy lineage not found for symbol: {symbol}")
-    agenda = _latest_lineage_research_agenda(research_agendas, summary)
+        chain = resolve_latest_strategy_research_chain(
+            symbol=symbol,
+            strategy_cards=strategy_cards,
+            experiment_trials=repository.load_experiment_trials(),
+            locked_evaluations=repository.load_locked_evaluation_results(),
+            split_manifests=repository.load_split_manifests(),
+            leaderboard_entries=repository.load_leaderboard_entries(),
+            paper_shadow_outcomes=paper_shadow_outcomes,
+            research_agendas=research_agendas,
+            research_autopilot_runs=repository.load_research_autopilot_runs(),
+        )
+        summary = build_strategy_lineage_summary(
+            root_card=chain.strategy_card,
+            strategy_cards=strategy_cards,
+            paper_shadow_outcomes=paper_shadow_outcomes,
+        )
+        if summary is None:
+            raise ValueError(f"strategy lineage not found for symbol: {symbol}")
+        agenda = _latest_lineage_research_agenda(research_agendas, summary)
     if agenda is None:
         raise ValueError(f"lineage research agenda not found for symbol: {symbol}; run create-lineage-research-agenda first")
     tasks = _build_tasks(
@@ -121,6 +128,39 @@ def build_lineage_research_task_plan(
         next_task_id=next_task.task_id if next_task else None,
         tasks=tasks,
     )
+
+
+def _latest_agenda_anchored_lineage(
+    *,
+    research_agendas: list[ResearchAgenda],
+    strategy_cards: list[StrategyCard],
+    paper_shadow_outcomes: list[PaperShadowOutcome],
+) -> tuple[ResearchAgenda | None, StrategyLineageSummary | None]:
+    card_by_id = {card.card_id: card for card in strategy_cards}
+    candidates = [
+        agenda
+        for agenda in research_agendas
+        if agenda.decision_basis == "strategy_lineage_research_agenda"
+    ]
+    for agenda in sorted(candidates, key=lambda item: item.created_at, reverse=True):
+        root_card = _root_card_for_agenda(agenda, card_by_id)
+        summary = build_strategy_lineage_summary(
+            root_card=root_card,
+            strategy_cards=strategy_cards,
+            paper_shadow_outcomes=paper_shadow_outcomes,
+        )
+        if summary is not None:
+            return agenda, summary
+    return None, None
+
+
+def _root_card_for_agenda(
+    agenda: ResearchAgenda,
+    card_by_id: dict[str, StrategyCard],
+) -> StrategyCard | None:
+    cards = [card_by_id[card_id] for card_id in agenda.strategy_card_ids if card_id in card_by_id]
+    roots = [card for card in cards if card.parent_card_id is None]
+    return roots[0] if roots else (cards[0] if cards else None)
 
 
 def _latest_lineage_research_agenda(
@@ -149,7 +189,7 @@ def _build_tasks(
     tasks = [_agenda_task(agenda, summary)]
     latest_outcome = _latest_outcome(summary.latest_outcome_id, paper_shadow_outcomes)
     if summary.latest_recommended_strategy_action == "QUARANTINE_STRATEGY":
-        tasks.append(_replacement_strategy_task(summary, latest_outcome))
+        tasks.append(_replacement_strategy_task(strategy_cards, summary, latest_outcome))
     elif summary.latest_recommended_strategy_action == "REVISE_STRATEGY" or summary.performance_verdict in {"惡化", "偏弱"}:
         tasks.append(_revision_task(storage, symbol, strategy_cards, summary, latest_outcome))
     elif summary.performance_verdict in {"改善", "偏強"}:
@@ -231,11 +271,26 @@ def _revision_task(
 
 
 def _replacement_strategy_task(
+    strategy_cards: list[StrategyCard],
     summary: StrategyLineageSummary,
     latest_outcome: PaperShadowOutcome | None,
 ) -> LineageResearchTask:
     failure = summary.primary_failure_attribution or "主要失敗"
     outcome_id = latest_outcome.outcome_id if latest_outcome is not None else "latest lineage outcome"
+    existing_replacement = _replacement_for_source_outcome(strategy_cards, outcome_id)
+    if existing_replacement is not None:
+        return LineageResearchTask(
+            task_id="draft_replacement_strategy_hypothesis",
+            title="Draft replacement strategy hypothesis",
+            status="completed",
+            required_artifact="strategy_card",
+            artifact_id=existing_replacement.card_id,
+            command_args=None,
+            worker_prompt=f"Replacement strategy {existing_replacement.card_id} already exists for {outcome_id}.",
+            blocked_reason=None,
+            missing_inputs=[],
+            rationale="A quarantined lineage already produced a replacement strategy hypothesis.",
+        )
     return LineageResearchTask(
         task_id="draft_replacement_strategy_hypothesis",
         title="Draft replacement strategy hypothesis",
@@ -302,6 +357,18 @@ def _revision_for_source_outcome(cards: list[StrategyCard], outcome_id: str) -> 
             for card in cards
             if card.decision_basis == "paper_shadow_strategy_revision_candidate"
             and card.parameters.get("revision_source_outcome_id") == outcome_id
+        ),
+        None,
+    )
+
+
+def _replacement_for_source_outcome(cards: list[StrategyCard], outcome_id: str) -> StrategyCard | None:
+    return next(
+        (
+            card
+            for card in cards
+            if card.decision_basis == REPLACEMENT_DECISION_BASIS
+            and card.parameters.get("replacement_source_outcome_id") == outcome_id
         ),
         None,
     )

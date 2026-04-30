@@ -205,6 +205,10 @@ factory:
 - PR46 surfaces the latest lineage task run log in dashboard and operator
   console strategy research pages, so the UX shows whether the next strategy
   work item was inspected by the research loop.
+- PR47 adds `execute-lineage-research-next-task` for the quarantined-lineage
+  replacement path. It turns `draft_replacement_strategy_hypothesis` into a
+  new DRAFT replacement strategy card and records the execution as an
+  `AutomationRun`.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -286,6 +290,7 @@ This version intentionally includes:
   - `create-lineage-research-agenda`
   - `lineage-research-plan`
   - `record-lineage-research-task-run`
+  - `execute-lineage-research-next-task`
   - `operator-control`
   - `repair-storage`
   - `decide`
@@ -1264,6 +1269,18 @@ python run_forecast_loop.py record-lineage-research-task-run --storage-dir .\pap
 records the current lineage agenda, root strategy, latest lineage outcome, task
 statuses, and next-task readiness so later UX and automation passes can see
 which strategy research work item was inspected.
+
+Execute the next supported lineage research task:
+
+```powershell
+python run_forecast_loop.py execute-lineage-research-next-task --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD --now 2026-04-30T13:00:00+00:00
+```
+
+Currently this executes only `draft_replacement_strategy_hypothesis`. It creates
+an idempotent DRAFT replacement `strategy_cards.jsonl` row linked to the
+quarantined lineage root and latest paper-shadow outcome, then records an
+`AutomationRun`. It does not run the replacement strategy, place an order,
+promote a card, or call any broker/exchange adapter.
 
 Create a local paper order from the latest strategy decision:
 

@@ -1298,6 +1298,9 @@ def _render_strategy_lineage_summary(summary: StrategyLineageSummary | None) -> 
           <dt>Revision Count</dt><dd>{summary.revision_count}</dd>
           <dt>Revision Cards</dt><dd>{_dashboard_list_inline(summary.revision_card_ids)}</dd>
           <dt>Revision Tree</dt><dd>{_dashboard_revision_tree(summary)}</dd>
+          <dt>Replacement Count</dt><dd>{summary.replacement_count}</dd>
+          <dt>Replacement Cards</dt><dd>{_dashboard_list_inline(summary.replacement_card_ids)}</dd>
+          <dt>Replacement Contributions</dt><dd>{_dashboard_replacement_contributions(summary)}</dd>
           <dt>表現結論</dt><dd>{_dashboard_performance_verdict(summary)}</dd>
           <dt>下一步研究焦點</dt><dd>{escape(summary.next_research_focus)}</dd>
           <dt>表現軌跡</dt><dd>{_dashboard_performance_trajectory(summary)}</dd>
@@ -1321,6 +1324,22 @@ def _dashboard_revision_tree(summary: StrategyLineageSummary) -> str:
         f" / Source {escape(node.source_outcome_id or 'none')}"
         f" / Fixes {escape('；'.join(node.failure_attributions) if node.failure_attributions else 'none')}"
         for node in summary.revision_nodes
+    )
+
+
+def _dashboard_replacement_contributions(summary: StrategyLineageSummary) -> str:
+    if not summary.replacement_nodes:
+        return "none"
+    return "<br>".join(
+        f"Replacement {escape(node.card_id)}"
+        f" / Source {escape(node.source_outcome_id or 'none')}"
+        f" / Latest {escape(node.latest_outcome_id or 'none')}"
+        f" / Action {escape(node.latest_recommended_strategy_action or 'none')}"
+        f" / Excess {_format_optional_number(node.latest_excess_return_after_costs)}"
+        f" / Status {escape(node.status)}"
+        f" / Hypothesis {escape(node.hypothesis)}"
+        f" / Failures {escape('；'.join(node.failure_attributions) if node.failure_attributions else 'none')}"
+        for node in summary.replacement_nodes
     )
 
 

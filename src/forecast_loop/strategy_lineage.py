@@ -33,12 +33,29 @@ class StrategyLineageOutcomeNode:
 
 
 @dataclass(frozen=True, slots=True)
+class StrategyLineageReplacementNode:
+    card_id: str
+    strategy_name: str
+    status: str
+    hypothesis: str
+    source_root_card_id: str
+    source_outcome_id: str | None
+    failure_attributions: list[str]
+    latest_outcome_id: str | None
+    latest_recommended_strategy_action: str | None
+    latest_excess_return_after_costs: float | None
+
+
+@dataclass(frozen=True, slots=True)
 class StrategyLineageSummary:
     root_card_id: str
     revision_card_ids: list[str]
     revision_nodes: list[StrategyLineageRevisionNode]
+    replacement_card_ids: list[str]
+    replacement_nodes: list[StrategyLineageReplacementNode]
     outcome_nodes: list[StrategyLineageOutcomeNode]
     revision_count: int
+    replacement_count: int
     outcome_count: int
     action_counts: dict[str, int]
     failure_attribution_counts: dict[str, int]
@@ -78,6 +95,7 @@ def build_strategy_lineage_summary(
         key=lambda outcome: (outcome.created_at, outcome.outcome_id),
     )
     outcome_nodes = _lineage_outcome_nodes(lineage_outcomes)
+    replacement_nodes = _lineage_replacement_nodes(root_card, replacement_cards, lineage_outcomes)
     excess_returns = [
         outcome.excess_return_after_costs
         for outcome in lineage_outcomes
@@ -99,8 +117,11 @@ def build_strategy_lineage_summary(
         root_card_id=root_card.card_id,
         revision_card_ids=[card.card_id for card in revision_cards],
         revision_nodes=revision_nodes,
+        replacement_card_ids=[card.card_id for card in replacement_cards],
+        replacement_nodes=replacement_nodes,
         outcome_nodes=outcome_nodes,
         revision_count=len(revision_cards),
+        replacement_count=len(replacement_cards),
         outcome_count=len(lineage_outcomes),
         action_counts=action_counts,
         failure_attribution_counts=failure_attribution_counts,
@@ -188,6 +209,45 @@ def _lineage_replacement_cards(
         and _string_parameter(card, "replacement_source_lineage_root_card_id") == root_card.card_id
     ]
     return sorted(replacements, key=lambda card: (card.created_at, card.card_id))
+
+
+def _lineage_replacement_nodes(
+    root_card: StrategyCard,
+    replacement_cards: list[StrategyCard],
+    lineage_outcomes: list[PaperShadowOutcome],
+) -> list[StrategyLineageReplacementNode]:
+    outcomes_by_card_id: dict[str, list[PaperShadowOutcome]] = {}
+    for outcome in lineage_outcomes:
+        outcomes_by_card_id.setdefault(outcome.strategy_card_id, []).append(outcome)
+
+    nodes: list[StrategyLineageReplacementNode] = []
+    for card in replacement_cards:
+        latest_outcome = _latest_outcome(outcomes_by_card_id.get(card.card_id, []))
+        nodes.append(
+            StrategyLineageReplacementNode(
+                card_id=card.card_id,
+                strategy_name=card.strategy_name,
+                status=card.status,
+                hypothesis=card.hypothesis,
+                source_root_card_id=root_card.card_id,
+                source_outcome_id=_string_parameter(card, "replacement_source_outcome_id"),
+                failure_attributions=_string_list_parameter(card, "replacement_failure_attributions"),
+                latest_outcome_id=latest_outcome.outcome_id if latest_outcome else None,
+                latest_recommended_strategy_action=(
+                    latest_outcome.recommended_strategy_action if latest_outcome else None
+                ),
+                latest_excess_return_after_costs=(
+                    latest_outcome.excess_return_after_costs if latest_outcome else None
+                ),
+            )
+        )
+    return nodes
+
+
+def _latest_outcome(outcomes: list[PaperShadowOutcome]) -> PaperShadowOutcome | None:
+    if not outcomes:
+        return None
+    return max(outcomes, key=lambda outcome: (outcome.created_at, outcome.outcome_id))
 
 
 def _string_parameter(card: StrategyCard, key: str) -> str | None:

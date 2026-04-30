@@ -129,6 +129,11 @@ def _steps(task_plan: LineageResearchTaskPlan) -> list[dict[str, str | None]]:
         steps.extend(
             [
                 {
+                    "name": "next_task_required_artifact",
+                    "status": next_task.status,
+                    "artifact_id": next_task.required_artifact,
+                },
+                {
                     "name": "next_task_worker_prompt",
                     "status": next_task.status,
                     "artifact_id": next_task.worker_prompt,

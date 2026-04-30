@@ -296,6 +296,9 @@ factory:
   while keeping the raw code list visible.
 - PR73 centralizes automation step display copy so dashboard and operator
   console render lineage blocker labels and values from the same helper.
+- PR74 persists each lineage run log's next required artifact explicitly, so a
+  downstream research worker can identify the expected output from the run log
+  without rebuilding the full task plan.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

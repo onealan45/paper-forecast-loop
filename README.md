@@ -280,6 +280,9 @@ factory:
 - PR67 makes blocked cross-sample task plans more actionable by carrying the
   agenda's expected evidence artifacts in `missing_inputs` before the linked
   autopilot run is accepted.
+- PR68 makes the blocked cross-sample worker handoff concrete by naming the
+  agenda id, strategy cards, latest lineage outcome, and expected fresh-sample
+  evidence directly in the task prompt.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

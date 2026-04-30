@@ -776,6 +776,9 @@ V1 MVP should include:
 - lineage research task planning for linked cross-sample autopilot runs, so an
   agenda handoff is not treated as the end of validation until a completed
   fresh-sample research autopilot run is linked
+- cross-sample UX validity filtering, so dashboard and operator console panels
+  do not present blocked, missing-outcome, stale-outcome, or unrelated
+  same-symbol autopilot runs as valid fresh-sample lineage evidence
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

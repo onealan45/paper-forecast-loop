@@ -270,6 +270,10 @@ factory:
   not stop at agenda creation: once the agenda exists, the plan requires a
   linked `research_autopilot_run` before the fresh-sample validation task chain
   is treated as fully complete.
+- PR65 hardens cross-sample UX evidence selection: dashboard and operator
+  console now show linked fresh-sample runs only when the run is unblocked,
+  points to an existing paper-shadow outcome, matches the current lineage
+  latest outcome, and belongs to the current root/revision/replacement lineage.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

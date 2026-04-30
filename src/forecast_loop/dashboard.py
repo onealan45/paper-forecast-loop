@@ -1335,7 +1335,7 @@ def _render_lineage_replacement_strategy(
             <dt>Basis</dt><dd>{escape(card.decision_basis)}</dd>
             <dt>來源 lineage</dt><dd><code>{escape(root_card_id)}</code></dd>
             <dt>來源 outcome</dt><dd><code>{escape(source_outcome_id)}</code></dd>
-            <dt>Failure attribution</dt><dd>{_dashboard_list_inline(attribution_list)}</dd>
+            <dt>Failure attribution</dt><dd>{_dashboard_list_inline([_display_failure_attribution_codes(attribution_list)])}</dd>
           </dl>
         </div>
         <div class="evidence-block">
@@ -1421,7 +1421,7 @@ def _dashboard_revision_tree(summary: StrategyLineageSummary) -> str:
         f" / {escape(node.status)} / Name {escape(node.strategy_name)}"
         f" / Hypothesis {escape(node.hypothesis)}"
         f" / Source {escape(node.source_outcome_id or 'none')}"
-        f" / Fixes {escape('；'.join(node.failure_attributions) if node.failure_attributions else 'none')}"
+        f" / Fixes {escape(_display_failure_attribution_codes(node.failure_attributions))}"
         for node in summary.revision_nodes
     )
 
@@ -1437,7 +1437,7 @@ def _dashboard_replacement_contributions(summary: StrategyLineageSummary) -> str
         f" / Excess {_format_optional_number(node.latest_excess_return_after_costs)}"
         f" / Status {escape(node.status)}"
         f" / Hypothesis {escape(node.hypothesis)}"
-        f" / Failures {escape('；'.join(node.failure_attributions) if node.failure_attributions else 'none')}"
+        f" / Failures {escape(_display_failure_attribution_codes(node.failure_attributions))}"
         for node in summary.replacement_nodes
     )
 
@@ -1450,7 +1450,7 @@ def _dashboard_performance_verdict(summary: StrategyLineageSummary) -> str:
         f" / 未知 {summary.unknown_outcome_count}"
         f" / 最新 {escape(summary.latest_change_label)}"
         f" / Delta {_format_optional_number(summary.latest_delta_vs_previous_excess)}"
-        f" / 主要失敗 {escape(summary.primary_failure_attribution or 'none')}"
+        f" / 主要失敗 {escape(_display_failure_attribution_code(summary.primary_failure_attribution))}"
         f" / 最新動作 {escape(summary.latest_recommended_strategy_action or 'none')}"
     )
 
@@ -1464,7 +1464,7 @@ def _dashboard_performance_trajectory(summary: StrategyLineageSummary) -> str:
         f" / Delta {_format_optional_number(node.delta_vs_previous_excess)}"
         f" / {escape(node.change_label)}"
         f" / Action {escape(node.recommended_strategy_action)}"
-        f" / Failures {escape('；'.join(node.failure_attributions) if node.failure_attributions else 'none')}"
+        f" / Failures {escape(_display_failure_attribution_codes(node.failure_attributions))}"
         for node in summary.outcome_nodes
     )
 
@@ -2450,7 +2450,19 @@ def _dashboard_artifact_id(item: object | None, field: str) -> str:
 def _display_failure_attributions(outcome: PaperShadowOutcome | None) -> list[str]:
     if outcome is None or not outcome.failure_attributions:
         return []
-    return [format_failure_attributions(outcome.failure_attributions)]
+    return [_display_failure_attribution_codes(outcome.failure_attributions)]
+
+
+def _display_failure_attribution_codes(attributions: list[str]) -> str:
+    if not attributions:
+        return "none"
+    return format_failure_attributions(attributions)
+
+
+def _display_failure_attribution_code(attribution: str | None) -> str:
+    if not attribution:
+        return "none"
+    return format_failure_attributions([attribution])
 
 
 def _dashboard_list_inline(items: list[str]) -> str:

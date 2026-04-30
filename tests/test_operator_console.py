@@ -1227,10 +1227,10 @@ def test_operator_console_strategy_lineage_includes_multi_generation_revisions(t
         assert "Name BTC strategy visibility second revision" in html
         assert "Hypothesis Second revision should inherit the original visible strategy lineage." in html
         assert "Source paper-shadow-outcome:visible-revision-quarantine" in html
-        assert "Fixes drawdown_breach, weak_baseline_edge" in html
+        assert "Fixes 回撤超標 (drawdown_breach), 基準優勢不足 (weak_baseline_edge)" in html
         assert "表現結論" in html
         assert "改善 0 / 惡化 2 / 未知 0" in html
-        assert "主要失敗 drawdown_breach" in html
+        assert "主要失敗 回撤超標 (drawdown_breach)" in html
         assert "最新動作 QUARANTINE_STRATEGY" in html
         assert "下一步研究焦點" in html
         assert "停止加碼此 lineage，優先研究 drawdown_breach 的修正或新策略。" in html
@@ -1455,6 +1455,11 @@ def test_operator_console_shows_lineage_replacement_strategy_hypothesis(tmp_path
     assert executed.created_artifact_ids[0] in html
     assert "lineage_replacement_strategy_hypothesis" in html
     assert "paper-shadow-outcome:visible-second-revision-quarantine" in html
+    replacement_start = html.index("Lineage 替代策略假說")
+    replacement_end = html.index("<h4>替代策略假說</h4>", replacement_start)
+    replacement_section = html[replacement_start:replacement_end]
+    assert "回撤超標 (drawdown_breach)" in replacement_section
+    assert "基準優勢不足 (weak_baseline_edge)" in replacement_section
     assert "drawdown_breach" in html
     assert "weak_baseline_edge" in html
     assert "替代策略" in html

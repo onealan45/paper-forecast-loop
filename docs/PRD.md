@@ -573,6 +573,8 @@ Outcome grades and core metric labels should follow the same rule: human label
 first, raw grade code retained when the raw code is operationally meaningful.
 Detailed paper-shadow attribution panels should reuse the same readable labels
 as the headline conclusion so the UX does not switch back to raw-only codes.
+Lineage views should follow the same rule for revision fixes, replacement
+failures, performance verdicts, and trajectories.
 
 ## 10.3 Data Scope
 

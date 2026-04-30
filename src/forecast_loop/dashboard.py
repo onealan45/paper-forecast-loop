@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 import tomllib
 
-from forecast_loop.automation_step_display import display_step_artifact, display_step_name
+from forecast_loop.automation_step_display import display_required_artifacts, display_step_artifact, display_step_name
 from forecast_loop.health import run_health_check
 from forecast_loop.models import (
     AutomationRun,
@@ -1508,7 +1508,7 @@ def _render_strategy_revision_candidate(snapshot: DashboardSnapshot) -> str:
           <dt>Retest Trial</dt><dd>{_dashboard_artifact_id(retest_trial, "trial_id")} / {escape(retest_trial.status if retest_trial else "尚未建立")}</dd>
           <dt>Dataset</dt><dd>{escape(retest_trial.dataset_id if retest_trial and retest_trial.dataset_id else "n/a")}</dd>
           <dt>Locked Split</dt><dd>{_dashboard_artifact_id(retest_split, "manifest_id")} / {escape(retest_split.status if retest_split else "尚未鎖定")}</dd>
-          <dt>Next Required</dt><dd>{_dashboard_list_inline(snapshot.latest_strategy_revision_next_required_artifacts)}</dd>
+          <dt>Next Required</dt><dd>{_dashboard_list_inline(display_required_artifacts(snapshot.latest_strategy_revision_next_required_artifacts))}</dd>
         </dl>
         {_render_revision_retest_task_plan(snapshot.latest_strategy_revision_retest_task_plan)}
         {_render_revision_retest_task_run(snapshot.latest_strategy_revision_retest_task_run)}

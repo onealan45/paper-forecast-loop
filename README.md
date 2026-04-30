@@ -311,6 +311,8 @@ factory:
 - PR78 extends the same readable artifact and missing-input copy to revision
   retest task-plan panels, keeping strategy-revision research steps scanable
   without hiding machine codes.
+- PR79 renders revision retest scaffold `Next Required` lists through the same
+  shared artifact copy, so scaffold summaries and task-plan panels stay aligned.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

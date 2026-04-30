@@ -1134,6 +1134,9 @@ def test_dashboard_shows_strategy_revision_retest_scaffold(tmp_path):
     assert "research-dataset:dashboard-revision-retest" in html
     assert "PENDING" in html
     assert "split-manifest:dashboard-revision-retest" in html
+    assert "baseline 評估 (baseline_evaluation)" in html
+    assert "回測結果 (backtest_result)" in html
+    assert "鎖定評估結果 (locked_evaluation_result)" in html
     assert "baseline_evaluation" in html
     assert "backtest_result" in html
     assert "locked_evaluation_result" in html

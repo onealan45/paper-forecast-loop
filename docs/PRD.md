@@ -814,6 +814,8 @@ V1 MVP should include:
 - readable required artifact and missing-input copy in revision retest
   task-plan panels, so strategy-revision research steps are as readable as
   lineage tasks
+- readable revision retest scaffold next-required lists, so scaffold summaries
+  and task plans describe required artifacts with the same copy
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

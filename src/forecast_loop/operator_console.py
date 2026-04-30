@@ -8,7 +8,7 @@ from pathlib import Path
 import socket
 from urllib.parse import urlparse
 
-from forecast_loop.automation_step_display import display_step_artifact, display_step_name
+from forecast_loop.automation_step_display import display_required_artifacts, display_step_artifact, display_step_name
 from forecast_loop.control import PaperControlState, current_control_state
 from forecast_loop.health import run_health_check
 from forecast_loop.models import (
@@ -1667,7 +1667,7 @@ def _revision_candidate_panel(snapshot: OperatorConsoleSnapshot, *, wide: bool) 
     <p>Dataset：<code>{escape(retest_trial.dataset_id if retest_trial and retest_trial.dataset_id else "n/a")}</code></p>
     <p>Locked split：{_artifact_id(retest_split, "manifest_id")} / {escape(retest_split.status if retest_split else "尚未鎖定")}</p>
     <p>Next required：</p>
-    {_plain_list(snapshot.latest_strategy_revision_next_required_artifacts)}
+    {_plain_list(display_required_artifacts(snapshot.latest_strategy_revision_next_required_artifacts))}
     {_revision_retest_task_plan_panel(snapshot.latest_strategy_revision_retest_task_plan)}
     {_revision_retest_task_run_panel(snapshot.latest_strategy_revision_retest_task_run)}
     {_revision_retest_autopilot_run_panel(snapshot.latest_strategy_revision_retest_autopilot_run)}
@@ -1773,7 +1773,7 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
 {_revision_retest_task_plan_panel(snapshot.latest_strategy_revision_retest_task_plan)}
 {_revision_retest_task_run_panel(snapshot.latest_strategy_revision_retest_task_run)}
 {_revision_retest_autopilot_run_panel(snapshot.latest_strategy_revision_retest_autopilot_run)}
-{_plain_list(snapshot.latest_strategy_revision_next_required_artifacts, empty="目前沒有 pending retest scaffold")}
+{_plain_list(display_required_artifacts(snapshot.latest_strategy_revision_next_required_artifacts), empty="目前沒有 pending retest scaffold")}
 {_plain_list(revision.entry_rules + revision.exit_rules + revision.risk_rules if revision else [], empty="目前沒有 DRAFT 修正候選")}
 """
 

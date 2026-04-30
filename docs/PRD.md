@@ -782,6 +782,9 @@ V1 MVP should include:
 - shared research-UX selectors, so dashboard and operator console apply the
   same cross-sample and retest evidence filters instead of carrying duplicated
   selector logic that can drift between surfaces
+- actionable cross-sample task-plan blockers, so blocked fresh-sample validation
+  tasks list the expected locked evaluation, walk-forward, paper-shadow outcome,
+  and linked autopilot run inputs rather than only saying a run is missing
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

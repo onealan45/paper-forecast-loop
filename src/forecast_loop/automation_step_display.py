@@ -5,6 +5,7 @@ def display_step_name(name: str) -> str:
     labels = {
         "next_task_blocked_reason": "下一個任務阻擋原因",
         "next_task_missing_inputs": "缺少證據輸入",
+        "next_task_required_artifact": "下一個任務要求產物",
     }
     return labels.get(name, name)
 
@@ -16,7 +17,19 @@ def display_step_artifact(name: str, artifact_id: str | None) -> str:
         return f"缺少 cross-sample autopilot run ({artifact_id})"
     if name == "next_task_missing_inputs":
         return f"{_missing_input_copy(artifact_id)} ({artifact_id})"
+    if name == "next_task_required_artifact":
+        return f"{_artifact_copy(artifact_id)} ({artifact_id})"
     return artifact_id
+
+
+def _artifact_copy(artifact_id: str) -> str:
+    labels = {
+        "research_agenda": "研究議程",
+        "research_autopilot_run": "研究自動化執行紀錄",
+        "strategy_card": "策略卡",
+        "paper_shadow_outcome": "paper-shadow 結果",
+    }
+    return labels.get(artifact_id, artifact_id)
 
 
 def _missing_input_copy(artifact_id: str) -> str:

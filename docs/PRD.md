@@ -804,6 +804,9 @@ V1 MVP should include:
 - explicit next required artifact entries in lineage task run logs, so
   downstream research workers can tell which artifact type to produce without
   reconstructing the task plan
+- readable next required artifact copy in dashboard and operator console run
+  logs, so those artifact targets are understandable in Traditional Chinese
+  while raw machine codes stay visible
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

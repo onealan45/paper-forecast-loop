@@ -67,6 +67,41 @@ def _revision_card(
     )
 
 
+def _replacement_card(
+    card_id: str,
+    *,
+    root_card_id: str,
+    source_outcome_id: str,
+) -> StrategyCard:
+    card = _card(card_id, status="DRAFT")
+    return StrategyCard(
+        card_id=card.card_id,
+        created_at=card.created_at,
+        strategy_name=card.strategy_name,
+        strategy_family=card.strategy_family,
+        version=card.version,
+        status=card.status,
+        symbols=card.symbols,
+        hypothesis="Replacement strategy after lineage quarantine.",
+        signal_description=card.signal_description,
+        entry_rules=card.entry_rules,
+        exit_rules=card.exit_rules,
+        risk_rules=card.risk_rules,
+        parameters={
+            "replacement_source_lineage_root_card_id": root_card_id,
+            "replacement_source_outcome_id": source_outcome_id,
+        },
+        data_requirements=card.data_requirements,
+        feature_snapshot_ids=card.feature_snapshot_ids,
+        backtest_result_ids=card.backtest_result_ids,
+        walk_forward_validation_ids=card.walk_forward_validation_ids,
+        event_edge_evaluation_ids=card.event_edge_evaluation_ids,
+        parent_card_id=None,
+        author=card.author,
+        decision_basis="lineage_replacement_strategy_hypothesis",
+    )
+
+
 def _outcome(
     outcome_id: str,
     *,
@@ -138,6 +173,104 @@ def test_strategy_lineage_summary_counts_revisions_actions_and_failures():
     assert summary.best_excess_return_after_costs == -0.03
     assert summary.worst_excess_return_after_costs == -0.08
     assert summary.latest_outcome_id == "revision-fail"
+
+
+def test_strategy_lineage_summary_includes_root_linked_replacement_outcomes():
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    parent = _card("strategy-card:parent")
+    revision = _card("strategy-card:revision", parent_card_id=parent.card_id, status="DRAFT")
+    replacement = _replacement_card(
+        "strategy-card:replacement",
+        root_card_id=parent.card_id,
+        source_outcome_id="revision-fail",
+    )
+
+    summary = build_strategy_lineage_summary(
+        root_card=parent,
+        strategy_cards=[parent, revision, replacement],
+        paper_shadow_outcomes=[
+            _outcome(
+                "parent-fail",
+                card_id=parent.card_id,
+                created_at=now,
+                action="REVISE_STRATEGY",
+                excess=-0.03,
+                attributions=["negative_excess_return"],
+            ),
+            _outcome(
+                "revision-fail",
+                card_id=revision.card_id,
+                created_at=now + timedelta(hours=1),
+                action="QUARANTINE_STRATEGY",
+                excess=-0.08,
+                attributions=["drawdown_breach"],
+            ),
+            _outcome(
+                "replacement-pass",
+                card_id=replacement.card_id,
+                created_at=now + timedelta(hours=2),
+                action="PROMOTION_READY",
+                excess=0.04,
+                attributions=[],
+            ),
+        ],
+    )
+
+    assert summary.outcome_count == 3
+    assert summary.latest_outcome_id == "replacement-pass"
+    assert summary.action_counts == {
+        "PROMOTION_READY": 1,
+        "QUARANTINE_STRATEGY": 1,
+        "REVISE_STRATEGY": 1,
+    }
+    assert summary.best_excess_return_after_costs == 0.04
+    assert summary.improved_outcome_count == 1
+
+
+def test_strategy_lineage_summary_resolves_root_when_current_card_is_replacement():
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    parent = _card("strategy-card:parent")
+    revision = _card("strategy-card:revision", parent_card_id=parent.card_id, status="DRAFT")
+    replacement = _replacement_card(
+        "strategy-card:replacement",
+        root_card_id=parent.card_id,
+        source_outcome_id="revision-fail",
+    )
+
+    summary = build_strategy_lineage_summary(
+        root_card=replacement,
+        strategy_cards=[parent, revision, replacement],
+        paper_shadow_outcomes=[
+            _outcome(
+                "parent-fail",
+                card_id=parent.card_id,
+                created_at=now,
+                action="REVISE_STRATEGY",
+                excess=-0.03,
+                attributions=["negative_excess_return"],
+            ),
+            _outcome(
+                "revision-fail",
+                card_id=revision.card_id,
+                created_at=now + timedelta(hours=1),
+                action="QUARANTINE_STRATEGY",
+                excess=-0.08,
+                attributions=["drawdown_breach"],
+            ),
+            _outcome(
+                "replacement-pass",
+                card_id=replacement.card_id,
+                created_at=now + timedelta(hours=2),
+                action="PROMOTION_READY",
+                excess=0.04,
+                attributions=[],
+            ),
+        ],
+    )
+
+    assert summary.root_card_id == parent.card_id
+    assert summary.outcome_count == 3
+    assert summary.latest_outcome_id == "replacement-pass"
 
 
 def test_strategy_lineage_summary_resolves_parent_when_current_card_is_revision():

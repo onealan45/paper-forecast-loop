@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from forecast_loop.models import PaperShadowOutcome, StrategyCard
 
 
+REPLACEMENT_DECISION_BASIS = "lineage_replacement_strategy_hypothesis"
+
+
 @dataclass(frozen=True, slots=True)
 class StrategyLineageRevisionNode:
     card_id: str
@@ -64,7 +67,12 @@ def build_strategy_lineage_summary(
 
     root_card = _lineage_root_card(root_card, strategy_cards)
     revision_cards, revision_nodes = _lineage_revision_tree(root_card, strategy_cards)
-    lineage_card_ids = {root_card.card_id, *(card.card_id for card in revision_cards)}
+    replacement_cards = _lineage_replacement_cards(root_card, strategy_cards)
+    lineage_card_ids = {
+        root_card.card_id,
+        *(card.card_id for card in revision_cards),
+        *(card.card_id for card in replacement_cards),
+    }
     lineage_outcomes = sorted(
         [outcome for outcome in paper_shadow_outcomes if outcome.strategy_card_id in lineage_card_ids],
         key=lambda outcome: (outcome.created_at, outcome.outcome_id),
@@ -113,6 +121,9 @@ def build_strategy_lineage_summary(
 
 def _lineage_root_card(card: StrategyCard, strategy_cards: list[StrategyCard]) -> StrategyCard:
     parent_by_id = {candidate.card_id: candidate for candidate in strategy_cards}
+    replacement_root_id = _string_parameter(card, "replacement_source_lineage_root_card_id")
+    if card.decision_basis == REPLACEMENT_DECISION_BASIS and replacement_root_id in parent_by_id:
+        return parent_by_id[replacement_root_id]
     current = card
     visited = {card.card_id}
     while current.parent_card_id is not None:
@@ -163,6 +174,20 @@ def _lineage_revision_tree(
         )
         stack.extend((child, depth + 1) for child in reversed(children_by_parent.get(card.card_id, [])))
     return revision_cards, revision_nodes
+
+
+def _lineage_replacement_cards(
+    root_card: StrategyCard,
+    strategy_cards: list[StrategyCard],
+) -> list[StrategyCard]:
+    replacements = [
+        card
+        for card in strategy_cards
+        if card.card_id != root_card.card_id
+        and card.decision_basis == REPLACEMENT_DECISION_BASIS
+        and _string_parameter(card, "replacement_source_lineage_root_card_id") == root_card.card_id
+    ]
+    return sorted(replacements, key=lambda card: (card.created_at, card.card_id))
 
 
 def _string_parameter(card: StrategyCard, key: str) -> str | None:

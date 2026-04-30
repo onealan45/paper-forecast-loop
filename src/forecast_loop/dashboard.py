@@ -37,6 +37,7 @@ from forecast_loop.models import (
     StrategyDecision,
 )
 from forecast_loop.lineage_research_plan import LineageResearchTaskPlan, build_lineage_research_task_plan
+from forecast_loop.lineage_research_run_log import automation_run_matches_lineage_research_plan
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.revision_retest_run_log import automation_run_matches_revision_retest_plan
 from forecast_loop.strategy_lineage import StrategyLineageSummary, build_strategy_lineage_summary
@@ -68,6 +69,7 @@ class DashboardSnapshot:
     latest_strategy_lineage_summary: StrategyLineageSummary | None
     latest_lineage_research_agenda: ResearchAgenda | None
     latest_lineage_research_task_plan: LineageResearchTaskPlan | None
+    latest_lineage_research_task_run: AutomationRun | None
     latest_strategy_revision_card: StrategyCard | None
     latest_strategy_revision_agenda: ResearchAgenda | None
     latest_strategy_revision_source_outcome: PaperShadowOutcome | None
@@ -211,6 +213,10 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         latest_strategy_lineage_summary=lineage_summary,
         latest_lineage_research_agenda=lineage_research_agenda,
         latest_lineage_research_task_plan=lineage_research_task_plan,
+        latest_lineage_research_task_run=_latest_lineage_research_task_run(
+            automation_runs,
+            lineage_research_task_plan,
+        ),
         latest_strategy_revision_card=revision_card,
         latest_strategy_revision_agenda=(
             research_chain.revision_candidate.research_agenda if research_chain.revision_candidate else None
@@ -310,6 +316,20 @@ def _latest_revision_retest_task_run(
         run
         for run in runs
         if automation_run_matches_revision_retest_plan(run, task_plan)
+    ]
+    return max(matches, key=lambda run: run.completed_at) if matches else None
+
+
+def _latest_lineage_research_task_run(
+    runs: list[AutomationRun],
+    task_plan: LineageResearchTaskPlan | None,
+) -> AutomationRun | None:
+    if task_plan is None:
+        return None
+    matches = [
+        run
+        for run in runs
+        if automation_run_matches_lineage_research_plan(run, task_plan)
     ]
     return max(matches, key=lambda run: run.completed_at) if matches else None
 
@@ -920,6 +940,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
     lineage_block = _render_strategy_lineage_summary(snapshot.latest_strategy_lineage_summary)
     lineage_agenda_block = _render_lineage_research_agenda(snapshot.latest_lineage_research_agenda)
     lineage_task_plan_block = _render_lineage_research_task_plan(snapshot.latest_lineage_research_task_plan)
+    lineage_task_run_block = _render_lineage_research_task_run(snapshot.latest_lineage_research_task_run)
     if (
         card is None
         and evaluation is None
@@ -949,6 +970,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
       {lineage_block}
       {lineage_agenda_block}
       {lineage_task_plan_block}
+      {lineage_task_run_block}
       <div class="evidence-grid">
         <div class="evidence-block">
           <h3>目前策略假設</h3>
@@ -1063,6 +1085,24 @@ def _render_lineage_research_task_plan(plan: LineageResearchTaskPlan | None) -> 
           <dt>Worker Prompt</dt><dd>{escape(next_task.worker_prompt if next_task else "none")}</dd>
           <dt>Rationale</dt><dd>{escape(next_task.rationale if next_task else "none")}</dd>
         </dl>
+      </div>
+    """
+
+
+def _render_lineage_research_task_run(run: AutomationRun | None) -> str:
+    if run is None:
+        return ""
+    return f"""
+      <div class="evidence-block">
+        <h3>最新 lineage task run log</h3>
+        <dl>
+          <dt>Status</dt><dd><span class="{_dashboard_automation_status_class(run.status)}">{escape(run.status)}</span></dd>
+          <dt>Run ID</dt><dd><code>{escape(run.automation_run_id)}</code></dd>
+          <dt>Command</dt><dd><code>{escape(run.command)}</code></dd>
+          <dt>Completed</dt><dd>{escape(run.completed_at.isoformat())}</dd>
+          <dt>Steps</dt><dd>{_dashboard_run_step_list(run)}</dd>
+        </dl>
+        <p class="micro-copy">這是 lineage research task plan 的稽核紀錄；只顯示，不執行。</p>
       </div>
     """
 

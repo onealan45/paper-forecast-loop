@@ -18,6 +18,7 @@ from forecast_loop.models import (
 )
 from forecast_loop.revision_retest import RETEST_PROTOCOL_VERSION
 from forecast_loop.storage import ArtifactRepository
+from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
 from forecast_loop.strategy_research import REVISION_CARD_BASIS
 
 
@@ -107,7 +108,12 @@ def build_revision_retest_task_plan(
         symbol=symbol,
         revision_card_id=revision_card_id,
     )
-    source_outcome = _source_outcome(repository.load_paper_shadow_outcomes(), card=card, symbol=symbol)
+    source_outcome = _source_outcome(
+        repository.load_paper_shadow_outcomes(),
+        cards=repository.load_strategy_cards(),
+        card=card,
+        symbol=symbol,
+    )
     research_dataset = _latest_research_dataset(repository.load_research_datasets(), symbol)
     experiment_trials = repository.load_experiment_trials()
     backtest_results = repository.load_backtest_results()
@@ -896,6 +902,10 @@ def _revision_card(
 
 
 def _is_revision_card(card: StrategyCard, symbol: str) -> bool:
+    return _is_revision_candidate(card, symbol) or _is_lineage_replacement_card(card, symbol)
+
+
+def _is_revision_candidate(card: StrategyCard, symbol: str) -> bool:
     return (
         card.status == "DRAFT"
         and card.decision_basis == REVISION_CARD_BASIS
@@ -906,21 +916,65 @@ def _is_revision_card(card: StrategyCard, symbol: str) -> bool:
     )
 
 
+def _is_lineage_replacement_card(card: StrategyCard, symbol: str) -> bool:
+    return (
+        card.status == "DRAFT"
+        and card.decision_basis == REPLACEMENT_DECISION_BASIS
+        and symbol in card.symbols
+        and isinstance(card.parameters.get("replacement_source_outcome_id"), str)
+        and isinstance(card.parameters.get("replacement_source_lineage_root_card_id"), str)
+        and card.parent_card_id is None
+    )
+
+
 def _source_outcome(
     outcomes: list[PaperShadowOutcome],
     *,
+    cards: list[StrategyCard],
     card: StrategyCard,
     symbol: str,
 ) -> PaperShadowOutcome:
-    outcome_id = str(card.parameters["revision_source_outcome_id"])
+    outcome_id = _source_outcome_id(card, symbol)
     outcome = next((item for item in outcomes if item.outcome_id == outcome_id), None)
     if outcome is None:
         raise ValueError(f"missing source paper shadow outcome: {outcome_id}")
     if outcome.symbol != symbol:
         raise ValueError(f"source paper shadow outcome symbol mismatch: {outcome_id}")
-    if outcome.strategy_card_id != card.parent_card_id:
+    if _is_revision_candidate(card, symbol) and outcome.strategy_card_id != card.parent_card_id:
         raise ValueError(f"source paper shadow outcome does not match revision parent: {outcome_id}")
+    if _is_lineage_replacement_card(card, symbol) and not _outcome_belongs_to_replacement_lineage(
+        cards,
+        outcome,
+        card,
+    ):
+        raise ValueError(f"source paper shadow outcome does not match replacement lineage: {outcome_id}")
+    if _is_lineage_replacement_card(card, symbol) and outcome.recommended_strategy_action != "QUARANTINE_STRATEGY":
+        raise ValueError(f"source paper shadow outcome does not require replacement: {outcome_id}")
     return outcome
+
+
+def _source_outcome_id(card: StrategyCard, symbol: str) -> str:
+    if _is_lineage_replacement_card(card, symbol):
+        return str(card.parameters["replacement_source_outcome_id"])
+    return str(card.parameters["revision_source_outcome_id"])
+
+
+def _outcome_belongs_to_replacement_lineage(
+    cards: list[StrategyCard],
+    outcome: PaperShadowOutcome,
+    replacement: StrategyCard,
+) -> bool:
+    root_card_id = str(replacement.parameters["replacement_source_lineage_root_card_id"])
+    by_id = {card.card_id: card for card in cards}
+    current_id: str | None = outcome.strategy_card_id
+    while current_id:
+        if current_id == root_card_id:
+            return True
+        current = by_id.get(current_id)
+        if current is None:
+            return False
+        current_id = current.parent_card_id
+    return False
 
 
 def _latest_retest_trial(

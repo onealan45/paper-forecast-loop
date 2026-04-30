@@ -7,6 +7,8 @@ from forecast_loop.cli import main
 from forecast_loop.lineage_agenda import create_lineage_research_agenda
 from forecast_loop.lineage_research_executor import execute_lineage_research_next_task
 from forecast_loop.models import PaperShadowOutcome, StrategyCard
+from forecast_loop.revision_retest import create_revision_retest_scaffold
+from forecast_loop.revision_retest_plan import build_revision_retest_task_plan
 from forecast_loop.storage import JsonFileRepository
 
 
@@ -225,3 +227,124 @@ def test_cli_execute_lineage_research_next_task_outputs_json_and_persists(tmp_pa
     assert payload["automation_run"]["command"] == "execute-lineage-research-next-task"
     assert len(JsonFileRepository(tmp_path).load_strategy_cards()) == 3
     assert len(JsonFileRepository(tmp_path).load_automation_runs()) == 1
+
+
+def test_lineage_replacement_strategy_can_start_retest_scaffold(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_quarantined_lineage(repository, now)
+    replacement_result = execute_lineage_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(hours=3),
+    )
+    replacement_card_id = replacement_result.created_artifact_ids[0]
+
+    scaffold = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=now + timedelta(hours=4),
+        revision_card_id=replacement_card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:replacement-retest",
+        max_trials=20,
+        seed=17,
+    )
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        revision_card_id=replacement_card_id,
+        symbol="BTC-USD",
+    )
+
+    assert scaffold.strategy_card.card_id == replacement_card_id
+    assert scaffold.source_outcome.outcome_id == "paper-shadow-outcome:revision-fail"
+    assert scaffold.experiment_trial.status == "PENDING"
+    assert scaffold.experiment_trial.strategy_card_id == replacement_card_id
+    assert scaffold.experiment_trial.parameters["revision_retest_protocol"] == "pr14-v1"
+    assert scaffold.experiment_trial.parameters["revision_source_outcome_id"] == "paper-shadow-outcome:revision-fail"
+    assert scaffold.experiment_trial.parameters["revision_retest_kind"] == "lineage_replacement"
+    assert scaffold.experiment_trial.parameters["replacement_source_lineage_root_card_id"] == "strategy-card:parent"
+    assert plan.strategy_card_id == replacement_card_id
+    assert plan.source_outcome_id == "paper-shadow-outcome:revision-fail"
+    assert plan.pending_trial_id == scaffold.experiment_trial.trial_id
+    assert plan.next_task_id == "lock_evaluation_protocol"
+
+
+def test_replacement_strategy_plan_rejects_non_quarantine_source_outcome(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_quarantined_lineage(repository, now)
+    base = _card("strategy-card:replacement", status="DRAFT")
+    replacement = StrategyCard(
+        card_id=base.card_id,
+        created_at=base.created_at,
+        strategy_name=base.strategy_name,
+        strategy_family=base.strategy_family,
+        version=base.version,
+        status=base.status,
+        symbols=base.symbols,
+        hypothesis=base.hypothesis,
+        signal_description=base.signal_description,
+        entry_rules=base.entry_rules,
+        exit_rules=base.exit_rules,
+        risk_rules=base.risk_rules,
+        parameters={
+            "replacement_source_lineage_root_card_id": "strategy-card:parent",
+            "replacement_source_outcome_id": "paper-shadow-outcome:parent-fail",
+        },
+        data_requirements=base.data_requirements,
+        feature_snapshot_ids=base.feature_snapshot_ids,
+        backtest_result_ids=base.backtest_result_ids,
+        walk_forward_validation_ids=base.walk_forward_validation_ids,
+        event_edge_evaluation_ids=base.event_edge_evaluation_ids,
+        parent_card_id=None,
+        author=base.author,
+        decision_basis="lineage_replacement_strategy_hypothesis",
+    )
+    repository.save_strategy_card(replacement)
+
+    with pytest.raises(ValueError, match="source paper shadow outcome does not require replacement"):
+        build_revision_retest_task_plan(
+            repository=repository,
+            storage_dir=tmp_path,
+            revision_card_id=replacement.card_id,
+            symbol="BTC-USD",
+        )
+
+
+def test_cli_create_revision_retest_scaffold_accepts_lineage_replacement_card(tmp_path, capsys):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_quarantined_lineage(repository, now)
+    replacement_result = execute_lineage_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(hours=3),
+    )
+
+    assert main(
+        [
+            "create-revision-retest-scaffold",
+            "--storage-dir",
+            str(tmp_path),
+            "--revision-card-id",
+            replacement_result.created_artifact_ids[0],
+            "--symbol",
+            "BTC-USD",
+            "--dataset-id",
+            "research-dataset:replacement-retest",
+            "--max-trials",
+            "20",
+            "--seed",
+            "17",
+            "--created-at",
+            "2026-04-30T14:00:00+00:00",
+        ]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["revision_retest_scaffold"]["strategy_card_id"] == replacement_result.created_artifact_ids[0]
+    assert payload["revision_retest_scaffold"]["source_outcome_id"] == "paper-shadow-outcome:revision-fail"
+    assert JsonFileRepository(tmp_path).load_experiment_trials()[0].parameters["revision_retest_kind"] == "lineage_replacement"

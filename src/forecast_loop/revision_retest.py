@@ -6,7 +6,7 @@ from datetime import datetime
 from forecast_loop.locked_evaluation import lock_evaluation_protocol
 from forecast_loop.models import CostModelSnapshot, ExperimentTrial, PaperShadowOutcome, SplitManifest, StrategyCard
 from forecast_loop.storage import ArtifactRepository
-from forecast_loop.strategy_evolution import REVISION_DECISION_BASIS
+from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS, REVISION_DECISION_BASIS
 from forecast_loop.strategy_research import REVISION_REQUIRED_ACTIONS
 
 
@@ -158,6 +158,10 @@ def _revision_card(
 
 
 def _is_revision_card(card: StrategyCard) -> bool:
+    return _is_revision_candidate(card) or _is_lineage_replacement_card(card)
+
+
+def _is_revision_candidate(card: StrategyCard) -> bool:
     return (
         card.status == "DRAFT"
         and card.decision_basis == REVISION_DECISION_BASIS
@@ -167,23 +171,65 @@ def _is_revision_card(card: StrategyCard) -> bool:
     )
 
 
+def _is_lineage_replacement_card(card: StrategyCard) -> bool:
+    return (
+        card.status == "DRAFT"
+        and card.decision_basis == REPLACEMENT_DECISION_BASIS
+        and isinstance(card.parameters.get("replacement_source_outcome_id"), str)
+        and isinstance(card.parameters.get("replacement_source_lineage_root_card_id"), str)
+        and card.parent_card_id is None
+    )
+
+
 def _source_outcome(
     repository: ArtifactRepository,
     *,
     card: StrategyCard,
     symbol: str,
 ) -> PaperShadowOutcome:
-    outcome_id = str(card.parameters["revision_source_outcome_id"])
+    outcome_id = _source_outcome_id(card)
     outcome = next((item for item in repository.load_paper_shadow_outcomes() if item.outcome_id == outcome_id), None)
     if outcome is None:
         raise ValueError(f"missing source paper shadow outcome: {outcome_id}")
     if outcome.symbol != symbol:
         raise ValueError(f"source paper shadow outcome symbol mismatch: {outcome_id}")
-    if outcome.strategy_card_id != card.parent_card_id:
+    if _is_revision_candidate(card) and outcome.strategy_card_id != card.parent_card_id:
         raise ValueError(f"source paper shadow outcome does not match revision parent: {outcome_id}")
-    if outcome.recommended_strategy_action not in REVISION_REQUIRED_ACTIONS:
+    if _is_lineage_replacement_card(card) and not _outcome_belongs_to_replacement_lineage(
+        repository.load_strategy_cards(),
+        outcome,
+        card,
+    ):
+        raise ValueError(f"source paper shadow outcome does not match replacement lineage: {outcome_id}")
+    if _is_revision_candidate(card) and outcome.recommended_strategy_action not in REVISION_REQUIRED_ACTIONS:
         raise ValueError(f"source paper shadow outcome does not require revision: {outcome_id}")
+    if _is_lineage_replacement_card(card) and outcome.recommended_strategy_action != "QUARANTINE_STRATEGY":
+        raise ValueError(f"source paper shadow outcome does not require replacement: {outcome_id}")
     return outcome
+
+
+def _source_outcome_id(card: StrategyCard) -> str:
+    if _is_lineage_replacement_card(card):
+        return str(card.parameters["replacement_source_outcome_id"])
+    return str(card.parameters["revision_source_outcome_id"])
+
+
+def _outcome_belongs_to_replacement_lineage(
+    cards: list[StrategyCard],
+    outcome: PaperShadowOutcome,
+    replacement: StrategyCard,
+) -> bool:
+    root_card_id = str(replacement.parameters["replacement_source_lineage_root_card_id"])
+    by_id = {card.card_id: card for card in cards}
+    current_id: str | None = outcome.strategy_card_id
+    while current_id:
+        if current_id == root_card_id:
+            return True
+        current = by_id.get(current_id)
+        if current is None:
+            return False
+        current_id = current.parent_card_id
+    return False
 
 
 def _existing_pending_retest(
@@ -222,6 +268,15 @@ def _save_pending_retest_trial(
         "revision_parent_card_id": card.parent_card_id,
         "max_trials": max_trials,
     }
+    if _is_lineage_replacement_card(card):
+        parameters.update(
+            {
+                "revision_retest_kind": "lineage_replacement",
+                "replacement_source_lineage_root_card_id": card.parameters["replacement_source_lineage_root_card_id"],
+            }
+        )
+    else:
+        parameters["revision_retest_kind"] = "revision"
     trial = ExperimentTrial(
         trial_id=ExperimentTrial.build_id(
             strategy_card_id=card.card_id,

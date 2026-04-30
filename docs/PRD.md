@@ -724,6 +724,9 @@ V1 MVP should include:
 - dashboard and operator console visibility for lineage replacement strategy
   hypotheses, so the UX exposes the concrete new strategy idea and its source
   failure context
+- replacement strategy retest scaffold support, allowing DRAFT
+  `lineage_replacement_strategy_hypothesis` cards to enter the existing locked
+  retest plan without promotion or execution
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

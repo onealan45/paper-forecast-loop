@@ -770,6 +770,9 @@ V1 MVP should include:
   validation runs prefer a direct `lineage_cross_sample_validation_agenda`
   that names the replacement card instead of closing under an older lineage
   agenda
+- dashboard and operator console visibility for linked cross-sample autopilot
+  runs, so the agenda stays visible after task-plan completion and the UX shows
+  the completed fresh-sample run, shadow outcome, and next research action
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

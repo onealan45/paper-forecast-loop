@@ -50,7 +50,7 @@ from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_rev
 from forecast_loop.revision_retest_run_log import automation_run_matches_revision_retest_plan
 from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
 from forecast_loop.strategy_lineage import StrategyLineageSummary, build_strategy_lineage_summary
-from forecast_loop.strategy_research_display import build_strategy_research_conclusion
+from forecast_loop.strategy_research_display import build_strategy_research_conclusion, format_failure_attributions
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.storage import JsonFileRepository
 
@@ -1191,7 +1191,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
             <dt>Grade</dt><dd>{escape(outcome.outcome_grade if outcome else "n/a")}</dd>
             <dt>Excess after costs</dt><dd>{_format_optional_ratio(outcome.excess_return_after_costs if outcome else None)}</dd>
             <dt>Recommended</dt><dd>{escape(outcome.recommended_strategy_action if outcome else "n/a")}</dd>
-            <dt>Failure attribution</dt><dd>{_dashboard_list_inline(outcome.failure_attributions if outcome else [])}</dd>
+            <dt>Failure attribution</dt><dd>{_dashboard_list_inline(_display_failure_attributions(outcome))}</dd>
           </dl>
         </div>
         <div class="evidence-block">
@@ -2445,6 +2445,12 @@ def _dashboard_artifact_id(item: object | None, field: str) -> str:
     if item is None:
         return "<span class=\"empty\">無</span>"
     return f"<code>{escape(str(getattr(item, field)))}</code>"
+
+
+def _display_failure_attributions(outcome: PaperShadowOutcome | None) -> list[str]:
+    if outcome is None or not outcome.failure_attributions:
+        return []
+    return [format_failure_attributions(outcome.failure_attributions)]
 
 
 def _dashboard_list_inline(items: list[str]) -> str:

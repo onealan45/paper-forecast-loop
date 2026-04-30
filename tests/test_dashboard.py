@@ -1072,6 +1072,8 @@ def test_dashboard_surfaces_strategy_research_context_before_raw_metadata(tmp_pa
     assert "Leaderboard" in html
     assert "leaderboard-entry:dashboard-visible" in html
     assert "Paper-shadow 歸因" in html
+    paper_shadow_section = html[html.index("Paper-shadow 歸因") : html.index("策略規則")]
+    assert "負超額報酬 (negative_excess_return)" in paper_shadow_section
     assert "negative_excess_return" in html
     assert "下一步研究動作" in html
     assert "REVISE_STRATEGY" in html

@@ -46,7 +46,7 @@ from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_rev
 from forecast_loop.revision_retest_run_log import automation_run_matches_revision_retest_plan
 from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
 from forecast_loop.strategy_lineage import StrategyLineageSummary, build_strategy_lineage_summary
-from forecast_loop.strategy_research_display import build_strategy_research_conclusion
+from forecast_loop.strategy_research_display import build_strategy_research_conclusion, format_failure_attributions
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.storage import JsonFileRepository
 
@@ -1058,7 +1058,7 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
     <p>Excess after costs：{_format_pct(outcome.excess_return_after_costs if outcome else None)}</p>
     <p>Recommended：{escape(outcome.recommended_strategy_action if outcome else "n/a")}</p>
     <p>Failure attribution：</p>
-    {_plain_list(outcome.failure_attributions if outcome else [])}
+    {_plain_list(_display_failure_attributions(outcome))}
   </article>
   <article class="panel wide">
     <h3>策略規則</h3>
@@ -1597,6 +1597,12 @@ def _plain_list(items: list[str], *, empty: str = "none") -> str:
     if not items:
         return f'<p class="muted">{escape(empty)}</p>'
     return "<ul class=\"conditions\">" + "".join(f"<li>{escape(item)}</li>" for item in items) + "</ul>"
+
+
+def _display_failure_attributions(outcome: PaperShadowOutcome | None) -> list[str]:
+    if outcome is None or not outcome.failure_attributions:
+        return []
+    return [format_failure_attributions(outcome.failure_attributions)]
 
 
 def _dict_rows(values: dict[str, object]) -> str:

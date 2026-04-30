@@ -424,16 +424,34 @@ def _cross_sample_autopilot_task(
         required_artifact="research_autopilot_run",
         artifact_id=None,
         command_args=None,
-        worker_prompt=(
-            "Complete the fresh-sample validation chain for this cross-sample agenda, then record the linked "
-            "research autopilot run so the lineage can compare the new sample against prior evidence."
-        ),
+        worker_prompt=_cross_sample_handoff_prompt(agenda, summary),
         blocked_reason="cross_sample_autopilot_run_missing",
         missing_inputs=_cross_sample_missing_inputs(agenda),
         rationale=(
             "Cross-sample validation agenda exists, but no linked completed autopilot run is recorded yet. "
             "The run must link the agenda's expected fresh-sample evidence before the lineage can treat it as validated."
         ),
+    )
+
+
+def _cross_sample_handoff_prompt(
+    agenda: ResearchAgenda | None,
+    summary: StrategyLineageSummary,
+) -> str:
+    if agenda is None:
+        return (
+            "Complete the fresh-sample validation chain for this cross-sample agenda, then record the linked "
+            "research autopilot run so the lineage can compare the new sample against prior evidence."
+        )
+    expected = ", ".join(agenda.expected_artifacts) or "fresh-sample evidence"
+    strategy_cards = ", ".join(agenda.strategy_card_ids) or summary.root_card_id
+    return (
+        f"Complete cross-sample validation agenda {agenda.agenda_id} for lineage {summary.root_card_id}. "
+        f"Strategy cards: {strategy_cards}. "
+        f"Latest lineage outcome: {summary.latest_outcome_id or 'none'}. "
+        f"Expected evidence: {expected}. "
+        "After those artifacts exist, record the linked research autopilot run so the lineage can compare "
+        "the fresh sample against prior evidence."
     )
 
 

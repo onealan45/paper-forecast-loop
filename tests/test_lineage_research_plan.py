@@ -417,6 +417,10 @@ def test_lineage_research_task_plan_marks_cross_sample_task_complete_when_agenda
         "paper_shadow_outcome",
         "research_autopilot_run",
     ]
+    assert cross_sample_agenda.agenda_id in run_task.worker_prompt
+    assert parent.card_id in run_task.worker_prompt
+    assert "paper-shadow-outcome:improved" in run_task.worker_prompt
+    assert "locked_evaluation, walk_forward_validation, paper_shadow_outcome" in run_task.worker_prompt
 
 
 def test_lineage_research_task_plan_marks_cross_sample_autopilot_task_complete(tmp_path):

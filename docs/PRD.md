@@ -785,6 +785,9 @@ V1 MVP should include:
 - actionable cross-sample task-plan blockers, so blocked fresh-sample validation
   tasks list the expected locked evaluation, walk-forward, paper-shadow outcome,
   and linked autopilot run inputs rather than only saying a run is missing
+- concrete cross-sample worker prompts, so blocked fresh-sample validation tasks
+  name the agenda id, strategy cards, latest lineage outcome, and expected
+  evidence chain directly in the handoff
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

@@ -236,6 +236,9 @@ factory:
 - PR55 exposes replacement contribution nodes in the lineage summary, dashboard,
   operator console, and CLI JSON, so replacement hypotheses show their source
   outcome, latest retest outcome, action, excess return, and status.
+- PR56 carries that replacement context into the next lineage research task
+  prompt when a replacement retest improves the lineage, so follow-up
+  cross-sample validation targets the exact replacement hypothesis and outcome.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

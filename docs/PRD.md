@@ -746,6 +746,9 @@ V1 MVP should include:
 - replacement contribution visibility in lineage summaries and research UX,
   showing source outcome, latest replacement retest outcome, action, excess
   return, and replacement status
+- replacement-aware lineage follow-up tasks, so improving replacement retests
+  produce cross-sample validation prompts that name the exact replacement card,
+  latest outcome, and excess return being tested
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

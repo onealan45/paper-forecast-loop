@@ -82,6 +82,42 @@ def _revision_card(
     )
 
 
+def _replacement_card(
+    card_id: str,
+    *,
+    root_card_id: str,
+    source_outcome_id: str,
+) -> StrategyCard:
+    card = _card(card_id, status="DRAFT")
+    return StrategyCard(
+        card_id=card.card_id,
+        created_at=card.created_at,
+        strategy_name=f"{card_id} replacement",
+        strategy_family=card.strategy_family,
+        version=card.version,
+        status=card.status,
+        symbols=card.symbols,
+        hypothesis="Replacement hypothesis should be validated across fresh samples.",
+        signal_description=card.signal_description,
+        entry_rules=card.entry_rules,
+        exit_rules=card.exit_rules,
+        risk_rules=card.risk_rules,
+        parameters={
+            "replacement_source_lineage_root_card_id": root_card_id,
+            "replacement_source_outcome_id": source_outcome_id,
+            "replacement_failure_attributions": ["drawdown_breach"],
+        },
+        data_requirements=card.data_requirements,
+        feature_snapshot_ids=card.feature_snapshot_ids,
+        backtest_result_ids=card.backtest_result_ids,
+        walk_forward_validation_ids=card.walk_forward_validation_ids,
+        event_edge_evaluation_ids=card.event_edge_evaluation_ids,
+        parent_card_id=None,
+        author=card.author,
+        decision_basis="lineage_replacement_strategy_hypothesis",
+    )
+
+
 def _outcome(
     outcome_id: str,
     *,
@@ -288,6 +324,173 @@ def test_lineage_research_task_plan_routes_improving_lineage_to_cross_sample_ver
     assert next_task.status == "ready"
     assert next_task.required_artifact == "locked_evaluation"
     assert next_task.blocked_reason is None
+
+
+def test_lineage_research_task_plan_includes_replacement_context_for_improving_replacement(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    parent = _card("strategy-card:parent")
+    revision = _revision_card(
+        "strategy-card:revision",
+        parent_card_id=parent.card_id,
+        source_outcome_id="paper-shadow-outcome:parent-fail",
+        failure_attributions=["negative_excess_return"],
+    )
+    replacement = _replacement_card(
+        "strategy-card:replacement",
+        root_card_id=parent.card_id,
+        source_outcome_id="paper-shadow-outcome:revision-fail",
+    )
+    repository.save_strategy_card(parent)
+    repository.save_strategy_card(revision)
+    repository.save_strategy_card(replacement)
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:parent-fail",
+            card_id=parent.card_id,
+            created_at=now,
+            action="REVISE_STRATEGY",
+            excess=-0.03,
+            attributions=["negative_excess_return"],
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:revision-fail",
+            card_id=revision.card_id,
+            created_at=now + timedelta(hours=1),
+            action="QUARANTINE_STRATEGY",
+            excess=-0.08,
+            attributions=["drawdown_breach"],
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:replacement-pass",
+            card_id=replacement.card_id,
+            created_at=now + timedelta(hours=2),
+            action="PROMOTION_READY",
+            excess=0.04,
+            attributions=[],
+        )
+    )
+    create_lineage_research_agenda(repository=repository, created_at=now, symbol="BTC-USD")
+
+    plan = build_lineage_research_task_plan(repository=repository, storage_dir=tmp_path, symbol="BTC-USD")
+
+    assert plan.latest_outcome_id == "paper-shadow-outcome:replacement-pass"
+    assert plan.next_task_id == "verify_cross_sample_persistence"
+    next_task = plan.task_by_id("verify_cross_sample_persistence")
+    assert "Replacement strategy-card:replacement" in next_task.worker_prompt
+    assert "paper-shadow-outcome:replacement-pass" in next_task.worker_prompt
+    assert "0.04" in next_task.worker_prompt
+
+
+def test_lineage_research_task_plan_omits_stale_replacement_context_when_latest_outcome_is_root(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    parent = _card("strategy-card:parent")
+    replacement = _replacement_card(
+        "strategy-card:replacement",
+        root_card_id=parent.card_id,
+        source_outcome_id="paper-shadow-outcome:parent-fail",
+    )
+    repository.save_strategy_card(parent)
+    repository.save_strategy_card(replacement)
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:parent-fail",
+            card_id=parent.card_id,
+            created_at=now,
+            action="QUARANTINE_STRATEGY",
+            excess=-0.08,
+            attributions=["drawdown_breach"],
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:replacement-old-pass",
+            card_id=replacement.card_id,
+            created_at=now + timedelta(hours=1),
+            action="PROMOTION_READY",
+            excess=0.01,
+            attributions=[],
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:root-latest-pass",
+            card_id=parent.card_id,
+            created_at=now + timedelta(hours=2),
+            action="CONTINUE_SHADOW",
+            excess=0.04,
+            attributions=[],
+        )
+    )
+    create_lineage_research_agenda(repository=repository, created_at=now, symbol="BTC-USD")
+
+    plan = build_lineage_research_task_plan(repository=repository, storage_dir=tmp_path, symbol="BTC-USD")
+
+    assert plan.latest_outcome_id == "paper-shadow-outcome:root-latest-pass"
+    assert plan.next_task_id == "verify_cross_sample_persistence"
+    next_task = plan.task_by_id("verify_cross_sample_persistence")
+    assert "Replacement strategy-card:replacement" not in next_task.worker_prompt
+    assert "replacement-old-pass" not in next_task.worker_prompt
+    assert "Latest improvement came from replacement" not in next_task.rationale
+
+
+def test_lineage_research_task_plan_omits_replacement_context_when_latest_replacement_is_unknown(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    parent = _card("strategy-card:parent")
+    replacement = _replacement_card(
+        "strategy-card:replacement",
+        root_card_id=parent.card_id,
+        source_outcome_id="paper-shadow-outcome:parent-fail",
+    )
+    repository.save_strategy_card(parent)
+    repository.save_strategy_card(replacement)
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:parent-baseline",
+            card_id=parent.card_id,
+            created_at=now,
+            action="CONTINUE_SHADOW",
+            excess=0.01,
+            attributions=[],
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:parent-improved",
+            card_id=parent.card_id,
+            created_at=now + timedelta(hours=1),
+            action="CONTINUE_SHADOW",
+            excess=0.04,
+            attributions=[],
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:replacement-unknown",
+            card_id=replacement.card_id,
+            created_at=now + timedelta(hours=2),
+            action="CONTINUE_SHADOW",
+            excess=None,
+            attributions=[],
+        )
+    )
+    create_lineage_research_agenda(repository=repository, created_at=now, symbol="BTC-USD")
+
+    plan = build_lineage_research_task_plan(repository=repository, storage_dir=tmp_path, symbol="BTC-USD")
+
+    assert plan.latest_outcome_id == "paper-shadow-outcome:replacement-unknown"
+    assert plan.performance_verdict == "偏強"
+    assert plan.next_task_id == "verify_cross_sample_persistence"
+    next_task = plan.task_by_id("verify_cross_sample_persistence")
+    assert "Replacement strategy-card:replacement" not in next_task.worker_prompt
+    assert "replacement-unknown" not in next_task.worker_prompt
+    assert "Latest improvement came from replacement" not in next_task.rationale
 
 
 def test_lineage_research_task_plan_routes_insufficient_evidence_to_shadow_collection(tmp_path):

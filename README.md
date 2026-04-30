@@ -239,6 +239,9 @@ factory:
 - PR56 carries that replacement context into the next lineage research task
   prompt when a replacement retest improves the lineage, so follow-up
   cross-sample validation targets the exact replacement hypothesis and outcome.
+- PR57 persists the next lineage task prompt and rationale in automation run
+  steps, so replacement-aware research instructions survive JSONL reload and
+  are visible to dashboard/operator-console inspection.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

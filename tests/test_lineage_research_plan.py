@@ -582,6 +582,80 @@ def test_record_lineage_research_task_run_logs_blocked_evidence_plan(tmp_path):
     assert automation_run_matches_lineage_research_plan(result.automation_run, result.task_plan)
 
 
+def test_record_lineage_research_task_run_logs_replacement_next_task_context(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    parent = _card("strategy-card:parent")
+    revision = _revision_card(
+        "strategy-card:revision",
+        parent_card_id=parent.card_id,
+        source_outcome_id="paper-shadow-outcome:parent-fail",
+        failure_attributions=["negative_excess_return"],
+    )
+    replacement = _replacement_card(
+        "strategy-card:replacement",
+        root_card_id=parent.card_id,
+        source_outcome_id="paper-shadow-outcome:revision-fail",
+    )
+    repository.save_strategy_card(parent)
+    repository.save_strategy_card(revision)
+    repository.save_strategy_card(replacement)
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:parent-fail",
+            card_id=parent.card_id,
+            created_at=now,
+            action="REVISE_STRATEGY",
+            excess=-0.03,
+            attributions=["negative_excess_return"],
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:revision-fail",
+            card_id=revision.card_id,
+            created_at=now + timedelta(hours=1),
+            action="QUARANTINE_STRATEGY",
+            excess=-0.08,
+            attributions=["drawdown_breach"],
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:replacement-pass",
+            card_id=replacement.card_id,
+            created_at=now + timedelta(hours=2),
+            action="PROMOTION_READY",
+            excess=0.04,
+            attributions=[],
+        )
+    )
+    create_lineage_research_agenda(repository=repository, created_at=now, symbol="BTC-USD")
+
+    result = record_lineage_research_task_run(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 30, 11, 0, tzinfo=UTC),
+    )
+    reloaded = JsonFileRepository(tmp_path).load_automation_runs()[0]
+
+    assert result.task_plan.next_task_id == "verify_cross_sample_persistence"
+    assert any(
+        step["name"] == "next_task_worker_prompt"
+        and step["status"] == "ready"
+        and "Replacement strategy-card:replacement" in str(step["artifact_id"])
+        and "paper-shadow-outcome:replacement-pass" in str(step["artifact_id"])
+        for step in reloaded.steps
+    )
+    assert any(
+        step["name"] == "next_task_rationale"
+        and step["status"] == "ready"
+        and "Latest improvement came from replacement strategy-card:replacement" in str(step["artifact_id"])
+        for step in reloaded.steps
+    )
+
+
 def test_lineage_research_plan_cli_prints_machine_readable_next_task(tmp_path, capsys):
     now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
     repository = JsonFileRepository(tmp_path)

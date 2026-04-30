@@ -749,6 +749,9 @@ V1 MVP should include:
 - replacement-aware lineage follow-up tasks, so improving replacement retests
   produce cross-sample validation prompts that name the exact replacement card,
   latest outcome, and excess return being tested
+- lineage task-run logs that persist the next task worker prompt and rationale,
+  so automation artifacts preserve the concrete research instruction after
+  reload
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

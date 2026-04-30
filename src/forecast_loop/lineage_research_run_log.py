@@ -124,4 +124,20 @@ def _steps(task_plan: LineageResearchTaskPlan) -> list[dict[str, str | None]]:
                 "artifact_id": task.artifact_id,
             }
         )
+    if task_plan.next_task_id is not None:
+        next_task = task_plan.task_by_id(task_plan.next_task_id)
+        steps.extend(
+            [
+                {
+                    "name": "next_task_worker_prompt",
+                    "status": next_task.status,
+                    "artifact_id": next_task.worker_prompt,
+                },
+                {
+                    "name": "next_task_rationale",
+                    "status": next_task.status,
+                    "artifact_id": next_task.rationale,
+                },
+            ]
+        )
     return steps

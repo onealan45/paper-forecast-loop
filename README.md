@@ -313,6 +313,8 @@ factory:
   without hiding machine codes.
 - PR79 renders revision retest scaffold `Next Required` lists through the same
   shared artifact copy, so scaffold summaries and task-plan panels stay aligned.
+- PR80 adds readable revision retest run-step labels, so run logs show the
+  strategy card, source outcome, and evaluation-lock step in human terms.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

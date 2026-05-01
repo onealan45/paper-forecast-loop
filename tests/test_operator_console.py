@@ -1145,7 +1145,7 @@ def test_operator_console_shows_revision_retest_autopilot_run(tmp_path):
     for html in (research_html, overview_html):
         assert "最新 revision retest autopilot run" in html
         assert "research-autopilot-run:visible-revision-retest" in html
-        assert "REPAIR_EVIDENCE_CHAIN" in html
+        assert "修復證據鏈 (REPAIR_EVIDENCE_CHAIN)" in html
         assert "locked_evaluation_not_rankable" in html
         assert "paper-shadow-outcome:visible-revision-retest" in html
 
@@ -1776,7 +1776,7 @@ def test_operator_console_shows_lineage_replacement_retest_scaffold(tmp_path):
     assert "research-dataset:visible-replacement-retest" in html
     assert scaffolded.created_artifact_ids[0] in html
     assert "research-autopilot-run:visible-replacement-retest" in html
-    assert "UPDATE_LINEAGE_VERDICT" in html
+    assert "更新 lineage 判定 (UPDATE_LINEAGE_VERDICT)" in html
     assert "lineage_replacement" in html
     assert "Replacement Contributions" in html
     assert f"Replacement {executed.created_artifact_ids[0]}" in html

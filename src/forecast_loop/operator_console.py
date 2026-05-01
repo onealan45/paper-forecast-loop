@@ -1004,7 +1004,7 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
   </article>
   <article class="panel">
     <h3>下一步研究動作</h3>
-    <div class="metric">{escape(autopilot.next_research_action if autopilot else "n/a")}</div>
+    <div class="metric">{escape(_display_research_action(autopilot.next_research_action if autopilot else None))}</div>
     <p>Run：{_artifact_id(autopilot, "run_id")}</p>
     <p>Status：{escape(autopilot.loop_status if autopilot else "n/a")}</p>
     <p>Blocked：</p>
@@ -1187,7 +1187,7 @@ def _lineage_cross_sample_agenda_panel(
     <h4>Linked autopilot run</h4>
     <p>Run：{_artifact_id(autopilot_run, "run_id")} / {escape(autopilot_run.loop_status if autopilot_run else "尚未記錄")}</p>
     <p>Shadow outcome：<code>{escape(autopilot_run.paper_shadow_outcome_id if autopilot_run and autopilot_run.paper_shadow_outcome_id else "none")}</code></p>
-    <p>Next research action：{escape(autopilot_run.next_research_action if autopilot_run else "等待 fresh-sample 驗證完成")}</p>
+    <p>Next research action：{escape(_display_research_action(autopilot_run.next_research_action if autopilot_run else "等待 fresh-sample 驗證完成"))}</p>
     <p class="muted">這是 fresh sample 驗證交接，不代表 locked evaluation、walk-forward 或 paper-shadow 已通過。</p>
   </article>
 """
@@ -1236,7 +1236,7 @@ def _lineage_replacement_strategy_panel(
     <h4>替代策略 Retest Autopilot Run</h4>
     <p>Status：<span class="{_automation_status_class(autopilot_run.loop_status) if autopilot_run else "status-muted"}">{escape(autopilot_run.loop_status if autopilot_run else "尚未記錄")}</span></p>
     <p>Run ID：<code>{escape(autopilot_run.run_id if autopilot_run else "none")}</code></p>
-    <p>Next action：{escape(autopilot_run.next_research_action if autopilot_run else "n/a")}</p>
+    <p>Next action：{escape(_display_research_action(autopilot_run.next_research_action if autopilot_run else None))}</p>
     <p>Paper-shadow outcome：<code>{escape(autopilot_run.paper_shadow_outcome_id if autopilot_run and autopilot_run.paper_shadow_outcome_id else "none")}</code></p>
     <p>Blocked：</p>
     {_plain_list(autopilot_run.blocked_reasons if autopilot_run else [])}
@@ -1771,7 +1771,7 @@ def _revision_retest_autopilot_run_panel(run: ResearchAutopilotRun | None) -> st
     <h4>最新 revision retest autopilot run</h4>
     <p>Status：<span class="{_automation_status_class(run.loop_status)}">{escape(run.loop_status)}</span></p>
     <p>Run ID：<code>{escape(run.run_id)}</code></p>
-    <p>Next action：{escape(run.next_research_action)}</p>
+    <p>Next action：{escape(_display_research_action(run.next_research_action))}</p>
     <p>Paper-shadow outcome：<code>{escape(run.paper_shadow_outcome_id or "none")}</code></p>
     <p>Blocked：</p>
     {_plain_list(run.blocked_reasons)}
@@ -1798,7 +1798,7 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
 <p>{escape(build_strategy_research_conclusion(card=card, outcome=outcome, autopilot=autopilot))}</p>
 <p>Leaderboard：{_artifact_id(leaderboard, "entry_id")} / alpha_score={_format_number(leaderboard.alpha_score if leaderboard else None)}</p>
 <p>Paper-shadow：{escape(outcome.recommended_strategy_action if outcome else "n/a")} / {escape(outcome.outcome_grade if outcome else "n/a")}</p>
-<p>下一步：{escape(autopilot.next_research_action if autopilot else "n/a")} / Run {_artifact_id(autopilot, "run_id")}</p>
+<p>下一步：{escape(_display_research_action(autopilot.next_research_action if autopilot else None))} / Run {_artifact_id(autopilot, "run_id")}</p>
 <p>策略修正候選：{_artifact_id(revision, "card_id")} / 來源 {_artifact_id(revision_source, "outcome_id")} / Agenda {_artifact_id(revision_agenda, "agenda_id")}</p>
 <p>Revision Retest Scaffold：{_artifact_id(retest_trial, "trial_id")} / Dataset <code>{escape(retest_trial.dataset_id if retest_trial and retest_trial.dataset_id else "n/a")}</code> / Split {_artifact_id(retest_split, "manifest_id")}</p>
 <p>策略 lineage：Root <code>{escape(lineage.root_card_id if lineage else "n/a")}</code> / Revisions {lineage.revision_count if lineage else "n/a"} / Outcomes {lineage.outcome_count if lineage else "n/a"}</p>

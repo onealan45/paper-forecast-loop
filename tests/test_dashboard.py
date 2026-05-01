@@ -1341,7 +1341,7 @@ def test_dashboard_shows_revision_retest_autopilot_run(tmp_path):
     assert snapshot.latest_strategy_revision_retest_autopilot_run.run_id == "research-autopilot-run:dashboard-revision-retest"
     assert "最新 revision retest autopilot run" in html
     assert "research-autopilot-run:dashboard-revision-retest" in html
-    assert "REPAIR_EVIDENCE_CHAIN" in html
+    assert "修復證據鏈 (REPAIR_EVIDENCE_CHAIN)" in html
     assert "locked_evaluation_not_rankable" in html
     assert "paper-shadow-outcome:dashboard-revision-retest" in html
 
@@ -1982,7 +1982,7 @@ def test_dashboard_shows_lineage_replacement_retest_scaffold(tmp_path):
     assert "research-dataset:dashboard-replacement-retest" in html
     assert scaffolded.created_artifact_ids[0] in html
     assert "research-autopilot-run:dashboard-replacement-retest" in html
-    assert "UPDATE_LINEAGE_VERDICT" in html
+    assert "更新 lineage 判定 (UPDATE_LINEAGE_VERDICT)" in html
     assert "lineage_replacement" in html
     assert "Replacement Contributions" in html
     assert f"Replacement {executed.created_artifact_ids[0]}" in html

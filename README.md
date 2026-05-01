@@ -333,6 +333,8 @@ factory:
   trajectories, and replacement contributions.
 - PR88 renders lineage next-research-focus sentences with readable failure
   attribution labels while leaving the underlying summary artifact unchanged.
+- PR89 reuses readable research-action copy across autopilot next-action panels,
+  including revision retest and lineage replacement retest surfaces.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

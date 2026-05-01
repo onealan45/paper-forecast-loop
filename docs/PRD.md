@@ -580,6 +580,8 @@ beside them for auditability.
 Lineage next-research-focus copy should translate embedded failure attribution
 tokens in the UI while preserving the raw artifact value for downstream
 automation and CLI consumers.
+Autopilot next-action panels should follow the same display rule: readable
+action label first, raw action code retained beside it.
 
 ## 10.3 Data Scope
 

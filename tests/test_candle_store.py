@@ -4,6 +4,7 @@ import json
 import pytest
 
 from forecast_loop.cli import main
+from forecast_loop.health import run_health_check
 from forecast_loop.models import MarketCandle, MarketCandleRecord
 from forecast_loop.storage import JsonFileRepository
 
@@ -94,6 +95,54 @@ def test_cli_import_and_export_candles_round_trip(tmp_path, capsys):
     assert [row["symbol"] for row in exported_rows] == ["BTC-USD", "BTC-USD", "BTC-USD"]
 
 
+def test_cli_import_candles_deduplicates_existing_timestamp_from_different_source(tmp_path, capsys):
+    first_input = tmp_path / "candles-fixture.jsonl"
+    second_input = tmp_path / "candles-provider.jsonl"
+    start = datetime(2026, 4, 21, 0, 0, tzinfo=UTC)
+    _write_jsonl(first_input, _raw_candle_rows(start, 2))
+    _write_jsonl(second_input, _raw_candle_rows(start, 2))
+
+    assert main(
+        [
+            "import-candles",
+            "--storage-dir",
+            str(tmp_path / "storage"),
+            "--input",
+            str(first_input),
+            "--symbol",
+            "BTC-USD",
+            "--source",
+            "fixture",
+            "--imported-at",
+            "2026-04-24T12:00:00+00:00",
+        ]
+    ) == 0
+    capsys.readouterr()
+
+    assert main(
+        [
+            "import-candles",
+            "--storage-dir",
+            str(tmp_path / "storage"),
+            "--input",
+            str(second_input),
+            "--symbol",
+            "BTC-USD",
+            "--source",
+            "provider-runtime",
+            "--imported-at",
+            "2026-04-24T13:00:00+00:00",
+        ]
+    ) == 0
+    result = json.loads(capsys.readouterr().out)
+    records = JsonFileRepository(tmp_path / "storage").load_market_candles()
+
+    assert result["imported_count"] == 0
+    assert result["skipped_duplicate_count"] == 2
+    assert len(records) == 2
+    assert [record.source for record in records] == ["fixture", "fixture"]
+
+
 def test_candle_health_detects_missing_and_duplicate_timestamps(tmp_path, capsys):
     repository = JsonFileRepository(tmp_path)
     imported_at = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
@@ -140,6 +189,37 @@ def test_candle_health_detects_missing_and_duplicate_timestamps(tmp_path, capsys
     assert result["missing_count"] == 1
     assert result["duplicate_count"] == 1
     assert "missing_candle_timestamp" in codes
+    assert "duplicate_candle_timestamp" in codes
+
+
+def test_health_check_flags_duplicate_market_candle_timestamps(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    timestamp = datetime(2026, 4, 21, 0, 0, tzinfo=UTC)
+    for source in ("fixture", "provider-runtime"):
+        repository.save_market_candle(
+            MarketCandleRecord.from_candle(
+                MarketCandle(
+                    timestamp=timestamp,
+                    open=100,
+                    high=101,
+                    low=99,
+                    close=100,
+                    volume=1_000,
+                ),
+                symbol="BTC-USD",
+                source=source,
+                imported_at=datetime(2026, 4, 24, 12, 0, tzinfo=UTC),
+            )
+        )
+
+    health = run_health_check(
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=datetime(2026, 4, 24, 13, 0, tzinfo=UTC),
+        create_repair_request=False,
+    )
+    codes = {finding.code for finding in health.findings}
+
     assert "duplicate_candle_timestamp" in codes
 
 
@@ -397,3 +477,14 @@ def test_cli_fetch_candles_stores_provider_candles_and_deduplicates(tmp_path, ca
     assert second_result["skipped_duplicate_count"] == 3
     assert len(second_records) == 3
     assert len(second_provider_runs) == 2
+
+    refetch_args = list(args)
+    refetch_args[refetch_args.index("--source") + 1] = "sample-runtime-refetch"
+    assert main(refetch_args) == 0
+    refetch_result = json.loads(capsys.readouterr().out)
+    refetch_repository = JsonFileRepository(storage_dir)
+
+    assert refetch_result["stored_count"] == 0
+    assert refetch_result["skipped_duplicate_count"] == 3
+    assert len(refetch_repository.load_market_candles()) == 3
+    assert [record.source for record in refetch_repository.load_market_candles()] == ["sample-runtime-seed"] * 3

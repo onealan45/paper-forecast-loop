@@ -279,6 +279,7 @@ def run_health_check(
     _check_duplicate_ids(repair_requests, "repair_request_id", storage_path / "repair_requests.jsonl", findings)
     _check_duplicate_ids(research_datasets, "dataset_id", storage_path / "research_datasets.jsonl", findings)
     _check_duplicate_ids(market_candles, "candle_id", storage_path / "market_candles.jsonl", findings)
+    _check_duplicate_market_candle_timestamps(market_candles, storage_path / "market_candles.jsonl", findings)
     _check_duplicate_ids(source_registry_entries, "source_id", storage_path / "source_registry.jsonl", findings)
     _check_duplicate_ids(source_documents, "document_id", storage_path / "source_documents.jsonl", findings)
     _check_duplicate_ids(
@@ -459,6 +460,32 @@ def _check_duplicate_ids(rows: list, attribute: str, path: Path, findings: list[
                 repair_required=True,
             )
         )
+
+
+def _check_duplicate_market_candle_timestamps(
+    candles: list[MarketCandleRecord],
+    path: Path,
+    findings: list[HealthFinding],
+) -> None:
+    seen: set[tuple[str, datetime]] = set()
+    duplicates: set[tuple[str, datetime]] = set()
+    for candle in candles:
+        key = (candle.symbol, candle.timestamp.astimezone(UTC))
+        if key in seen:
+            duplicates.add(key)
+        seen.add(key)
+    if not duplicates:
+        return
+    summary = ", ".join(f"{symbol}@{timestamp.isoformat()}" for symbol, timestamp in sorted(duplicates))
+    findings.append(
+        HealthFinding(
+            code="duplicate_candle_timestamp",
+            severity="blocking",
+            message=f"{path.name} contains duplicate candle timestamp(s): {summary}.",
+            artifact_path=str(path),
+            repair_required=True,
+        )
+    )
 
 
 def _check_broker_reconciliations(

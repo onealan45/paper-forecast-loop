@@ -318,6 +318,9 @@ factory:
 - PR117 lets replacement strategies that were created from prior replacement
   outcomes start their own retest scaffold and plan, so the self-evolving
   lineage can continue after a replacement is quarantined.
+- PR118 makes market-candle ingestion source-agnostic at the symbol/timestamp
+  boundary and teaches health-check to flag duplicate candle timestamps, so
+  overlapping seed/provider candles cannot silently corrupt backtests.
 - PR61 shows those cross-sample agenda strategy-card links in dashboard and
   operator console, making the root/replacement strategy targets inspectable
   from the research UX without opening raw JSON.

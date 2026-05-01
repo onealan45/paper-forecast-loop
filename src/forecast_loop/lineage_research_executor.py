@@ -127,12 +127,13 @@ def _execute_verify_cross_sample_persistence(
 ) -> list[str]:
     task = plan.task_by_id("verify_cross_sample_persistence")
     title = f"Cross-sample validation for lineage {plan.root_card_id}"
+    strategy_card_ids = _cross_sample_strategy_card_ids(repository, plan)
     hypothesis = (
         f"{task.worker_prompt} "
         f"Latest lineage outcome: {plan.latest_outcome_id or 'none'}. "
-        f"Performance verdict: {plan.performance_verdict}."
+        f"Performance verdict: {plan.performance_verdict}. "
+        f"Target strategy cards: {', '.join(strategy_card_ids)}."
     )
-    strategy_card_ids = _cross_sample_strategy_card_ids(repository, plan)
     agenda = ResearchAgenda(
         agenda_id=ResearchAgenda.build_id(
             symbol=plan.symbol,
@@ -174,6 +175,8 @@ def _cross_sample_strategy_card_ids(
     card_ids = [plan.root_card_id]
     if plan.latest_outcome_id is None:
         return card_ids
+    strategy_cards = repository.load_strategy_cards()
+    card_by_id = {card.card_id: card for card in strategy_cards}
     latest_outcome = next(
         (
             outcome
@@ -185,17 +188,44 @@ def _cross_sample_strategy_card_ids(
     if latest_outcome is None:
         return card_ids
     latest_card = next(
-        (card for card in repository.load_strategy_cards() if card.card_id == latest_outcome.strategy_card_id),
+        (card for card in strategy_cards if card.card_id == latest_outcome.strategy_card_id),
         None,
     )
     if (
         latest_card is not None
-        and latest_card.decision_basis == REPLACEMENT_DECISION_BASIS
-        and latest_card.parameters.get("replacement_source_lineage_root_card_id") == plan.root_card_id
+        and _card_belongs_to_lineage(latest_card, plan.root_card_id, card_by_id)
         and latest_card.card_id not in card_ids
     ):
         card_ids.append(latest_card.card_id)
     return card_ids
+
+
+def _card_belongs_to_lineage(
+    card: StrategyCard,
+    root_card_id: str,
+    card_by_id: dict[str, StrategyCard],
+) -> bool:
+    if card.card_id == root_card_id:
+        return True
+    if (
+        card.decision_basis == REPLACEMENT_DECISION_BASIS
+        and card.parameters.get("replacement_source_lineage_root_card_id") == root_card_id
+    ):
+        return True
+
+    seen: set[str] = set()
+    parent_id = card.parent_card_id
+    while parent_id:
+        if parent_id == root_card_id:
+            return True
+        if parent_id in seen:
+            return False
+        seen.add(parent_id)
+        parent = card_by_id.get(parent_id)
+        if parent is None:
+            return False
+        parent_id = parent.parent_card_id
+    return False
 
 
 def _automation_steps(

@@ -5,8 +5,9 @@ import pytest
 
 from forecast_loop.cli import main
 from forecast_loop.lineage_agenda import create_lineage_research_agenda
-from forecast_loop.lineage_research_executor import execute_lineage_research_next_task
-from forecast_loop.models import PaperShadowOutcome, ResearchDataset, StrategyCard
+from forecast_loop.lineage_research_executor import _cross_sample_strategy_card_ids, execute_lineage_research_next_task
+from forecast_loop.lineage_research_plan import LineageResearchTaskPlan
+from forecast_loop.models import PaperShadowOutcome, ResearchAgenda, ResearchDataset, StrategyCard
 from forecast_loop.revision_retest import create_revision_retest_scaffold
 from forecast_loop.revision_retest_executor import execute_revision_retest_next_task
 from forecast_loop.revision_retest_plan import build_revision_retest_task_plan
@@ -285,6 +286,241 @@ def test_execute_lineage_research_next_task_creates_cross_sample_validation_agen
         and step["artifact_id"] == cross_sample.agenda_id
         for step in result.automation_run.steps
     )
+
+
+def test_execute_lineage_research_next_task_targets_latest_revision_for_cross_sample_agenda(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    parent = _card("strategy-card:parent")
+    revision = _revision_card(
+        "strategy-card:revision",
+        parent_card_id=parent.card_id,
+        source_outcome_id="paper-shadow-outcome:parent-fail",
+    )
+    repository.save_strategy_card(parent)
+    repository.save_strategy_card(revision)
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:parent-fail",
+            card_id=parent.card_id,
+            created_at=now,
+            action="REVISE_STRATEGY",
+            attributions=["negative_excess_return"],
+            excess=-0.04,
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:revision-improved",
+            card_id=revision.card_id,
+            created_at=now + timedelta(hours=1),
+            action="QUARANTINE",
+            attributions=[],
+            excess=-0.01,
+        )
+    )
+    create_lineage_research_agenda(repository=repository, created_at=now + timedelta(hours=2), symbol="BTC-USD")
+
+    result = execute_lineage_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(hours=3),
+    )
+
+    cross_sample = next(
+        agenda
+        for agenda in repository.load_research_agendas()
+        if agenda.decision_basis == "lineage_cross_sample_validation_agenda"
+    )
+    assert result.executed_task_id == "verify_cross_sample_persistence"
+    assert cross_sample.strategy_card_ids == [parent.card_id, revision.card_id]
+    assert revision.card_id in cross_sample.hypothesis
+    assert "paper-shadow-outcome:revision-improved" in cross_sample.hypothesis
+
+
+def test_execute_lineage_research_next_task_ignores_stale_root_only_cross_sample_agenda_for_revision(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    parent = _card("strategy-card:parent")
+    revision = _revision_card(
+        "strategy-card:revision",
+        parent_card_id=parent.card_id,
+        source_outcome_id="paper-shadow-outcome:parent-fail",
+    )
+    repository.save_strategy_card(parent)
+    repository.save_strategy_card(revision)
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:parent-fail",
+            card_id=parent.card_id,
+            created_at=now,
+            action="REVISE_STRATEGY",
+            attributions=["negative_excess_return"],
+            excess=-0.04,
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:revision-improved",
+            card_id=revision.card_id,
+            created_at=now + timedelta(hours=1),
+            action="QUARANTINE",
+            attributions=[],
+            excess=-0.01,
+        )
+    )
+    repository.save_research_agenda(
+        ResearchAgenda(
+            agenda_id="research-agenda:stale-root-only",
+            created_at=now + timedelta(hours=2),
+            symbol="BTC-USD",
+            title="Stale root-only cross-sample agenda",
+            hypothesis="Old agenda created before latest revision targeting existed.",
+            priority="MEDIUM",
+            status="OPEN",
+            target_strategy_family="lineage_cross_sample_validation",
+            strategy_card_ids=[parent.card_id],
+            expected_artifacts=["locked_evaluation", "walk_forward_validation", "paper_shadow_outcome"],
+            acceptance_criteria=[
+                "latest_lineage_outcome=paper-shadow-outcome:revision-improved",
+                "stale root-only target should not satisfy revision cross-sample validation",
+            ],
+            blocked_actions=["real_order_submission", "automatic_live_execution"],
+            decision_basis="lineage_cross_sample_validation_agenda",
+        )
+    )
+    create_lineage_research_agenda(repository=repository, created_at=now + timedelta(hours=3), symbol="BTC-USD")
+
+    result = execute_lineage_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(hours=4),
+    )
+
+    corrected_agenda = next(
+        agenda
+        for agenda in repository.load_research_agendas()
+        if agenda.decision_basis == "lineage_cross_sample_validation_agenda"
+        and revision.card_id in agenda.strategy_card_ids
+    )
+    assert result.before_plan.next_task_id == "verify_cross_sample_persistence"
+    assert result.executed_task_id == "verify_cross_sample_persistence"
+    assert result.created_artifact_ids == [corrected_agenda.agenda_id]
+    assert corrected_agenda.strategy_card_ids == [parent.card_id, revision.card_id]
+
+
+def test_execute_lineage_research_next_task_ignores_cross_sample_agenda_with_unrelated_target(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    parent = _card("strategy-card:parent")
+    revision = _revision_card(
+        "strategy-card:revision",
+        parent_card_id=parent.card_id,
+        source_outcome_id="paper-shadow-outcome:parent-fail",
+    )
+    unrelated = _card("strategy-card:unrelated")
+    repository.save_strategy_card(parent)
+    repository.save_strategy_card(revision)
+    repository.save_strategy_card(unrelated)
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:parent-fail",
+            card_id=parent.card_id,
+            created_at=now,
+            action="REVISE_STRATEGY",
+            attributions=["negative_excess_return"],
+            excess=-0.04,
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:revision-improved",
+            card_id=revision.card_id,
+            created_at=now + timedelta(hours=1),
+            action="QUARANTINE",
+            attributions=[],
+            excess=-0.01,
+        )
+    )
+    repository.save_research_agenda(
+        ResearchAgenda(
+            agenda_id="research-agenda:polluted-targets",
+            created_at=now + timedelta(hours=2),
+            symbol="BTC-USD",
+            title="Polluted cross-sample agenda",
+            hypothesis="Old agenda accidentally included an unrelated strategy card.",
+            priority="MEDIUM",
+            status="OPEN",
+            target_strategy_family="lineage_cross_sample_validation",
+            strategy_card_ids=[parent.card_id, revision.card_id, unrelated.card_id],
+            expected_artifacts=["locked_evaluation", "walk_forward_validation", "paper_shadow_outcome"],
+            acceptance_criteria=[
+                "latest_lineage_outcome=paper-shadow-outcome:revision-improved",
+                "polluted target list should not satisfy revision cross-sample validation",
+            ],
+            blocked_actions=["real_order_submission", "automatic_live_execution"],
+            decision_basis="lineage_cross_sample_validation_agenda",
+        )
+    )
+    create_lineage_research_agenda(repository=repository, created_at=now + timedelta(hours=3), symbol="BTC-USD")
+
+    result = execute_lineage_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(hours=4),
+    )
+
+    corrected_agenda = next(
+        agenda
+        for agenda in repository.load_research_agendas()
+        if agenda.decision_basis == "lineage_cross_sample_validation_agenda"
+        and agenda.agenda_id != "research-agenda:polluted-targets"
+    )
+    assert result.before_plan.next_task_id == "verify_cross_sample_persistence"
+    assert result.executed_task_id == "verify_cross_sample_persistence"
+    assert result.created_artifact_ids == [corrected_agenda.agenda_id]
+    assert corrected_agenda.strategy_card_ids == [parent.card_id, revision.card_id]
+
+
+def test_cross_sample_target_selection_ignores_unrelated_latest_card(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    parent = _card("strategy-card:parent")
+    unrelated_parent = _card("strategy-card:unrelated-parent")
+    unrelated_revision = _revision_card(
+        "strategy-card:unrelated-revision",
+        parent_card_id=unrelated_parent.card_id,
+        source_outcome_id="paper-shadow-outcome:unrelated-parent-fail",
+    )
+    repository.save_strategy_card(parent)
+    repository.save_strategy_card(unrelated_parent)
+    repository.save_strategy_card(unrelated_revision)
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:unrelated-improved",
+            card_id=unrelated_revision.card_id,
+            created_at=now + timedelta(hours=1),
+            action="PROMOTION_READY",
+            attributions=[],
+            excess=0.03,
+        )
+    )
+    plan = LineageResearchTaskPlan(
+        symbol="BTC-USD",
+        agenda_id="research-agenda:parent",
+        root_card_id=parent.card_id,
+        latest_outcome_id="paper-shadow-outcome:unrelated-improved",
+        performance_verdict="改善",
+        latest_recommended_strategy_action="PROMOTION_READY",
+        next_research_focus="verify unrelated defensive filtering",
+        next_task_id=None,
+        tasks=[],
+    )
+
+    assert _cross_sample_strategy_card_ids(repository, plan) == [parent.card_id]
 
 
 def test_lineage_replacement_strategy_can_start_retest_scaffold(tmp_path):

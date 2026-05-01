@@ -255,6 +255,13 @@ factory:
   validation agendas, so downstream research tools can trace both the lineage
   root and the exact replacement hypothesis without parsing natural-language
   prompts.
+- PR102 applies the same structural targeting to improving revision lineages:
+  when the latest paper-shadow improvement belongs to a DRAFT revision, the
+  cross-sample validation agenda now names both the root strategy and that
+  latest revision card, so the fresh-sample handoff does not accidentally test
+  only the stale root strategy. Existing root-only handoff agendas for that
+  same latest outcome are ignored so the executor can create a corrected
+  current-target agenda.
 - PR61 shows those cross-sample agenda strategy-card links in dashboard and
   operator console, making the root/replacement strategy targets inspectable
   from the research UX without opening raw JSON.

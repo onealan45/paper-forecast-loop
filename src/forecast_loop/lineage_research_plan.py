@@ -537,14 +537,34 @@ def _cross_sample_agenda_for_summary(
     if summary.latest_outcome_id is None:
         return None
     marker = f"latest_lineage_outcome={summary.latest_outcome_id}"
+    target_ids = set(_cross_sample_target_card_ids(summary))
     candidates = [
         agenda
         for agenda in agendas
         if agenda.decision_basis == "lineage_cross_sample_validation_agenda"
         and summary.root_card_id in agenda.strategy_card_ids
+        and target_ids == set(agenda.strategy_card_ids)
         and marker in agenda.acceptance_criteria
     ]
     return max(candidates, key=lambda agenda: agenda.created_at) if candidates else None
+
+
+def _cross_sample_target_card_ids(summary: StrategyLineageSummary) -> list[str]:
+    card_ids = [summary.root_card_id]
+    latest_card_id = _latest_outcome_strategy_card_id(summary)
+    lineage_ids = _lineage_strategy_ids(summary)
+    if latest_card_id is not None and latest_card_id != summary.root_card_id and latest_card_id in lineage_ids:
+        card_ids.append(latest_card_id)
+    return card_ids
+
+
+def _latest_outcome_strategy_card_id(summary: StrategyLineageSummary) -> str | None:
+    if summary.latest_outcome_id is None:
+        return None
+    for outcome in reversed(summary.outcome_nodes):
+        if outcome.outcome_id == summary.latest_outcome_id:
+            return outcome.strategy_card_id
+    return None
 
 
 def _latest_replacement_context(summary: StrategyLineageSummary) -> StrategyLineageReplacementNode | None:

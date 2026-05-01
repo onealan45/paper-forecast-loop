@@ -117,4 +117,36 @@ def _steps(task_plan: RevisionRetestTaskPlan) -> list[dict[str, str | None]]:
                 "artifact_id": task.artifact_id,
             }
         )
+    if task_plan.next_task_id is not None:
+        next_task = task_plan.task_by_id(task_plan.next_task_id)
+        steps.extend(
+            [
+                {
+                    "name": "next_task_required_artifact",
+                    "status": next_task.status,
+                    "artifact_id": next_task.required_artifact,
+                },
+                {
+                    "name": "next_task_rationale",
+                    "status": next_task.status,
+                    "artifact_id": next_task.rationale,
+                },
+            ]
+        )
+        if next_task.blocked_reason is not None:
+            steps.append(
+                {
+                    "name": "next_task_blocked_reason",
+                    "status": next_task.status,
+                    "artifact_id": next_task.blocked_reason,
+                }
+            )
+        if next_task.missing_inputs:
+            steps.append(
+                {
+                    "name": "next_task_missing_inputs",
+                    "status": next_task.status,
+                    "artifact_id": ", ".join(next_task.missing_inputs),
+                }
+            )
     return steps

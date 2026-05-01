@@ -36,6 +36,7 @@ from forecast_loop.models import (
     SplitManifest,
     StrategyCard,
     StrategyDecision,
+    StrategyResearchDigest,
 )
 from forecast_loop.lineage_research_plan import LineageResearchTaskPlan, build_lineage_research_task_plan
 from forecast_loop.research_ux_selectors import (
@@ -83,6 +84,7 @@ class DashboardSnapshot:
     latest_paper_shadow_outcome: PaperShadowOutcome | None
     latest_research_agenda: ResearchAgenda | None
     latest_research_autopilot_run: ResearchAutopilotRun | None
+    latest_strategy_research_digest: StrategyResearchDigest | None
     latest_strategy_lineage_summary: StrategyLineageSummary | None
     latest_lineage_research_agenda: ResearchAgenda | None
     latest_lineage_research_task_plan: LineageResearchTaskPlan | None
@@ -164,6 +166,9 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
     paper_shadow_outcomes = [item for item in repository.load_paper_shadow_outcomes() if item.symbol == dashboard_symbol]
     research_agendas = [item for item in repository.load_research_agendas() if item.symbol == dashboard_symbol]
     research_autopilot_runs = [item for item in repository.load_research_autopilot_runs() if item.symbol == dashboard_symbol]
+    strategy_research_digests = [
+        item for item in repository.load_strategy_research_digests() if item.symbol == dashboard_symbol
+    ]
     automation_runs = [item for item in repository.load_automation_runs() if item.symbol == dashboard_symbol]
     research_chain = resolve_latest_strategy_research_chain(
         symbol=dashboard_symbol,
@@ -281,6 +286,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         latest_paper_shadow_outcome=research_chain.paper_shadow_outcome,
         latest_research_agenda=research_chain.research_agenda,
         latest_research_autopilot_run=research_chain.research_autopilot_run,
+        latest_strategy_research_digest=strategy_research_digests[-1] if strategy_research_digests else None,
         latest_strategy_lineage_summary=lineage_summary,
         latest_lineage_research_agenda=lineage_research_agenda,
         latest_lineage_research_task_plan=lineage_research_task_plan,
@@ -1098,6 +1104,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
     autopilot = snapshot.latest_research_autopilot_run
     revision_block = _render_strategy_revision_candidate(snapshot)
     lineage_block = _render_strategy_lineage_summary(snapshot.latest_strategy_lineage_summary)
+    digest_block = _render_strategy_research_digest(snapshot.latest_strategy_research_digest)
     lineage_agenda_block = _render_lineage_research_agenda(snapshot.latest_lineage_research_agenda)
     lineage_task_plan_block = _render_lineage_research_task_plan(snapshot.latest_lineage_research_task_plan)
     lineage_task_run_block = _render_lineage_research_task_run(snapshot.latest_lineage_research_task_run)
@@ -1118,6 +1125,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
         and outcome is None
         and agenda is None
         and autopilot is None
+        and snapshot.latest_strategy_research_digest is None
         and snapshot.latest_strategy_revision_card is None
     ):
         return """
@@ -1140,6 +1148,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
         <h3>策略研究結論</h3>
         <p>{escape(build_strategy_research_conclusion(card=card, outcome=outcome, autopilot=autopilot))}</p>
       </div>
+      {digest_block}
       {revision_block}
       {lineage_block}
       {lineage_agenda_block}
@@ -1224,6 +1233,32 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
           </dl>
         </div>
       </details>
+    """
+
+
+def _render_strategy_research_digest(digest: StrategyResearchDigest | None) -> str:
+    if digest is None:
+        return ""
+    failure_attributions = (
+        [_display_failure_attribution_codes(digest.top_failure_attributions)]
+        if digest.top_failure_attributions
+        else []
+    )
+    return f"""
+      <div class="evidence-block">
+        <h3>策略研究摘要</h3>
+        <p>{escape(digest.research_summary)}</p>
+        <dl>
+          <dt>Digest</dt><dd><code>{escape(digest.digest_id)}</code></dd>
+          <dt>Strategy</dt><dd>{escape(digest.strategy_name)} / {escape(_display_strategy_card_status(digest.strategy_status))}</dd>
+          <dt>Outcome</dt><dd>{escape(_display_outcome_grade(digest.outcome_grade))} / {_format_optional_ratio(digest.excess_return_after_costs)}</dd>
+          <dt>Recommended</dt><dd>{escape(_display_research_action(digest.recommended_strategy_action))}</dd>
+          <dt>Failure concentration</dt><dd>{_dashboard_list_inline(failure_attributions)}</dd>
+          <dt>Lineage</dt><dd>Revisions {digest.lineage_revision_count} / Outcomes {digest.lineage_outcome_count}</dd>
+          <dt>Next rationale</dt><dd>{escape(digest.next_step_rationale)}</dd>
+          <dt>Evidence</dt><dd>{_dashboard_list_inline(digest.evidence_artifact_ids)}</dd>
+        </dl>
+      </div>
     """
 
 

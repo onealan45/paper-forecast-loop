@@ -351,6 +351,10 @@ factory:
   `strategy-research-digest` CLI so automation can read one compact strategy
   summary covering the current hypothesis, paper-shadow result, lineage failure
   concentration, evidence ids, and next research action without parsing HTML.
+- PR96 surfaces the latest strategy research digest in the dashboard and
+  operator console, so the UX shows the compact strategy summary, repeated
+  failure concentration, evidence ids, and next research rationale before
+  lower-level artifact tables.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

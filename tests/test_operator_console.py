@@ -27,6 +27,7 @@ from forecast_loop.models import (
     SplitManifest,
     StrategyCard,
     StrategyDecision,
+    StrategyResearchDigest,
 )
 from forecast_loop.operator_console import (
     build_operator_console_snapshot,
@@ -400,6 +401,43 @@ def _seed_visible_strategy_research(repository: JsonFileRepository, now: datetim
     repository.save_paper_shadow_outcome(outcome)
     repository.save_research_agenda(agenda)
     repository.save_research_autopilot_run(run)
+
+
+def _seed_visible_strategy_research_digest(repository: JsonFileRepository, now: datetime) -> None:
+    repository.save_strategy_research_digest(
+        StrategyResearchDigest(
+            digest_id="strategy-research-digest:visible",
+            created_at=now,
+            symbol="BTC-USD",
+            strategy_card_id="strategy-card:visible",
+            strategy_name="BTC strategy visibility candidate",
+            strategy_status="ACTIVE",
+            hypothesis="Breakout continuation should beat the baseline after costs.",
+            paper_shadow_outcome_id="paper-shadow-outcome:visible",
+            outcome_grade="FAIL",
+            excess_return_after_costs=-0.025,
+            recommended_strategy_action="REVISE_STRATEGY",
+            top_failure_attributions=["negative_excess_return", "drawdown_breach"],
+            lineage_root_card_id="strategy-card:visible",
+            lineage_revision_count=1,
+            lineage_outcome_count=2,
+            lineage_primary_failure_attribution="drawdown_breach",
+            lineage_next_research_focus="優先修正 drawdown_breach，再重跑 locked retest。",
+            next_research_action="REVISE_STRATEGY",
+            autopilot_run_id="research-autopilot-run:visible",
+            evidence_artifact_ids=[
+                "strategy-card:visible",
+                "paper-shadow-outcome:visible",
+                "paper-shadow-outcome:visible-revision-quarantine",
+            ],
+            research_summary=(
+                "目前策略 BTC strategy visibility candidate：paper-shadow 失敗；"
+                "下一步修訂策略。"
+            ),
+            next_step_rationale="優先修正 回撤超標 (drawdown_breach)，再重跑 locked retest。",
+            decision_basis="test",
+        )
+    )
 
 
 def _seed_visible_revision_candidate(repository: JsonFileRepository, now: datetime) -> None:
@@ -887,6 +925,28 @@ def test_research_page_surfaces_strategy_hypothesis_gates_shadow_and_autopilot(t
     assert "REVISE_STRATEGY" in html
     assert "research-autopilot-run:visible" in html
     assert "<form" not in html.lower()
+
+
+def test_operator_console_surfaces_strategy_research_digest_in_research_and_overview(tmp_path):
+    now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    repository.save_strategy_decision(_decision(now))
+    _seed_visible_strategy_research(repository, now)
+    _seed_visible_strategy_research_digest(repository, now + timedelta(minutes=15))
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    research_html = render_operator_console_page(snapshot, page="research")
+    overview_html = render_operator_console_page(snapshot, page="overview")
+
+    assert snapshot.latest_strategy_research_digest is not None
+    assert snapshot.latest_strategy_research_digest.digest_id == "strategy-research-digest:visible"
+    for html in (research_html, overview_html):
+        assert "策略研究摘要" in html
+        assert "strategy-research-digest:visible" in html
+        assert "目前策略 BTC strategy visibility candidate：paper-shadow 失敗；下一步修訂策略。" in html
+        assert "優先修正 回撤超標 (drawdown_breach)，再重跑 locked retest。" in html
+        assert "負超額報酬 (negative_excess_return), 回撤超標 (drawdown_breach)" in html
+        assert "paper-shadow-outcome:visible-revision-quarantine" in html
 
 
 def test_research_page_uses_autopilot_linked_chain_instead_of_latest_symbol_artifacts(tmp_path):

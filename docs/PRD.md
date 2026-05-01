@@ -875,6 +875,9 @@ V1 MVP should include:
   machine-readable summary of the active hypothesis, paper-shadow outcome,
   lineage failure concentration, evidence ids, and next research action without
   scraping dashboard/operator-console HTML
+- strategy research digest visibility in dashboard and operator console, so
+  human review sees the compact strategy summary, failure concentration,
+  evidence ids, and next research rationale before lower-level artifact tables
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

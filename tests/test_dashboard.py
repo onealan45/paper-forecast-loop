@@ -34,6 +34,7 @@ from forecast_loop.models import (
     RiskSnapshot,
     StrategyCard,
     StrategyDecision,
+    StrategyResearchDigest,
 )
 from forecast_loop.revision_retest_executor import execute_revision_retest_next_task
 from forecast_loop.storage import JsonFileRepository
@@ -205,6 +206,43 @@ def _seed_dashboard_strategy_research(repository: JsonFileRepository, now: datet
     repository.save_paper_shadow_outcome(outcome)
     repository.save_research_agenda(agenda)
     repository.save_research_autopilot_run(autopilot)
+
+
+def _seed_dashboard_strategy_research_digest(repository: JsonFileRepository, now: datetime) -> None:
+    repository.save_strategy_research_digest(
+        StrategyResearchDigest(
+            digest_id="strategy-research-digest:dashboard-visible",
+            created_at=now,
+            symbol="BTC-USD",
+            strategy_card_id="strategy-card:dashboard-visible",
+            strategy_name="Dashboard BTC breakout candidate",
+            strategy_status="ACTIVE",
+            hypothesis="Dashboard should show concrete strategy logic before raw metadata.",
+            paper_shadow_outcome_id="paper-shadow-outcome:dashboard-visible",
+            outcome_grade="FAIL",
+            excess_return_after_costs=-0.025,
+            recommended_strategy_action="REVISE_STRATEGY",
+            top_failure_attributions=["negative_excess_return", "drawdown_breach"],
+            lineage_root_card_id="strategy-card:dashboard-visible",
+            lineage_revision_count=1,
+            lineage_outcome_count=2,
+            lineage_primary_failure_attribution="drawdown_breach",
+            lineage_next_research_focus="優先修正 drawdown_breach，再重跑 locked retest。",
+            next_research_action="REVISE_STRATEGY",
+            autopilot_run_id="research-autopilot-run:dashboard-visible",
+            evidence_artifact_ids=[
+                "strategy-card:dashboard-visible",
+                "paper-shadow-outcome:dashboard-visible",
+                "paper-shadow-outcome:dashboard-revision-quarantine",
+            ],
+            research_summary=(
+                "目前策略 Dashboard BTC breakout candidate：paper-shadow 失敗；"
+                "下一步修訂策略。"
+            ),
+            next_step_rationale="優先修正 回撤超標 (drawdown_breach)，再重跑 locked retest。",
+            decision_basis="test",
+        )
+    )
 
 
 def _seed_dashboard_revision_candidate(repository: JsonFileRepository, now: datetime) -> None:
@@ -1083,6 +1121,28 @@ def test_dashboard_surfaces_strategy_research_context_before_raw_metadata(tmp_pa
     assert "下一步研究動作" in html
     assert "REVISE_STRATEGY" in html
     assert "research-autopilot-run:dashboard-visible" in html
+
+
+def test_dashboard_surfaces_strategy_research_digest_summary(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+    _seed_dashboard_strategy_research(repository, now)
+    _seed_dashboard_strategy_research_digest(repository, now + timedelta(minutes=15))
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+    html = render_dashboard_html(snapshot)
+
+    assert snapshot.latest_strategy_research_digest is not None
+    assert snapshot.latest_strategy_research_digest.digest_id == "strategy-research-digest:dashboard-visible"
+    assert "策略研究摘要" in html
+    assert "strategy-research-digest:dashboard-visible" in html
+    assert "目前策略 Dashboard BTC breakout candidate：paper-shadow 失敗；下一步修訂策略。" in html
+    assert "優先修正 回撤超標 (drawdown_breach)，再重跑 locked retest。" in html
+    assert "負超額報酬 (negative_excess_return), 回撤超標 (drawdown_breach)" in html
+    assert "paper-shadow-outcome:dashboard-revision-quarantine" in html
+    assert html.index("策略研究摘要") < html.index("目前策略假設")
 
 
 def test_dashboard_uses_autopilot_linked_chain_instead_of_latest_symbol_artifacts(tmp_path):

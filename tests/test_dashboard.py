@@ -1071,6 +1071,8 @@ def test_dashboard_surfaces_strategy_research_context_before_raw_metadata(tmp_pa
     assert "0.2100" in html
     assert "Leaderboard" in html
     assert "leaderboard-entry:dashboard-visible" in html
+    leaderboard_section = html[html.index("Leaderboard") : html.index("Paper-shadow 歸因")]
+    assert "<dt>Promotion</dt><dd>候選策略 (CANDIDATE)</dd>" in leaderboard_section
     assert "Paper-shadow 歸因" in html
     paper_shadow_section = html[html.index("Paper-shadow 歸因") : html.index("策略規則")]
     assert "<dt>Grade</dt><dd>失敗 (FAIL)</dd>" in paper_shadow_section

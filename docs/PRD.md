@@ -591,6 +591,9 @@ lineage artifacts keep machine keys unchanged.
 Paper-shadow detail and overview preview rows should render outcome grade and
 recommended action with readable labels first and raw codes retained beside
 them.
+Leaderboard promotion-stage rows should render readable labels first and raw
+promotion codes retained beside them; this is display-only and must not change
+promotion gates.
 
 ## 10.3 Data Scope
 
@@ -858,6 +861,9 @@ V1 MVP should include:
   reading raw machine-code detail
 - readable paper-shadow detail and overview status copy, so operators see
   outcome grade and recommended strategy action in human terms before raw codes
+- readable leaderboard promotion-stage copy, so strategy research panels expose
+  candidate/paper-shadow status in human terms without hiding raw promotion
+  codes
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

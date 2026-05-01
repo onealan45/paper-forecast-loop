@@ -873,6 +873,8 @@ def test_research_page_surfaces_strategy_hypothesis_gates_shadow_and_autopilot(t
     assert "0.2100" in html
     assert "Leaderboard" in html
     assert "leaderboard-entry:visible" in html
+    leaderboard_section = html[html.index("Leaderboard") : html.index("Paper-shadow 歸因")]
+    assert "Promotion：候選策略 (CANDIDATE)" in leaderboard_section
     assert "Paper-shadow 歸因" in html
     paper_shadow_section = html[html.index("Paper-shadow 歸因") : html.index("策略規則")]
     assert "Grade：失敗 (FAIL)" in paper_shadow_section

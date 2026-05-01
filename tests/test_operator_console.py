@@ -836,6 +836,24 @@ def test_health_page_shows_blocking_findings_and_repair_request_detail(tmp_path)
     assert "<form" not in html.lower()
 
 
+def test_health_page_shows_repair_request_status_reason(tmp_path):
+    now = datetime(2026, 5, 1, 8, 30, tzinfo=UTC)
+    resolved = replace(
+        _repair_request(now),
+        status="resolved",
+        status_updated_at=now + timedelta(minutes=5),
+        status_reason="health-check returned healthy after runtime refresh",
+    )
+    JsonFileRepository(tmp_path).save_repair_request(resolved)
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    html = render_operator_console_page(snapshot, page="health")
+
+    assert "已解決 (resolved)" in html
+    assert "health-check returned healthy after runtime refresh" in html
+    assert "2026-05-01" in html
+
+
 def test_health_page_renders_when_repair_request_log_is_corrupt(tmp_path):
     now = datetime(2026, 4, 25, 1, 30, tzinfo=UTC)
     (tmp_path / "repair_requests.jsonl").write_text("{bad json\n", encoding="utf-8")

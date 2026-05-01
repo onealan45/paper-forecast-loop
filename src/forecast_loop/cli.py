@@ -54,6 +54,7 @@ from forecast_loop.pipeline import ForecastingLoop
 from forecast_loop.provider_audit import AuditedMarketDataProvider
 from forecast_loop.portfolio import create_portfolio_snapshot, fill_paper_order, save_portfolio_mark
 from forecast_loop.providers import CoinGeckoMarketDataProvider, build_sample_provider
+from forecast_loop.repair_requests import update_repair_request_status
 from forecast_loop.replay import ReplayRunner
 from forecast_loop.research_dataset import build_research_dataset
 from forecast_loop.research_report import generate_research_report
@@ -160,6 +161,13 @@ def main(argv: list[str] | None = None) -> int:
 
     repair_storage_cmd = subparsers.add_parser("repair-storage")
     repair_storage_cmd.add_argument("--storage-dir", required=True)
+
+    repair_request_cmd = subparsers.add_parser("repair-request")
+    repair_request_cmd.add_argument("--storage-dir", required=True)
+    repair_request_cmd.add_argument("--repair-request-id", required=True)
+    repair_request_cmd.add_argument("--status", choices=["resolved", "ignored"], required=True)
+    repair_request_cmd.add_argument("--reason", required=True)
+    repair_request_cmd.add_argument("--updated-at")
 
     decide = subparsers.add_parser("decide")
     decide.add_argument("--storage-dir", required=True)
@@ -576,6 +584,8 @@ def main(argv: list[str] | None = None) -> int:
             return _operator_control(args)
         if args.command == "repair-storage":
             return _repair_storage(args)
+        if args.command == "repair-request":
+            return _repair_request(args)
         if args.command == "decide":
             return _decide(args)
         if args.command == "decide-all":
@@ -1214,6 +1224,32 @@ def _repair_storage(args) -> int:
                 "latest_forecast_id": result.latest_forecast_id,
                 "status": result.status,
             }
+        )
+    )
+    return 0
+
+
+def _repair_request(args) -> int:
+    storage_dir = Path(args.storage_dir)
+    if not storage_dir.exists():
+        raise ValueError(f"storage directory does not exist: {storage_dir}")
+    if not storage_dir.is_dir():
+        raise ValueError(f"storage path is not a directory: {storage_dir}")
+    updated_at = _parse_datetime(args.updated_at) if args.updated_at else datetime.now(tz=UTC)
+    repair_request = update_repair_request_status(
+        repository=JsonFileRepository(storage_dir),
+        repair_request_id=args.repair_request_id,
+        status=args.status,
+        reason=args.reason,
+        updated_at=updated_at,
+    )
+    print(
+        json.dumps(
+            {
+                "storage_dir": str(storage_dir.resolve()),
+                "repair_request": repair_request.to_dict(),
+            },
+            ensure_ascii=False,
         )
     )
     return 0

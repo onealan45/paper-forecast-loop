@@ -1131,7 +1131,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
       <div class="summary-tags">
         <span class="tag">Strategy {_dashboard_artifact_id(card, "card_id")}</span>
         <span class="tag">Leaderboard {_dashboard_artifact_id(leaderboard, "entry_id")}</span>
-        <span class="tag">下一步 {escape(autopilot.next_research_action if autopilot else "n/a")}</span>
+        <span class="tag">下一步 {escape(_display_research_action(autopilot.next_research_action if autopilot else None))}</span>
       </div>
       <div class="evidence-block">
         <h3>策略研究結論</h3>
@@ -1157,7 +1157,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
         </div>
         <div class="evidence-block">
           <h3>下一步研究動作</h3>
-          <p class="decision-emphasis">{escape(autopilot.next_research_action if autopilot else "n/a")}</p>
+          <p class="decision-emphasis">{escape(_display_research_action(autopilot.next_research_action if autopilot else None))}</p>
           <dl>
             <dt>Autopilot Run</dt><dd>{_dashboard_artifact_id(autopilot, "run_id")}</dd>
             <dt>Loop Status</dt><dd>{escape(autopilot.loop_status if autopilot else "n/a")}</dd>
@@ -1308,7 +1308,7 @@ def _render_lineage_cross_sample_agenda(
           <dt>Acceptance</dt><dd>{_dashboard_list_inline(agenda.acceptance_criteria)}</dd>
           <dt>Linked autopilot run</dt><dd>{_dashboard_artifact_id(autopilot_run, "run_id")} / {escape(autopilot_run.loop_status if autopilot_run else "尚未記錄")}</dd>
           <dt>Linked shadow outcome</dt><dd><code>{escape(autopilot_run.paper_shadow_outcome_id if autopilot_run and autopilot_run.paper_shadow_outcome_id else "none")}</code></dd>
-          <dt>Next research action</dt><dd>{escape(autopilot_run.next_research_action if autopilot_run else "等待 fresh-sample 驗證完成")}</dd>
+          <dt>Next research action</dt><dd>{escape(_display_research_action(autopilot_run.next_research_action if autopilot_run else "等待 fresh-sample 驗證完成"))}</dd>
         </dl>
         <p class="micro-copy">這是 fresh sample 驗證交接，不代表 locked evaluation、walk-forward 或 paper-shadow 已通過。</p>
       </div>
@@ -1369,7 +1369,7 @@ def _render_lineage_replacement_strategy(
         <dl>
           <dt>Loop Status</dt><dd><span class="{_dashboard_automation_status_class(autopilot_run.loop_status) if autopilot_run else "status-muted"}">{escape(autopilot_run.loop_status if autopilot_run else "尚未記錄")}</span></dd>
           <dt>Run ID</dt><dd><code>{escape(autopilot_run.run_id if autopilot_run else "none")}</code></dd>
-          <dt>Next Action</dt><dd>{escape(autopilot_run.next_research_action if autopilot_run else "n/a")}</dd>
+          <dt>Next Action</dt><dd>{escape(_display_research_action(autopilot_run.next_research_action if autopilot_run else None))}</dd>
           <dt>Paper-shadow Outcome</dt><dd><code>{escape(autopilot_run.paper_shadow_outcome_id if autopilot_run and autopilot_run.paper_shadow_outcome_id else "none")}</code></dd>
           <dt>Blocked</dt><dd>{_dashboard_list_inline(autopilot_run.blocked_reasons if autopilot_run else [])}</dd>
           <dt>Steps</dt><dd>{_dashboard_steps_inline(autopilot_run) if autopilot_run else '<span class="micro-copy">尚無 completed replacement retest chain 紀錄。</span>'}</dd>
@@ -1596,7 +1596,7 @@ def _render_revision_retest_autopilot_run(run: ResearchAutopilotRun | None) -> s
           <dl>
             <dt>Loop Status</dt><dd><span class="{_dashboard_automation_status_class(run.loop_status)}">{escape(run.loop_status)}</span></dd>
             <dt>Run ID</dt><dd><code>{escape(run.run_id)}</code></dd>
-            <dt>Next Action</dt><dd>{escape(run.next_research_action)}</dd>
+            <dt>Next Action</dt><dd>{escape(_display_research_action(run.next_research_action))}</dd>
             <dt>Paper-shadow Outcome</dt><dd><code>{escape(run.paper_shadow_outcome_id or "none")}</code></dd>
             <dt>Blocked</dt><dd>{_dashboard_list_inline(run.blocked_reasons)}</dd>
             <dt>Steps</dt><dd>{_dashboard_steps_inline(run)}</dd>

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from forecast_loop.models import (
@@ -106,10 +106,15 @@ class _AlignedShadowWindowReadiness:
     rationale_parts: tuple[str, ...]
     first_aligned_window_start: datetime | None
     next_required_window_end: datetime | None
+    next_required_window_observed: bool
 
     @property
     def candidate_window_ready(self) -> bool:
-        return self.first_aligned_window_start is not None and self.next_required_window_end is not None
+        return (
+            self.first_aligned_window_start is not None
+            and self.next_required_window_end is not None
+            and self.next_required_window_observed
+        )
 
 
 def build_revision_retest_task_plan(
@@ -970,17 +975,24 @@ def _aligned_shadow_window_readiness(
             ),
             first_aligned_window_start=None,
             next_required_window_end=None,
+            next_required_window_observed=False,
         )
     first_aligned_start = post_entry_timestamps[0]
     if len(post_entry_timestamps) == 1:
+        expected_window_end = _expected_next_candle_timestamp(candles, symbol, first_aligned_start)
         return _AlignedShadowWindowReadiness(
             rationale_parts=(
                 f"first_aligned_window_start={first_aligned_start.isoformat()}",
-                "next_required_window_end=missing",
+                (
+                    f"next_required_window_end={expected_window_end.isoformat()}"
+                    if expected_window_end is not None
+                    else "next_required_window_end=missing"
+                ),
                 "candidate_window_ready=false",
             ),
             first_aligned_window_start=first_aligned_start,
-            next_required_window_end=None,
+            next_required_window_end=expected_window_end,
+            next_required_window_observed=False,
         )
     next_window_end = post_entry_timestamps[1]
     return _AlignedShadowWindowReadiness(
@@ -991,7 +1003,29 @@ def _aligned_shadow_window_readiness(
         ),
         first_aligned_window_start=first_aligned_start,
         next_required_window_end=next_window_end,
+        next_required_window_observed=True,
     )
+
+
+def _expected_next_candle_timestamp(
+    candles: list[MarketCandleRecord],
+    symbol: str,
+    first_aligned_start: datetime,
+) -> datetime | None:
+    interval = _infer_candle_interval(candles, symbol)
+    if interval is None:
+        return None
+    return first_aligned_start + interval
+
+
+def _infer_candle_interval(candles: list[MarketCandleRecord], symbol: str) -> timedelta | None:
+    timestamps = sorted({candle.timestamp for candle in candles if candle.symbol == symbol})
+    deltas = [
+        current - previous
+        for previous, current in zip(timestamps, timestamps[1:])
+        if current > previous
+    ]
+    return min(deltas) if deltas else None
 
 
 def _revision_card(

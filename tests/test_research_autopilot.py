@@ -3339,7 +3339,7 @@ def test_revision_retest_shadow_task_exposes_aligned_window_readiness(tmp_path):
     assert task.status == "blocked"
     assert task.command_args is None
     assert "first_aligned_window_start=2026-04-29T12:30:00+00:00" in task.rationale
-    assert "next_required_window_end=missing" in task.rationale
+    assert "next_required_window_end=2026-04-30T12:30:00+00:00" in task.rationale
     assert "candidate_window_ready=false" in task.rationale
 
 

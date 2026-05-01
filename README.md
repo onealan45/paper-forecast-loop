@@ -335,6 +335,9 @@ factory:
   attribution labels while leaving the underlying summary artifact unchanged.
 - PR89 reuses readable research-action copy across autopilot next-action panels,
   including revision retest and lineage replacement retest surfaces.
+- PR90 reuses readable research-action copy for lineage action-count aggregates,
+  so dashboard and operator console show the action label with the raw code
+  instead of raw-only count keys.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

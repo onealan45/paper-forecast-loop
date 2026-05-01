@@ -582,6 +582,9 @@ tokens in the UI while preserving the raw artifact value for downstream
 automation and CLI consumers.
 Autopilot next-action panels should follow the same display rule: readable
 action label first, raw action code retained beside it.
+Lineage action-count aggregates should use the same display rule in dashboard
+and operator-console UX: readable action label first, raw action code retained
+beside it, while stored lineage artifacts keep machine keys unchanged.
 
 ## 10.3 Data Scope
 
@@ -841,6 +844,9 @@ V1 MVP should include:
 - strategy research conclusion copy in dashboard and operator console, so the
   UX summarizes current strategy state, paper-shadow result, failure
   attribution, and next research action before raw evidence details
+- readable lineage action-count aggregates in dashboard and operator console,
+  so operators can scan quarantined/revised strategy action concentration
+  without losing the raw action codes needed for auditability
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

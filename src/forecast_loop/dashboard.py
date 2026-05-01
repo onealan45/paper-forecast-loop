@@ -303,7 +303,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         latest_lineage_cross_sample_autopilot_run=lineage_cross_sample_autopilot_run,
         latest_lineage_replacement_strategy_card=lineage_replacement_card,
         latest_lineage_replacement_retest_task_plan=lineage_replacement_retest_task_plan,
-        latest_lineage_replacement_retest_task_run=_latest_revision_retest_executor_run(
+        latest_lineage_replacement_retest_task_run=_latest_revision_retest_activity_run(
             automation_runs,
             lineage_replacement_retest_task_plan,
         ),
@@ -498,6 +498,21 @@ def _latest_revision_retest_executor_run(
         and _automation_step_artifact_id(run, "source_outcome") == task_plan.source_outcome_id
     ]
     return max(matches, key=lambda run: run.completed_at) if matches else None
+
+
+def _latest_revision_retest_activity_run(
+    runs: list[AutomationRun],
+    task_plan: RevisionRetestTaskPlan | None,
+) -> AutomationRun | None:
+    candidates = [
+        run
+        for run in (
+            _latest_revision_retest_task_run(runs, task_plan),
+            _latest_revision_retest_executor_run(runs, task_plan),
+        )
+        if run is not None
+    ]
+    return max(candidates, key=lambda run: run.completed_at) if candidates else None
 
 
 def _automation_step_artifact_id(run: AutomationRun, name: str) -> str | None:
@@ -1404,7 +1419,7 @@ def _render_lineage_replacement_strategy(
           <dt>Scaffold Status</dt><dd>{escape(scaffold_task.status if scaffold_task else "無 plan")}</dd>
           <dt>Retest Kind</dt><dd><code>{escape(_replacement_retest_kind(retest_plan))}</code></dd>
           <dt>Next Task</dt><dd><code>{escape(next_task.task_id if next_task else "none")}</code> / {escape(next_task.status if next_task else "completed")}</dd>
-          <dt>Latest Executor Run</dt><dd>{_dashboard_artifact_id(retest_run, "automation_run_id")} / {escape(retest_run.status if retest_run else "尚未執行")}</dd>
+          <dt>Latest Retest Activity</dt><dd>{_dashboard_artifact_id(retest_run, "automation_run_id")} / {escape(retest_run.status if retest_run else "尚未執行")}</dd>
         </dl>
         {shadow_readiness}
         <p class="micro-copy">這裡只顯示替代策略是否已進入 retest scaffold；不代表策略通過、晉級或下單。</p>

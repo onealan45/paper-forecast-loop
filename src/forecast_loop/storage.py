@@ -48,6 +48,7 @@ from forecast_loop.models import (
     SplitManifest,
     StrategyCard,
     StrategyDecision,
+    StrategyResearchDigest,
     WalkForwardValidation,
 )
 
@@ -235,6 +236,10 @@ class ArtifactRepository(Protocol):
 
     def load_research_autopilot_runs(self) -> list[ResearchAutopilotRun]: ...
 
+    def save_strategy_research_digest(self, digest: StrategyResearchDigest) -> None: ...
+
+    def load_strategy_research_digests(self) -> list[StrategyResearchDigest]: ...
+
 
 class JsonFileRepository:
     def __init__(self, root: Path | str) -> None:
@@ -284,6 +289,7 @@ class JsonFileRepository:
         self.paper_shadow_outcomes_path = self.root / "paper_shadow_outcomes.jsonl"
         self.research_agendas_path = self.root / "research_agendas.jsonl"
         self.research_autopilot_runs_path = self.root / "research_autopilot_runs.jsonl"
+        self.strategy_research_digests_path = self.root / "strategy_research_digests.jsonl"
 
     def save_market_candle(self, candle: MarketCandleRecord) -> None:
         self._append_unique(
@@ -740,6 +746,16 @@ class JsonFileRepository:
 
     def load_research_autopilot_runs(self) -> list[ResearchAutopilotRun]:
         return self._load_lines(self.research_autopilot_runs_path, ResearchAutopilotRun.from_dict)
+
+    def save_strategy_research_digest(self, digest: StrategyResearchDigest) -> None:
+        self._append_unique(
+            self.strategy_research_digests_path,
+            digest.to_dict(),
+            identity_key="digest_id",
+        )
+
+    def load_strategy_research_digests(self) -> list[StrategyResearchDigest]:
+        return self._load_lines(self.strategy_research_digests_path, StrategyResearchDigest.from_dict)
 
     def _append(self, path: Path, payload: dict) -> None:
         with path.open("a", encoding="utf-8") as handle:

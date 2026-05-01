@@ -1433,6 +1433,89 @@ class ResearchAutopilotRun:
 
 
 @dataclass(slots=True)
+class StrategyResearchDigest:
+    digest_id: str
+    created_at: datetime
+    symbol: str
+    strategy_card_id: str | None
+    strategy_name: str
+    strategy_status: str | None
+    hypothesis: str
+    paper_shadow_outcome_id: str | None
+    outcome_grade: str | None
+    excess_return_after_costs: float | None
+    recommended_strategy_action: str | None
+    top_failure_attributions: list[str]
+    lineage_root_card_id: str | None
+    lineage_revision_count: int
+    lineage_outcome_count: int
+    lineage_primary_failure_attribution: str | None
+    lineage_next_research_focus: str | None
+    next_research_action: str | None
+    autopilot_run_id: str | None
+    evidence_artifact_ids: list[str]
+    research_summary: str
+    next_step_rationale: str
+    decision_basis: str
+
+    @classmethod
+    def build_id(
+        cls,
+        *,
+        created_at: datetime,
+        symbol: str,
+        strategy_card_id: str | None,
+        paper_shadow_outcome_id: str | None,
+        autopilot_run_id: str | None,
+        lineage_latest_outcome_id: str | None,
+    ) -> str:
+        return _stable_artifact_id(
+            "strategy-research-digest",
+            {
+                "created_at": created_at.isoformat(),
+                "symbol": symbol,
+                "strategy_card_id": strategy_card_id,
+                "paper_shadow_outcome_id": paper_shadow_outcome_id,
+                "autopilot_run_id": autopilot_run_id,
+                "lineage_latest_outcome_id": lineage_latest_outcome_id,
+            },
+        )
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.isoformat()
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "StrategyResearchDigest":
+        return cls(
+            digest_id=_require_string(payload, "digest_id"),
+            created_at=_require_aware_datetime(payload, "created_at"),
+            symbol=_require_string(payload, "symbol"),
+            strategy_card_id=payload.get("strategy_card_id"),
+            strategy_name=payload.get("strategy_name", "no_strategy_card"),
+            strategy_status=payload.get("strategy_status"),
+            hypothesis=payload.get("hypothesis", ""),
+            paper_shadow_outcome_id=payload.get("paper_shadow_outcome_id"),
+            outcome_grade=payload.get("outcome_grade"),
+            excess_return_after_costs=_optional_float(payload.get("excess_return_after_costs")),
+            recommended_strategy_action=payload.get("recommended_strategy_action"),
+            top_failure_attributions=list(payload.get("top_failure_attributions", [])),
+            lineage_root_card_id=payload.get("lineage_root_card_id"),
+            lineage_revision_count=int(payload.get("lineage_revision_count", 0)),
+            lineage_outcome_count=int(payload.get("lineage_outcome_count", 0)),
+            lineage_primary_failure_attribution=payload.get("lineage_primary_failure_attribution"),
+            lineage_next_research_focus=payload.get("lineage_next_research_focus"),
+            next_research_action=payload.get("next_research_action"),
+            autopilot_run_id=payload.get("autopilot_run_id"),
+            evidence_artifact_ids=list(payload.get("evidence_artifact_ids", [])),
+            research_summary=payload.get("research_summary", ""),
+            next_step_rationale=payload.get("next_step_rationale", ""),
+            decision_basis=payload.get("decision_basis", "legacy_strategy_research_digest"),
+        )
+
+
+@dataclass(slots=True)
 class SourceRegistryEntry:
     source_id: str
     source_name: str

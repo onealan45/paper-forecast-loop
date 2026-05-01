@@ -51,6 +51,7 @@ from forecast_loop.models import (
     SplitManifest,
     StrategyCard,
     StrategyDecision,
+    StrategyResearchDigest,
     WalkForwardValidation,
 )
 from forecast_loop.storage import JsonFileRepository
@@ -157,6 +158,12 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         "research_autopilot_runs.jsonl",
         "run_id",
         ResearchAutopilotRun.from_dict,
+    ),
+    ArtifactSpec(
+        "strategy_research_digests",
+        "strategy_research_digests.jsonl",
+        "digest_id",
+        StrategyResearchDigest.from_dict,
     ),
 )
 _SPEC_BY_TYPE = {spec.artifact_type: spec for spec in ARTIFACT_SPECS}
@@ -498,6 +505,12 @@ class SQLiteRepository:
     def load_research_autopilot_runs(self) -> list[ResearchAutopilotRun]:
         return self._load("research_autopilot_runs", ResearchAutopilotRun.from_dict)
 
+    def save_strategy_research_digest(self, digest: StrategyResearchDigest) -> None:
+        self._save_unique("strategy_research_digests", digest.digest_id, digest.to_dict())
+
+    def load_strategy_research_digests(self) -> list[StrategyResearchDigest]:
+        return self._load("strategy_research_digests", StrategyResearchDigest.from_dict)
+
     def artifact_counts(self) -> dict[str, int]:
         with self._connect() as connection:
             rows = connection.execute(
@@ -663,6 +676,8 @@ def migrate_jsonl_to_sqlite(storage_dir: Path | str, db_path: Path | str | None 
         sqlite_repository.save_research_agenda(agenda)
     for run in json_repository.load_research_autopilot_runs():
         sqlite_repository.save_research_autopilot_run(run)
+    for digest in json_repository.load_strategy_research_digests():
+        sqlite_repository.save_strategy_research_digest(digest)
 
     after_counts = sqlite_repository.artifact_counts()
     return {

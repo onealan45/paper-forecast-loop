@@ -37,6 +37,15 @@ _OUTCOME_GRADE_LABELS = {
     "PASS": "通過",
 }
 
+_PROMOTION_STAGE_LABELS = {
+    "BLOCKED": "已阻擋",
+    "CANDIDATE": "候選策略",
+    "PAPER_SHADOW_BLOCKED": "paper-shadow 已阻擋",
+    "PAPER_SHADOW_FAILED": "paper-shadow 失敗",
+    "PAPER_SHADOW_PASSED": "paper-shadow 通過",
+    "PROMOTION_READY": "可進入下一階段",
+}
+
 
 def build_strategy_research_conclusion(
     *,
@@ -78,6 +87,13 @@ def format_outcome_grade(grade: str) -> str:
     if label is None:
         return grade
     return f"{label} ({grade})"
+
+
+def format_promotion_stage(stage: str) -> str:
+    label = _PROMOTION_STAGE_LABELS.get(stage)
+    if label is None:
+        return stage
+    return f"{label} ({stage})"
 
 
 def _format_failure_attribution(attribution: str) -> str:

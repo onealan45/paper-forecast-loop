@@ -343,6 +343,8 @@ factory:
   lineage panels.
 - PR92 reuses readable paper-shadow grade and recommended-action copy in the
   detailed research panels and operator overview preview.
+- PR93 reuses readable promotion-stage copy in leaderboard panels while keeping
+  raw promotion codes visible for auditability.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

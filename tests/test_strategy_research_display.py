@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from forecast_loop.models import PaperShadowOutcome, ResearchAutopilotRun, StrategyCard
-from forecast_loop.strategy_research_display import build_strategy_research_conclusion
+from forecast_loop.strategy_research_display import build_strategy_research_conclusion, format_promotion_stage
 
 
 def _strategy_card(now: datetime) -> StrategyCard:
@@ -112,3 +112,9 @@ def test_build_strategy_research_conclusion_handles_missing_card():
         build_strategy_research_conclusion(card=None, outcome=None, autopilot=None)
         == "目前沒有策略卡，無法形成策略研究結論。"
     )
+
+
+def test_format_promotion_stage_keeps_raw_code_with_readable_label():
+    assert format_promotion_stage("CANDIDATE") == "候選策略 (CANDIDATE)"
+    assert format_promotion_stage("BLOCKED") == "已阻擋 (BLOCKED)"
+    assert format_promotion_stage("UNKNOWN_STAGE") == "UNKNOWN_STAGE"

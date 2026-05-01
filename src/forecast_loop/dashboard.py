@@ -54,6 +54,7 @@ from forecast_loop.strategy_research_display import (
     build_strategy_research_conclusion,
     format_failure_attributions,
     format_outcome_grade,
+    format_promotion_stage,
     format_research_action,
 )
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
@@ -1183,7 +1184,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
             <dt>Entry</dt><dd>{_dashboard_artifact_id(leaderboard, "entry_id")}</dd>
             <dt>Rankable</dt><dd>{_display_boolean(leaderboard.rankable) if leaderboard else "否"}</dd>
             <dt>alpha_score</dt><dd>{_format_optional_number(leaderboard.alpha_score if leaderboard else None)}</dd>
-            <dt>Promotion</dt><dd>{escape(leaderboard.promotion_stage if leaderboard else "n/a")}</dd>
+            <dt>Promotion</dt><dd>{escape(_display_promotion_stage(leaderboard.promotion_stage if leaderboard else None))}</dd>
             <dt>Rules</dt><dd>{escape(leaderboard.leaderboard_rules_version if leaderboard else "n/a")}</dd>
           </dl>
         </div>
@@ -2480,6 +2481,12 @@ def _display_outcome_grade(grade: str | None) -> str:
     if not grade:
         return "n/a"
     return format_outcome_grade(grade)
+
+
+def _display_promotion_stage(stage: str | None) -> str:
+    if not stage:
+        return "n/a"
+    return format_promotion_stage(stage)
 
 
 def _display_lineage_next_research_focus(summary: StrategyLineageSummary) -> str:

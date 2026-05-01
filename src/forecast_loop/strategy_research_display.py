@@ -46,6 +46,13 @@ _PROMOTION_STAGE_LABELS = {
     "PROMOTION_READY": "可進入下一階段",
 }
 
+_STRATEGY_CARD_STATUS_LABELS = {
+    "ACTIVE": "啟用",
+    "DRAFT": "草稿",
+    "QUARANTINED": "隔離中",
+    "RETIRED": "已淘汰",
+}
+
 
 def build_strategy_research_conclusion(
     *,
@@ -94,6 +101,13 @@ def format_promotion_stage(stage: str) -> str:
     if label is None:
         return stage
     return f"{label} ({stage})"
+
+
+def format_strategy_card_status(status: str) -> str:
+    label = _STRATEGY_CARD_STATUS_LABELS.get(status)
+    if label is None:
+        return status
+    return f"{label} ({status})"
 
 
 def _format_failure_attribution(attribution: str) -> str:

@@ -56,6 +56,7 @@ from forecast_loop.strategy_research_display import (
     format_outcome_grade,
     format_promotion_stage,
     format_research_action,
+    format_strategy_card_status,
 )
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.storage import JsonFileRepository
@@ -1152,7 +1153,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
           <p class="decision-emphasis">{escape(card.strategy_name if card else "尚無策略卡")}</p>
           <dl>
             <dt>Family / Version</dt><dd>{escape(card.strategy_family if card else "n/a")} / {escape(card.version if card else "n/a")}</dd>
-            <dt>Status</dt><dd>{escape(card.status if card else "n/a")}</dd>
+            <dt>Status</dt><dd>{escape(_display_strategy_card_status(card.status if card else None))}</dd>
             <dt>Signal</dt><dd>{escape(card.signal_description if card else "n/a")}</dd>
             <dt>參數</dt><dd>{_dashboard_dict_inline(card.parameters if card else {})}</dd>
           </dl>
@@ -1337,7 +1338,7 @@ def _render_lineage_replacement_strategy(
           <h3>Lineage 替代策略假說</h3>
           <p class="decision-emphasis">{escape(card.strategy_name)}</p>
           <dl>
-            <dt>Replacement</dt><dd>{_dashboard_artifact_id(card, "card_id")} / {escape(card.status)}</dd>
+            <dt>Replacement</dt><dd>{_dashboard_artifact_id(card, "card_id")} / {escape(_display_strategy_card_status(card.status))}</dd>
             <dt>Basis</dt><dd>{escape(card.decision_basis)}</dd>
             <dt>來源 lineage</dt><dd><code>{escape(root_card_id)}</code></dd>
             <dt>來源 outcome</dt><dd><code>{escape(source_outcome_id)}</code></dd>
@@ -1424,7 +1425,7 @@ def _dashboard_revision_tree(summary: StrategyLineageSummary) -> str:
         return "none"
     return "<br>".join(
         f"Depth {node.depth} / Parent {escape(node.parent_card_id)} / <code>{escape(node.card_id)}</code>"
-        f" / {escape(node.status)} / Name {escape(node.strategy_name)}"
+        f" / {escape(_display_strategy_card_status(node.status))} / Name {escape(node.strategy_name)}"
         f" / Hypothesis {escape(node.hypothesis)}"
         f" / Source {escape(node.source_outcome_id or 'none')}"
         f" / Fixes {escape(_display_failure_attribution_codes(node.failure_attributions))}"
@@ -1441,7 +1442,7 @@ def _dashboard_replacement_contributions(summary: StrategyLineageSummary) -> str
         f" / Latest {escape(node.latest_outcome_id or 'none')}"
         f" / Action {escape(_display_research_action(node.latest_recommended_strategy_action))}"
         f" / Excess {_format_optional_number(node.latest_excess_return_after_costs)}"
-        f" / Status {escape(node.status)}"
+        f" / Status {escape(_display_strategy_card_status(node.status))}"
         f" / Hypothesis {escape(node.hypothesis)}"
         f" / Failures {escape(_display_failure_attribution_codes(node.failure_attributions))}"
         for node in summary.replacement_nodes
@@ -1497,7 +1498,7 @@ def _render_strategy_revision_candidate(snapshot: DashboardSnapshot) -> str:
           <h3>策略修正候選</h3>
           <p class="decision-emphasis">{escape(revision.strategy_name)}</p>
           <dl>
-            <dt>Revision</dt><dd>{_dashboard_artifact_id(revision, "card_id")} / {escape(revision.status)}</dd>
+            <dt>Revision</dt><dd>{_dashboard_artifact_id(revision, "card_id")} / {escape(_display_strategy_card_status(revision.status))}</dd>
             <dt>父策略</dt><dd>{escape(revision.parent_card_id or "n/a")}</dd>
             <dt>來源失敗</dt><dd>{_dashboard_artifact_id(source, "outcome_id")}</dd>
             <dt>Failure attribution</dt><dd>{_dashboard_list_inline(attribution_list)}</dd>
@@ -2487,6 +2488,12 @@ def _display_promotion_stage(stage: str | None) -> str:
     if not stage:
         return "n/a"
     return format_promotion_stage(stage)
+
+
+def _display_strategy_card_status(status: str | None) -> str:
+    if not status:
+        return "n/a"
+    return format_strategy_card_status(status)
 
 
 def _display_lineage_next_research_focus(summary: StrategyLineageSummary) -> str:

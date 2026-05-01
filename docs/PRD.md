@@ -594,6 +594,10 @@ them.
 Leaderboard promotion-stage rows should render readable labels first and raw
 promotion codes retained beside them; this is display-only and must not change
 promotion gates.
+Strategy-card status rows should render readable labels first and raw status
+codes retained beside them across current strategy, revisions, replacements,
+and lineage rows; this is display-only and must not change strategy lifecycle
+state.
 
 ## 10.3 Data Scope
 
@@ -864,6 +868,9 @@ V1 MVP should include:
 - readable leaderboard promotion-stage copy, so strategy research panels expose
   candidate/paper-shadow status in human terms without hiding raw promotion
   codes
+- readable strategy-card status copy, so strategy hypothesis, revision,
+  replacement, and lineage panels show lifecycle state in human terms while
+  retaining raw status codes
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

@@ -865,6 +865,7 @@ def test_research_page_surfaces_strategy_hypothesis_gates_shadow_and_autopilot(t
     ) in html
     assert "BTC strategy visibility candidate" in html
     assert "Breakout continuation should beat the baseline after costs." in html
+    assert "Status 啟用 (ACTIVE)" in html
     assert "進場規則" in html
     assert "突破前高且成交量放大" in html
     assert "Evidence Gates" in html
@@ -1246,6 +1247,7 @@ def test_operator_console_strategy_lineage_includes_multi_generation_revisions(t
         assert "Depth 2" in html
         assert "Parent strategy-card:visible-revision" in html
         assert "Name BTC strategy visibility second revision" in html
+        assert "草稿 (DRAFT)" in html
         assert "Hypothesis Second revision should inherit the original visible strategy lineage." in html
         assert "Source paper-shadow-outcome:visible-revision-quarantine" in html
         assert "Fixes 回撤超標 (drawdown_breach), 基準優勢不足 (weak_baseline_edge)" in html

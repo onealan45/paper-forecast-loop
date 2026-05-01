@@ -1063,6 +1063,7 @@ def test_dashboard_surfaces_strategy_research_context_before_raw_metadata(tmp_pa
     ) in html
     assert "Dashboard BTC breakout candidate" in html
     assert "Dashboard should show concrete strategy logic before raw metadata." in html
+    assert "<dt>Status</dt><dd>啟用 (ACTIVE)</dd>" in html
     assert "進場規則" in html
     assert "突破前高且成交量放大" in html
     assert "Evidence Gates" in html
@@ -1436,6 +1437,7 @@ def test_dashboard_strategy_lineage_includes_multi_generation_revisions(tmp_path
     assert "Depth 2" in html
     assert "Parent strategy-card:dashboard-revision" in html
     assert "Name Dashboard BTC breakout candidate second revision" in html
+    assert "草稿 (DRAFT)" in html
     assert "Hypothesis Second revision should inherit the original strategy lineage." in html
     assert "Source paper-shadow-outcome:dashboard-revision-quarantine" in html
     assert "Fixes 回撤超標 (drawdown_breach), 基準優勢不足 (weak_baseline_edge)" in html

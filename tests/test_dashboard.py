@@ -1419,6 +1419,8 @@ def test_dashboard_strategy_lineage_includes_multi_generation_revisions(tmp_path
         "QUARANTINE_STRATEGY": 2,
         "REVISE_STRATEGY": 1,
     }
+    assert "隔離策略 (QUARANTINE_STRATEGY)</code>=2" in html
+    assert "修訂策略 (REVISE_STRATEGY)</code>=1" in html
     assert "Revision Tree" in html
     assert "Depth 2" in html
     assert "Parent strategy-card:dashboard-revision" in html

@@ -1221,6 +1221,11 @@ def test_operator_console_strategy_lineage_includes_multi_generation_revisions(t
         "REVISE_STRATEGY": 1,
     }
     for html in (research_html, overview_html):
+        action_start = html.index("Action counts")
+        action_end = html.index("Failure attribution", action_start)
+        action_count_section = html[action_start:action_end]
+        assert "隔離策略 (QUARANTINE_STRATEGY)" in action_count_section
+        assert "修訂策略 (REVISE_STRATEGY)" in action_count_section
         assert "Revision Tree" in html
         assert "Depth 2" in html
         assert "Parent strategy-card:visible-revision" in html

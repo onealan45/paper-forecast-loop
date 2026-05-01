@@ -1282,7 +1282,7 @@ def _strategy_lineage_panel(summary: StrategyLineageSummary | None) -> str:
     {_strategy_lineage_performance_trajectory(summary)}
     <p>Shadow outcomes：{summary.outcome_count}</p>
     <h4>Action counts</h4>
-    {_dict_rows(summary.action_counts)}
+    {_action_count_rows(summary.action_counts)}
     <h4>Failure attribution</h4>
     {_dict_rows(summary.failure_attribution_counts)}
     <p>Best / worst excess：{_format_number(summary.best_excess_return_after_costs)} / {_format_number(summary.worst_excess_return_after_costs)}</p>
@@ -1648,6 +1648,26 @@ def _dict_rows(values: dict[str, object]) -> str:
     return f"<table><tbody>{rows}</tbody></table>"
 
 
+def _action_count_rows(values: dict[str, object]) -> str:
+    if not values:
+        return '<p class="muted">none</p>'
+    rows = "".join(
+        "<tr>"
+        f"<td><code>{escape(_display_research_action(str(key)))}</code></td>"
+        f"<td>{escape(_format_artifact_value(value))}</td>"
+        "</tr>"
+        for key, value in sorted(values.items(), key=lambda item: str(item[0]))
+    )
+    return f"<table><tbody>{rows}</tbody></table>"
+
+
+def _action_count_labels(values: dict[str, object]) -> list[str]:
+    return [
+        f"{_display_research_action(str(key))}: {_format_artifact_value(value)}"
+        for key, value in sorted(values.items(), key=lambda item: str(item[0]))
+    ]
+
+
 def _format_artifact_value(value: object) -> str:
     if isinstance(value, float):
         return _format_number(value)
@@ -1811,7 +1831,9 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
 <p>{escape(_display_lineage_next_research_focus(lineage) if lineage else "目前沒有 lineage 下一步研究焦點。")}</p>
 <p>表現軌跡</p>
 {_strategy_lineage_performance_trajectory(lineage)}
-{_plain_list(list(lineage.action_counts.keys()) if lineage else [], empty="目前沒有 lineage action")}
+<p>Action counts</p>
+{_plain_list(_action_count_labels(lineage.action_counts) if lineage else [], empty="目前沒有 lineage action")}
+<p>Failure attribution</p>
 {_plain_list(list(lineage.failure_attribution_counts.keys()) if lineage else [], empty="目前沒有 lineage failure attribution")}
 {_revision_retest_task_plan_panel(snapshot.latest_strategy_revision_retest_task_plan)}
 {_revision_retest_task_run_panel(snapshot.latest_strategy_revision_retest_task_run)}

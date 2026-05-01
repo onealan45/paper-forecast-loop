@@ -1,6 +1,15 @@
 from __future__ import annotations
 
 
+SHADOW_READINESS_LABELS = {
+    "earliest_window_start": "最早合法觀察開始",
+    "latest_stored_candle": "最新已儲存 K 線",
+    "first_aligned_window_start": "第一個 K 線對齊開始",
+    "next_required_window_end": "下一個需要的結束 K 線",
+    "candidate_window_ready": "候選視窗狀態",
+}
+
+
 def display_step_name(name: str) -> str:
     labels = {
         "revision_card": "修正策略卡",
@@ -29,6 +38,41 @@ def display_step_artifact(name: str, artifact_id: str | None) -> str:
 
 def display_required_artifacts(artifact_ids: list[str]) -> list[str]:
     return [display_step_artifact("next_task_required_artifact", artifact_id) for artifact_id in artifact_ids]
+
+
+def display_shadow_readiness_from_rationale(rationale: str) -> list[tuple[str, str]]:
+    values = _parse_shadow_readiness(rationale)
+    return [
+        (SHADOW_READINESS_LABELS[key], _shadow_readiness_value(key, values[key]))
+        for key in SHADOW_READINESS_LABELS
+        if key in values
+    ]
+
+
+def _parse_shadow_readiness(rationale: str) -> dict[str, str]:
+    values = {}
+    for key in SHADOW_READINESS_LABELS:
+        marker = f"{key}="
+        start = rationale.find(marker)
+        if start == -1:
+            continue
+        value_start = start + len(marker)
+        value_end = rationale.find(";", value_start)
+        if value_end == -1:
+            value_end = len(rationale)
+        values[key] = rationale[value_start:value_end].strip().removesuffix(".")
+    return values
+
+
+def _shadow_readiness_value(key: str, value: str) -> str:
+    if key == "candidate_window_ready":
+        if value == "true":
+            return "候選視窗已具備起訖 K 線 (true)"
+        if value == "false":
+            return "候選視窗尚未完整 (false)"
+    if value == "missing":
+        return "尚未出現 (missing)"
+    return value
 
 
 def _artifact_copy(artifact_id: str) -> str:

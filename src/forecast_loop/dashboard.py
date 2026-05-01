@@ -8,7 +8,12 @@ import os
 from pathlib import Path
 import tomllib
 
-from forecast_loop.automation_step_display import display_required_artifacts, display_step_artifact, display_step_name
+from forecast_loop.automation_step_display import (
+    display_required_artifacts,
+    display_shadow_readiness_from_rationale,
+    display_step_artifact,
+    display_step_name,
+)
 from forecast_loop.health import run_health_check
 from forecast_loop.models import (
     AutomationRun,
@@ -1367,6 +1372,7 @@ def _render_lineage_replacement_strategy(
     attribution_list = [str(item) for item in attributions] if isinstance(attributions, list) else [str(attributions)]
     scaffold_task = retest_plan.task_by_id("create_revision_retest_scaffold") if retest_plan else None
     next_task = retest_plan.task_by_id(retest_plan.next_task_id) if retest_plan and retest_plan.next_task_id else None
+    shadow_readiness = _render_shadow_readiness(next_task.rationale if next_task else "")
     return f"""
       <div class="evidence-grid">
         <div class="evidence-block">
@@ -1400,6 +1406,7 @@ def _render_lineage_replacement_strategy(
           <dt>Next Task</dt><dd><code>{escape(next_task.task_id if next_task else "none")}</code> / {escape(next_task.status if next_task else "completed")}</dd>
           <dt>Latest Executor Run</dt><dd>{_dashboard_artifact_id(retest_run, "automation_run_id")} / {escape(retest_run.status if retest_run else "尚未執行")}</dd>
         </dl>
+        {shadow_readiness}
         <p class="micro-copy">這裡只顯示替代策略是否已進入 retest scaffold；不代表策略通過、晉級或下單。</p>
       </div>
       <div class="evidence-block">
@@ -1583,6 +1590,7 @@ def _render_revision_retest_task_plan(plan: RevisionRetestTaskPlan | None) -> st
         if next_task and next_task.missing_inputs
         else "無"
     )
+    shadow_readiness = _render_shadow_readiness(next_task.rationale if next_task else "")
     return f"""
         <div class="evidence-block subtle">
           <h4>下一個 retest 研究任務</h4>
@@ -1593,7 +1601,21 @@ def _render_revision_retest_task_plan(plan: RevisionRetestTaskPlan | None) -> st
             <dt>Missing Inputs</dt><dd><code>{escape(missing_inputs)}</code></dd>
             <dt>Command Args</dt><dd><code>{escape(command)}</code><br><span class="micro-copy">只顯示，不執行。</span></dd>
           </dl>
+          {shadow_readiness}
         </div>
+    """
+
+
+def _render_shadow_readiness(rationale: str) -> str:
+    rows = display_shadow_readiness_from_rationale(rationale)
+    if not rows:
+        return ""
+    items = "".join(f"<dt>{escape(label)}</dt><dd>{escape(value)}</dd>" for label, value in rows)
+    return f"""
+          <div class="evidence-block subtle compact">
+            <h5>Shadow 觀察 readiness</h5>
+            <dl>{items}</dl>
+          </div>
     """
 
 

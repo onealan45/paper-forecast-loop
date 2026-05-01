@@ -847,6 +847,9 @@ V1 MVP should include:
 - aligned paper-shadow window readiness context, so a blocked shadow-outcome
   task also reports the first legal candle-aligned start, next required end
   candle, and whether a complete candidate window exists
+- dashboard and operator console visibility for shadow-window readiness, so
+  operators see the latest stored K-line, first aligned start, missing end
+  boundary, and readiness state in Traditional Chinese before reading raw JSON
 - dashboard and operator console visibility for those cross-sample agenda
   strategy-card links, so the research UX names the root and replacement
   strategy targets directly

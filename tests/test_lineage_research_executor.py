@@ -591,6 +591,62 @@ def test_lineage_replacement_strategy_can_start_retest_scaffold(tmp_path):
     assert plan.next_task_id == "lock_evaluation_protocol"
 
 
+def test_chained_lineage_replacement_strategy_can_start_retest_scaffold(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_quarantined_lineage(repository, now)
+    first_replacement_id = execute_lineage_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(hours=3),
+    ).created_artifact_ids[0]
+    replacement_outcome = _outcome(
+        "paper-shadow-outcome:first-replacement-fail",
+        card_id=first_replacement_id,
+        created_at=now + timedelta(hours=4),
+        action="QUARANTINE_STRATEGY",
+        attributions=["leaderboard_entry_not_rankable", "weak_baseline_edge"],
+    )
+    repository.save_paper_shadow_outcome(replacement_outcome)
+    create_lineage_research_agenda(
+        repository=repository,
+        created_at=now + timedelta(hours=5),
+        symbol="BTC-USD",
+    )
+    second_replacement_id = execute_lineage_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(hours=6),
+    ).created_artifact_ids[0]
+
+    scaffold = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=now + timedelta(hours=7),
+        revision_card_id=second_replacement_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:second-replacement-retest",
+        max_trials=20,
+        seed=17,
+    )
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        revision_card_id=second_replacement_id,
+        symbol="BTC-USD",
+    )
+
+    assert scaffold.strategy_card.card_id == second_replacement_id
+    assert scaffold.source_outcome.outcome_id == replacement_outcome.outcome_id
+    assert scaffold.experiment_trial.parameters["revision_retest_kind"] == "lineage_replacement"
+    assert scaffold.experiment_trial.parameters["replacement_source_lineage_root_card_id"] == "strategy-card:parent"
+    assert plan.strategy_card_id == second_replacement_id
+    assert plan.source_outcome_id == replacement_outcome.outcome_id
+    assert plan.pending_trial_id == scaffold.experiment_trial.trial_id
+    assert plan.next_task_id == "lock_evaluation_protocol"
+
+
 def test_replacement_strategy_plan_rejects_non_quarantine_source_outcome(tmp_path):
     now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
     repository = JsonFileRepository(tmp_path)

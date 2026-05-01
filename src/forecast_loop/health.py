@@ -53,6 +53,7 @@ from forecast_loop.models import (
     WalkForwardValidation,
 )
 from forecast_loop.storage import JsonFileRepository
+from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
 
 
 def run_health_check(
@@ -703,6 +704,7 @@ def _check_links(
     backtest_result_ids = {result.result_id for result in backtest_results}
     event_edge_evaluation_ids = {evaluation.evaluation_id for evaluation in event_edge_evaluations}
     strategy_card_ids = {card.card_id for card in strategy_cards}
+    strategy_card_by_id = {card.card_id: card for card in strategy_cards}
     walk_forward_validation_ids = {validation.validation_id for validation in walk_forward_validations}
     trial_ids = {trial.trial_id for trial in experiment_trials}
     split_manifest_ids = {manifest.manifest_id for manifest in split_manifests}
@@ -1279,7 +1281,7 @@ def _check_links(
             )
         else:
             agenda = research_agenda_by_id[run.agenda_id]
-            if run.strategy_card_id not in agenda.strategy_card_ids:
+            if not _research_run_strategy_card_matches_agenda(run.strategy_card_id, agenda, strategy_card_by_id):
                 _add_link_finding(
                     "research_autopilot_run_agenda_strategy_card_mismatch",
                     storage_path / "research_autopilot_runs.jsonl",
@@ -1470,6 +1472,22 @@ def _add_link_finding(code: str, path: Path, source_id: str, missing_id: str, fi
             repair_required=True,
         )
     )
+
+
+def _research_run_strategy_card_matches_agenda(
+    strategy_card_id: str,
+    agenda: ResearchAgenda,
+    strategy_card_by_id: dict[str, StrategyCard],
+) -> bool:
+    if strategy_card_id in agenda.strategy_card_ids:
+        return True
+    if agenda.decision_basis != "strategy_lineage_research_agenda":
+        return False
+    card = strategy_card_by_id.get(strategy_card_id)
+    if card is None or card.decision_basis != REPLACEMENT_DECISION_BASIS:
+        return False
+    root_card_id = card.parameters.get("replacement_source_lineage_root_card_id")
+    return isinstance(root_card_id, str) and root_card_id in agenda.strategy_card_ids
 
 
 def _check_m7_evidence_integrity(

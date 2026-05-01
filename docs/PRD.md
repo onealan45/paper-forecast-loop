@@ -856,6 +856,9 @@ V1 MVP should include:
 - shadow-window command suggestions, so a blocked replacement retest can expose
   the exact candle-derived `execute-revision-retest-next-task` command once the
   first legal aligned window is complete
+- chained replacement retest compatibility, so a replacement strategy created
+  from a quarantined replacement outcome can start its own retest scaffold and
+  plan under the same lineage root
 - dashboard and operator console visibility for those cross-sample agenda
   strategy-card links, so the research UX names the root and replacement
   strategy targets directly

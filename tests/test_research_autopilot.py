@@ -1697,6 +1697,26 @@ def test_record_revision_retest_task_run_logs_blocked_task_plan(tmp_path):
         step["name"] == "lock_evaluation_protocol" and step["status"] == "blocked"
         for step in run.steps
     )
+    assert {
+        "name": "next_task_blocked_reason",
+        "status": "blocked",
+        "artifact_id": "split_window_inputs_required",
+    } in run.steps
+    assert {
+        "name": "next_task_missing_inputs",
+        "status": "blocked",
+        "artifact_id": "train_start, train_end, validation_start, validation_end, holdout_start, holdout_end",
+    } in run.steps
+    assert {
+        "name": "next_task_required_artifact",
+        "status": "blocked",
+        "artifact_id": "split_manifest",
+    } in run.steps
+    assert {
+        "name": "next_task_rationale",
+        "status": "blocked",
+        "artifact_id": "The planner refuses to invent train, validation, or holdout windows.",
+    } in run.steps
     assert JsonFileRepository(tmp_path).load_automation_runs() == [run]
 
 

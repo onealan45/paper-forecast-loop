@@ -262,6 +262,10 @@ factory:
   only the stale root strategy. Existing root-only handoff agendas for that
   same latest outcome are ignored so the executor can create a corrected
   current-target agenda.
+- PR103 makes completed revision retest autopilot runs prefer that direct
+  `lineage_cross_sample_validation_agenda` when it exactly names the root and
+  latest revision card, so fresh-sample validation closes under the handoff
+  agenda instead of falling back to the older revision agenda.
 - PR61 shows those cross-sample agenda strategy-card links in dashboard and
   operator console, making the root/replacement strategy targets inspectable
   from the research UX without opening raw JSON.

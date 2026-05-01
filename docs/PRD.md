@@ -810,6 +810,10 @@ V1 MVP should include:
   stale root-only strategy target; existing stale root-only agendas for the
   same latest outcome are ignored until a corrected current-target agenda is
   created
+- revision retest autopilot agenda anchoring for direct cross-sample handoffs,
+  so a completed DRAFT revision retest records its autopilot run under the
+  exact root-plus-revision `lineage_cross_sample_validation_agenda` when that
+  agenda exists, while polluted target lists are ignored
 - dashboard and operator console visibility for those cross-sample agenda
   strategy-card links, so the research UX names the root and replacement
   strategy targets directly

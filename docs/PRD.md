@@ -844,6 +844,9 @@ V1 MVP should include:
 - paper-shadow observation readiness context in revision retest plans, so a
   blocked shadow-outcome task reports the earliest legal window start and
   latest stored candle instead of only saying future returns are not fabricated
+- aligned paper-shadow window readiness context, so a blocked shadow-outcome
+  task also reports the first legal candle-aligned start, next required end
+  candle, and whether a complete candidate window exists
 - dashboard and operator console visibility for those cross-sample agenda
   strategy-card links, so the research UX names the root and replacement
   strategy targets directly

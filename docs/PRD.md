@@ -817,6 +817,10 @@ V1 MVP should include:
 - blocked cross-sample autopilot run context in lineage task plans, so an
   existing blocked fresh-sample run shows its run id, latest lineage outcome,
   and blocker list instead of being mislabeled as a missing run
+- normalized raw `QUARANTINE` paper-shadow actions in lineage task planning, so
+  a negative after-cost lineage that is still quarantined routes to replacement
+  strategy research instead of cross-sample validation, and blocked reasons can
+  supply concrete failure context when failure attributions are absent
 - dashboard and operator console visibility for those cross-sample agenda
   strategy-card links, so the research UX names the root and replacement
   strategy targets directly

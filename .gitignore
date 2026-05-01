@@ -2,6 +2,9 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.tmp/
+test-temp-root/
+sandbox-perm-check/
 *.pyc
 .coverage
 htmlcov/

@@ -270,6 +270,11 @@ factory:
   plan: if a run exists but its evidence chain is blocked, stale, or not linked
   to the latest outcome, the task now shows the run id and blocker list instead
   of incorrectly reporting that the run is missing.
+- PR105 normalizes raw paper-shadow `QUARANTINE` actions in lineage planning:
+  a strategy that is still quarantined and negative after costs no longer moves
+  to cross-sample validation merely because it improved versus a worse prior
+  run; it routes to replacement-strategy research and uses blocked reasons as
+  concrete failure context when failure attributions are empty.
 - PR61 shows those cross-sample agenda strategy-card links in dashboard and
   operator console, making the root/replacement strategy targets inspectable
   from the research UX without opening raw JSON.

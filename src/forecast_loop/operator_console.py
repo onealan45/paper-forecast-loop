@@ -49,6 +49,7 @@ from forecast_loop.strategy_lineage import StrategyLineageSummary, build_strateg
 from forecast_loop.strategy_research_display import (
     build_strategy_research_conclusion,
     format_failure_attributions,
+    format_outcome_grade,
     format_research_action,
 )
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
@@ -1058,9 +1059,9 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
   <article class="panel">
     <h3>Paper-shadow 歸因</h3>
     <p>ID：{_artifact_id(outcome, "outcome_id")}</p>
-    <p>Grade：{escape(outcome.outcome_grade if outcome else "n/a")}</p>
+    <p>Grade：{escape(_display_outcome_grade(outcome.outcome_grade if outcome else None))}</p>
     <p>Excess after costs：{_format_pct(outcome.excess_return_after_costs if outcome else None)}</p>
-    <p>Recommended：{escape(outcome.recommended_strategy_action if outcome else "n/a")}</p>
+    <p>Recommended：{escape(_display_research_action(outcome.recommended_strategy_action if outcome else None))}</p>
     <p>Failure attribution：</p>
     {_plain_list(_display_failure_attributions(outcome))}
   </article>
@@ -1627,6 +1628,12 @@ def _display_research_action(action: str | None) -> str:
     return format_research_action(action)
 
 
+def _display_outcome_grade(grade: str | None) -> str:
+    if not grade:
+        return "n/a"
+    return format_outcome_grade(grade)
+
+
 def _display_lineage_next_research_focus(summary: StrategyLineageSummary) -> str:
     focus = summary.next_research_focus
     failure = summary.primary_failure_attribution
@@ -1837,7 +1844,7 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
 <h4>策略研究結論</h4>
 <p>{escape(build_strategy_research_conclusion(card=card, outcome=outcome, autopilot=autopilot))}</p>
 <p>Leaderboard：{_artifact_id(leaderboard, "entry_id")} / alpha_score={_format_number(leaderboard.alpha_score if leaderboard else None)}</p>
-<p>Paper-shadow：{escape(outcome.recommended_strategy_action if outcome else "n/a")} / {escape(outcome.outcome_grade if outcome else "n/a")}</p>
+<p>Paper-shadow：{escape(_display_research_action(outcome.recommended_strategy_action if outcome else None))} / {escape(_display_outcome_grade(outcome.outcome_grade if outcome else None))}</p>
 <p>下一步：{escape(_display_research_action(autopilot.next_research_action if autopilot else None))} / Run {_artifact_id(autopilot, "run_id")}</p>
 <p>策略修正候選：{_artifact_id(revision, "card_id")} / 來源 {_artifact_id(revision_source, "outcome_id")} / Agenda {_artifact_id(revision_agenda, "agenda_id")}</p>
 <p>Revision Retest Scaffold：{_artifact_id(retest_trial, "trial_id")} / Dataset <code>{escape(retest_trial.dataset_id if retest_trial and retest_trial.dataset_id else "n/a")}</code> / Split {_artifact_id(retest_split, "manifest_id")}</p>

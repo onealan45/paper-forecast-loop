@@ -588,6 +588,9 @@ beside it, while stored lineage artifacts keep machine keys unchanged.
 Lineage failure-attribution aggregate counts should also render readable
 failure labels first with raw failure codes retained beside them, while stored
 lineage artifacts keep machine keys unchanged.
+Paper-shadow detail and overview preview rows should render outcome grade and
+recommended action with readable labels first and raw codes retained beside
+them.
 
 ## 10.3 Data Scope
 
@@ -853,6 +856,8 @@ V1 MVP should include:
 - readable lineage failure-attribution aggregate counts in dashboard and
   operator console, so operators can scan repeated failure concentration before
   reading raw machine-code detail
+- readable paper-shadow detail and overview status copy, so operators see
+  outcome grade and recommended strategy action in human terms before raw codes
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

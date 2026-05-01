@@ -37,6 +37,7 @@ def run_walk_forward_validation(
     fee_bps: float = 5.0,
     slippage_bps: float = 10.0,
     moving_average_window: int = 3,
+    id_context: str | None = None,
 ) -> WalkForwardEngineResult:
     _validate_inputs(
         storage_dir=storage_dir,
@@ -85,6 +86,7 @@ def run_walk_forward_validation(
             fee_bps=fee_bps,
             slippage_bps=slippage_bps,
             moving_average_window=moving_average_window,
+            id_context=id_context,
         ).result
         test_result = run_backtest(
             storage_dir=storage_path,
@@ -96,6 +98,7 @@ def run_walk_forward_validation(
             fee_bps=fee_bps,
             slippage_bps=slippage_bps,
             moving_average_window=moving_average_window,
+            id_context=id_context,
         ).result
         flags = _window_overfit_flags(
             validation_return=validation_result.strategy_return,
@@ -181,6 +184,7 @@ def run_walk_forward_validation(
         decision_basis=(
             "rolling walk-forward validation; train window is recorded as boundary context, "
             "validation and test windows are evaluated with paper-only backtests"
+            + (f"; id_context={id_context}" if id_context else "")
         ),
     )
     repository.save_walk_forward_validation(validation_artifact)

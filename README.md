@@ -287,6 +287,10 @@ factory:
   walk-forward artifacts that were created before the current retest trial,
   so replacement strategy cards cannot inherit older revision evidence merely
   because the symbol and split window match.
+- PR109 gives executor-created retest backtest and walk-forward artifacts a
+  retest-specific ID context, so a current replacement/revision retest can
+  generate fresh evidence even when generic same-window artifacts already
+  exist in storage.
 - PR61 shows those cross-sample agenda strategy-card links in dashboard and
   operator console, making the root/replacement strategy targets inspectable
   from the research UX without opening raw JSON.

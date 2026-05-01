@@ -243,6 +243,7 @@ def _execute_run_backtest(
         start=split.holdout_start,
         end=split.holdout_end,
         created_at=created_at,
+        id_context=_retest_evidence_context(plan),
     )
     return [result.result.result_id]
 
@@ -268,6 +269,7 @@ def _execute_run_walk_forward(
         start=split.train_start,
         end=split.holdout_end,
         created_at=created_at,
+        id_context=_retest_evidence_context(plan),
     )
     validation = _link_holdout_backtest_to_walk_forward(
         repository=repository,
@@ -619,3 +621,8 @@ def _execute_lock_evaluation_protocol(
         embargo_hours=split.embargo_hours,
     )
     return [locked_split.manifest_id, cost_model.cost_model_id]
+
+
+def _retest_evidence_context(plan: RevisionRetestTaskPlan) -> str:
+    trial_id = plan.pending_trial_id or plan.passed_trial_id or "no-trial"
+    return f"revision_retest:{plan.strategy_card_id}:{trial_id}:{plan.source_outcome_id}"

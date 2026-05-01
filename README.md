@@ -298,6 +298,9 @@ factory:
 - PR111 blocks paper-shadow outcome windows that start before the leaderboard
   entry exists, preventing retest chains from using pre-entry candles or
   explicit returns as if they were fresh shadow observations.
+- PR112 adds paper-shadow observation readiness context to revision retest
+  plans, showing the earliest legal shadow-window start and latest stored
+  candle when the outcome task is still blocked.
 - PR61 shows those cross-sample agenda strategy-card links in dashboard and
   operator console, making the root/replacement strategy targets inspectable
   from the research UX without opening raw JSON.

@@ -16,7 +16,7 @@ from forecast_loop.models import (
     StrategyCard,
     WalkForwardValidation,
 )
-from forecast_loop.revision_retest import RETEST_PROTOCOL_VERSION
+from forecast_loop.revision_retest import REPLACEMENT_REQUIRED_ACTIONS, RETEST_PROTOCOL_VERSION
 from forecast_loop.storage import ArtifactRepository
 from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
 from forecast_loop.strategy_research import REVISION_CARD_BASIS
@@ -949,7 +949,7 @@ def _source_outcome(
         card,
     ):
         raise ValueError(f"source paper shadow outcome does not match replacement lineage: {outcome_id}")
-    if _is_lineage_replacement_card(card, symbol) and outcome.recommended_strategy_action != "QUARANTINE_STRATEGY":
+    if _is_lineage_replacement_card(card, symbol) and outcome.recommended_strategy_action not in REPLACEMENT_REQUIRED_ACTIONS:
         raise ValueError(f"source paper shadow outcome does not require replacement: {outcome_id}")
     return outcome
 

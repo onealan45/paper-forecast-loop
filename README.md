@@ -279,6 +279,10 @@ factory:
   read time, so overlapping leaderboard, locked-evaluation, and link blockers
   do not inflate repeated-failure counts or distract the strategy research
   loop from the real failure modes.
+- PR107 lets replacement retest scaffolds and task plans accept raw
+  paper-shadow `QUARANTINE` source outcomes as replacement-required evidence,
+  keeping retest execution aligned with PR105 lineage routing instead of
+  rejecting active storage replacement cards.
 - PR61 shows those cross-sample agenda strategy-card links in dashboard and
   operator console, making the root/replacement strategy targets inspectable
   from the research UX without opening raw JSON.

@@ -720,6 +720,27 @@ def test_create_revision_retest_scaffold_creates_pending_trial(tmp_path):
     ]
 
 
+def test_create_revision_retest_scaffold_accepts_raw_quarantine_lineage_replacement(tmp_path):
+    repository, replacement_card_id, source_outcome = _seed_lineage_replacement_card_from_shadow(
+        tmp_path,
+        replacement_action="QUARANTINE",
+    )
+
+    scaffold = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=replacement_card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:replacement-retest",
+        max_trials=20,
+        seed=7,
+    )
+
+    assert scaffold.strategy_card.card_id == replacement_card_id
+    assert scaffold.source_outcome.outcome_id == source_outcome.outcome_id
+    assert scaffold.experiment_trial.parameters["revision_source_outcome_id"] == source_outcome.outcome_id
+
+
 def test_create_revision_retest_scaffold_is_idempotent(tmp_path):
     repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
         tmp_path,
@@ -1008,6 +1029,34 @@ def test_revision_retest_task_plan_is_read_only_and_blocks_missing_split_inputs(
     assert lock_task.blocked_reason == "split_window_inputs_required"
     assert "train_start" in lock_task.missing_inputs
     assert before_files == after_files
+
+
+def test_revision_retest_task_plan_accepts_raw_quarantine_lineage_replacement(tmp_path):
+    repository, replacement_card_id, source_outcome = _seed_lineage_replacement_card_from_shadow(
+        tmp_path,
+        replacement_action="QUARANTINE",
+    )
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=replacement_card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:replacement-retest",
+        max_trials=20,
+        seed=7,
+    )
+
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=replacement_card_id,
+    )
+
+    assert plan.strategy_card_id == replacement_card_id
+    assert plan.source_outcome_id == source_outcome.outcome_id
+    assert plan.next_task_id == "lock_evaluation_protocol"
+    assert plan.task_by_id("create_revision_retest_scaffold").status == "completed"
 
 
 def test_revision_retest_task_plan_emits_backtest_and_walk_forward_commands_after_split_lock(tmp_path):
@@ -2636,6 +2685,54 @@ def _seed_lineage_replacement_retest_through_shadow(tmp_path):
         shadow_turnover=1.2,
     )
     return repository, replacement
+
+
+def _seed_lineage_replacement_card_from_shadow(tmp_path, *, replacement_action: str):
+    repository, _card, _trial, _evaluation, entry, _decision, source_outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=source_outcome.outcome_id,
+    ).strategy_card
+    replacement_source = PaperShadowOutcome(
+        outcome_id=f"paper-shadow-outcome:revision-{replacement_action.lower().replace('_', '-')}",
+        created_at=datetime(2026, 4, 29, 9, 30, tzinfo=UTC),
+        leaderboard_entry_id=entry.entry_id,
+        evaluation_id=entry.evaluation_id,
+        strategy_card_id=revision.card_id,
+        trial_id=entry.trial_id,
+        symbol="BTC-USD",
+        window_start=datetime(2026, 4, 28, 9, 30, tzinfo=UTC),
+        window_end=datetime(2026, 4, 29, 9, 30, tzinfo=UTC),
+        observed_return=-0.06,
+        benchmark_return=0.01,
+        excess_return_after_costs=-0.08,
+        max_adverse_excursion=0.16,
+        turnover=2.4,
+        outcome_grade="FAIL",
+        failure_attributions=["drawdown_breach", "weak_baseline_edge"],
+        recommended_promotion_stage="PAPER_SHADOW_FAILED",
+        recommended_strategy_action=replacement_action,
+        blocked_reasons=["paper_shadow_failed"],
+        notes=[],
+        decision_basis="test",
+    )
+    repository.save_paper_shadow_outcome(replacement_source)
+    create_lineage_research_agenda(
+        repository=repository,
+        created_at=datetime(2026, 4, 29, 10, 0, tzinfo=UTC),
+        symbol="BTC-USD",
+    )
+    replacement_card_id = execute_lineage_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 10, 30, tzinfo=UTC),
+    ).created_artifact_ids[0]
+    return repository, replacement_card_id, replacement_source
 
 
 def test_execute_revision_retest_shadow_outcome_requires_observation_inputs(tmp_path):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -8,7 +8,7 @@ from forecast_loop.backtest import run_backtest
 from forecast_loop.baselines import build_baseline_evaluation
 from forecast_loop.experiment_registry import record_experiment_trial
 from forecast_loop.locked_evaluation import evaluate_leaderboard_gate, lock_evaluation_protocol
-from forecast_loop.models import AutomationRun
+from forecast_loop.models import AutomationRun, WalkForwardValidation
 from forecast_loop.paper_shadow import record_paper_shadow_outcome
 from forecast_loop.revision_retest import RETEST_PROTOCOL_VERSION, create_revision_retest_scaffold
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
@@ -265,7 +265,44 @@ def _execute_run_walk_forward(
         end=split.holdout_end,
         created_at=created_at,
     )
-    return [result.validation.validation_id]
+    validation = _link_holdout_backtest_to_walk_forward(
+        repository=repository,
+        validation=result.validation,
+        backtest_result_id=plan.backtest_result_id,
+    )
+    return [validation.validation_id]
+
+
+def _link_holdout_backtest_to_walk_forward(
+    *,
+    repository: ArtifactRepository,
+    validation: WalkForwardValidation,
+    backtest_result_id: str | None,
+) -> WalkForwardValidation:
+    if backtest_result_id is None or backtest_result_id in validation.backtest_result_ids:
+        return validation
+    backtest_result_ids = list(dict.fromkeys([*validation.backtest_result_ids, backtest_result_id]))
+    linked_validation = replace(
+        validation,
+        validation_id=WalkForwardValidation.build_id(
+            symbol=validation.symbol,
+            start=validation.start,
+            end=validation.end,
+            train_size=validation.train_size,
+            validation_size=validation.validation_size,
+            test_size=validation.test_size,
+            step_size=validation.step_size,
+            moving_average_window=validation.moving_average_window,
+            backtest_result_ids=backtest_result_ids,
+        ),
+        backtest_result_ids=backtest_result_ids,
+        decision_basis=(
+            f"{validation.decision_basis}; revision retest holdout backtest linked "
+            "for selected split evidence"
+        ),
+    )
+    repository.save_walk_forward_validation(linked_validation)
+    return linked_validation
 
 
 def _execute_record_passed_retest_trial(

@@ -50,6 +50,7 @@ def build_strategy_research_digest(
         paper_shadow_outcomes=paper_shadow_outcomes,
         research_agendas=repository.load_research_agendas(),
         research_autopilot_runs=repository.load_research_autopilot_runs(),
+        prefer_latest_anchor=True,
     )
     lineage = build_strategy_lineage_summary(
         root_card=chain.strategy_card,
@@ -106,6 +107,7 @@ def build_strategy_research_digest(
             card=chain.strategy_card,
             outcome=chain.paper_shadow_outcome,
             autopilot=chain.research_autopilot_run,
+            next_research_action=next_research_action,
         ),
         next_step_rationale=_next_step_rationale(
             next_research_action=next_research_action,
@@ -134,6 +136,8 @@ def _top_failure_attributions(
 def _next_research_action(chain, lineage) -> str | None:
     if chain.research_autopilot_run is not None:
         return chain.research_autopilot_run.next_research_action
+    if chain.leaderboard_entry is not None and chain.paper_shadow_outcome is None:
+        return "WAIT_FOR_PAPER_SHADOW_OUTCOME"
     if lineage is not None and lineage.latest_recommended_strategy_action is not None:
         return lineage.latest_recommended_strategy_action
     if chain.paper_shadow_outcome is not None:
@@ -168,12 +172,12 @@ def _append_artifact_id(ids: list[str], item) -> None:
         return
     for attr in (
         "card_id",
-        "trial_id",
-        "evaluation_id",
-        "entry_id",
         "outcome_id",
-        "agenda_id",
+        "entry_id",
+        "evaluation_id",
+        "trial_id",
         "run_id",
+        "agenda_id",
     ):
         value = getattr(item, attr, None)
         if isinstance(value, str):

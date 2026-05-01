@@ -11,6 +11,7 @@ from forecast_loop.strategy_research import REVISION_REQUIRED_ACTIONS
 
 
 RETEST_PROTOCOL_VERSION = "pr14-v1"
+REPLACEMENT_REQUIRED_ACTIONS = {"QUARANTINE", "QUARANTINE_STRATEGY"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,7 +204,7 @@ def _source_outcome(
         raise ValueError(f"source paper shadow outcome does not match replacement lineage: {outcome_id}")
     if _is_revision_candidate(card) and outcome.recommended_strategy_action not in REVISION_REQUIRED_ACTIONS:
         raise ValueError(f"source paper shadow outcome does not require revision: {outcome_id}")
-    if _is_lineage_replacement_card(card) and outcome.recommended_strategy_action != "QUARANTINE_STRATEGY":
+    if _is_lineage_replacement_card(card) and outcome.recommended_strategy_action not in REPLACEMENT_REQUIRED_ACTIONS:
         raise ValueError(f"source paper shadow outcome does not require replacement: {outcome_id}")
     return outcome
 

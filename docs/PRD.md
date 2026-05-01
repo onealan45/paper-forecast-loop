@@ -825,6 +825,10 @@ V1 MVP should include:
   read time, so overlapping leaderboard, locked-evaluation, and link blockers
   do not inflate failure-attribution aggregates or mislead self-evolution
   research priorities
+- replacement retest scaffold and task-plan acceptance for raw `QUARANTINE`
+  paper-shadow source outcomes, so a replacement card created from current
+  lineage routing can enter the retest chain instead of being rejected as not
+  replacement-required
 - dashboard and operator console visibility for those cross-sample agenda
   strategy-card links, so the research UX names the root and replacement
   strategy targets directly

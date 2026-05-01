@@ -417,6 +417,28 @@ def _cross_sample_autopilot_task(
             missing_inputs=[],
             rationale="Fresh-sample validation has a linked research autopilot run and paper-shadow outcome.",
         )
+    blocked_run = _latest_cross_sample_autopilot_run_for_agenda(agenda, research_autopilot_runs, summary)
+    if blocked_run is not None:
+        missing_inputs = _invalid_cross_sample_run_inputs(
+            blocked_run,
+            paper_shadow_outcomes=paper_shadow_outcomes,
+            summary=summary,
+        )
+        return LineageResearchTask(
+            task_id="record_cross_sample_autopilot_run",
+            title="Record cross-sample autopilot run",
+            status="blocked",
+            required_artifact="research_autopilot_run",
+            artifact_id=blocked_run.run_id,
+            command_args=None,
+            worker_prompt=_blocked_cross_sample_run_prompt(blocked_run, agenda, summary, missing_inputs),
+            blocked_reason=_invalid_cross_sample_run_reason(blocked_run),
+            missing_inputs=missing_inputs,
+            rationale=(
+                "A cross-sample autopilot run is recorded, but it is not accepted as completed fresh-sample "
+                "evidence because its evidence chain is blocked, stale, or not linked to the latest lineage outcome."
+            ),
+        )
     return LineageResearchTask(
         task_id="record_cross_sample_autopilot_run",
         title="Record cross-sample autopilot run",
@@ -431,6 +453,24 @@ def _cross_sample_autopilot_task(
             "Cross-sample validation agenda exists, but no linked completed autopilot run is recorded yet. "
             "The run must link the agenda's expected fresh-sample evidence before the lineage can treat it as validated."
         ),
+    )
+
+
+def _blocked_cross_sample_run_prompt(
+    run: ResearchAutopilotRun,
+    agenda: ResearchAgenda | None,
+    summary: StrategyLineageSummary,
+    missing_inputs: list[str],
+) -> str:
+    agenda_id = agenda.agenda_id if agenda else run.agenda_id
+    blockers = ", ".join(missing_inputs) or "unspecified_blocker"
+    strategy_cards = ", ".join(agenda.strategy_card_ids) if agenda else run.strategy_card_id
+    return (
+        f"Cross-sample autopilot run {run.run_id} exists for agenda {agenda_id}, "
+        f"strategy cards: {strategy_cards}, "
+        f"latest lineage outcome: {summary.latest_outcome_id or 'none'}, "
+        f"but it is not accepted as completed fresh-sample evidence. "
+        f"Repair or rerun the evidence chain for blockers: {blockers}."
     )
 
 
@@ -481,6 +521,24 @@ def _cross_sample_autopilot_run_for_agenda(
     return max(matches, key=lambda run: run.created_at) if matches else None
 
 
+def _latest_cross_sample_autopilot_run_for_agenda(
+    agenda: ResearchAgenda | None,
+    research_autopilot_runs: list[ResearchAutopilotRun],
+    summary: StrategyLineageSummary,
+) -> ResearchAutopilotRun | None:
+    if agenda is None:
+        return None
+    lineage_ids = _lineage_strategy_ids(summary)
+    matches = [
+        run
+        for run in research_autopilot_runs
+        if run.agenda_id == agenda.agenda_id
+        and run.decision_basis == "research_paper_autopilot_loop"
+        and run.strategy_card_id in lineage_ids
+    ]
+    return max(matches, key=lambda run: run.created_at) if matches else None
+
+
 def _cross_sample_autopilot_run_for_lineage(
     summary: StrategyLineageSummary,
     agendas: list[ResearchAgenda],
@@ -518,6 +576,32 @@ def _valid_cross_sample_autopilot_run(
         return False
     outcome = _latest_outcome(run.paper_shadow_outcome_id, paper_shadow_outcomes)
     return outcome is not None and outcome.strategy_card_id in lineage_ids
+
+
+def _invalid_cross_sample_run_reason(run: ResearchAutopilotRun) -> str:
+    if run.loop_status == "BLOCKED" or run.blocked_reasons:
+        return "cross_sample_autopilot_run_blocked"
+    return "cross_sample_autopilot_run_invalid"
+
+
+def _invalid_cross_sample_run_inputs(
+    run: ResearchAutopilotRun,
+    *,
+    paper_shadow_outcomes: list[PaperShadowOutcome],
+    summary: StrategyLineageSummary,
+) -> list[str]:
+    if run.blocked_reasons:
+        return list(run.blocked_reasons)
+    missing: list[str] = []
+    if run.paper_shadow_outcome_id is None:
+        missing.append("paper_shadow_outcome")
+    elif run.paper_shadow_outcome_id != summary.latest_outcome_id:
+        missing.append("latest_paper_shadow_outcome")
+    elif _latest_outcome(run.paper_shadow_outcome_id, paper_shadow_outcomes) is None:
+        missing.append("paper_shadow_outcome")
+    if run.loop_status == "BLOCKED" and "blocked_evidence_chain" not in missing:
+        missing.append("blocked_evidence_chain")
+    return missing or ["valid_cross_sample_autopilot_run"]
 
 
 def _lineage_strategy_ids(summary: StrategyLineageSummary) -> set[str]:

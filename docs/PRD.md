@@ -814,6 +814,9 @@ V1 MVP should include:
   so a completed DRAFT revision retest records its autopilot run under the
   exact root-plus-revision `lineage_cross_sample_validation_agenda` when that
   agenda exists, while polluted target lists are ignored
+- blocked cross-sample autopilot run context in lineage task plans, so an
+  existing blocked fresh-sample run shows its run id, latest lineage outcome,
+  and blocker list instead of being mislabeled as a missing run
 - dashboard and operator console visibility for those cross-sample agenda
   strategy-card links, so the research UX names the root and replacement
   strategy targets directly

@@ -266,6 +266,10 @@ factory:
   `lineage_cross_sample_validation_agenda` when it exactly names the root and
   latest revision card, so fresh-sample validation closes under the handoff
   agenda instead of falling back to the older revision agenda.
+- PR104 makes blocked cross-sample autopilot runs visible in the lineage task
+  plan: if a run exists but its evidence chain is blocked, stale, or not linked
+  to the latest outcome, the task now shows the run id and blocker list instead
+  of incorrectly reporting that the run is missing.
 - PR61 shows those cross-sample agenda strategy-card links in dashboard and
   operator console, making the root/replacement strategy targets inspectable
   from the research UX without opening raw JSON.

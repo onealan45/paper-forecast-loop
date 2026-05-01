@@ -18,6 +18,8 @@ def display_step_artifact(name: str, artifact_id: str | None) -> str:
         return "none"
     if name == "next_task_blocked_reason" and artifact_id == "cross_sample_autopilot_run_missing":
         return f"缺少 cross-sample autopilot run ({artifact_id})"
+    if name == "next_task_blocked_reason" and artifact_id == "cross_sample_autopilot_run_blocked":
+        return f"cross-sample autopilot run 被證據鏈阻擋 ({artifact_id})"
     if name == "next_task_missing_inputs":
         return f"{_missing_input_copy(artifact_id)} ({artifact_id})"
     if name == "next_task_required_artifact":

@@ -3107,6 +3107,127 @@ def test_replacement_retest_autopilot_prefers_direct_cross_sample_agenda(tmp_pat
     assert "strategy_decision_missing" not in result.research_autopilot_run.blocked_reasons
 
 
+def test_revision_retest_autopilot_prefers_direct_cross_sample_agenda(tmp_path):
+    repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 30, 13, 0, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+        shadow_window_start=datetime(2026, 4, 29, 12, 30, tzinfo=UTC),
+        shadow_window_end=datetime(2026, 4, 30, 12, 30, tzinfo=UTC),
+        shadow_observed_return=0.04,
+        shadow_benchmark_return=0.01,
+        shadow_max_adverse_excursion=0.02,
+        shadow_turnover=1.5,
+    )
+    assert revision.parent_card_id is not None
+    cross_sample_agenda = ResearchAgenda(
+        agenda_id="research-agenda:cross-sample-revision-direct-card",
+        created_at=datetime(2026, 4, 30, 13, 15, tzinfo=UTC),
+        symbol="BTC-USD",
+        title="Validate revision lineage on fresh cross-sample data",
+        hypothesis="Revision card should persist beyond its first paper-shadow pass.",
+        priority="HIGH",
+        status="OPEN",
+        target_strategy_family="lineage_revision_validation",
+        strategy_card_ids=[revision.parent_card_id, revision.card_id],
+        expected_artifacts=["paper_shadow_outcome", "research_autopilot_run"],
+        acceptance_criteria=["Latest revision retest autopilot run links this handoff agenda."],
+        blocked_actions=["real_order_submission"],
+        decision_basis="lineage_cross_sample_validation_agenda",
+    )
+    repository.save_research_agenda(cross_sample_agenda)
+
+    result = record_revision_retest_autopilot_run(
+        repository=repository,
+        storage_dir=tmp_path,
+        created_at=datetime(2026, 4, 30, 13, 30, tzinfo=UTC),
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+
+    assert result.research_autopilot_run.agenda_id == cross_sample_agenda.agenda_id
+    assert "agenda_strategy_card_mismatch" not in result.research_autopilot_run.blocked_reasons
+    assert "strategy_decision_missing" not in result.research_autopilot_run.blocked_reasons
+
+
+def test_revision_retest_autopilot_ignores_polluted_cross_sample_agenda(tmp_path):
+    repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 30, 13, 0, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+        shadow_window_start=datetime(2026, 4, 29, 12, 30, tzinfo=UTC),
+        shadow_window_end=datetime(2026, 4, 30, 12, 30, tzinfo=UTC),
+        shadow_observed_return=0.04,
+        shadow_benchmark_return=0.01,
+        shadow_max_adverse_excursion=0.02,
+        shadow_turnover=1.5,
+    )
+    assert revision.parent_card_id is not None
+    unrelated = _strategy_card(datetime(2026, 4, 30, 13, 10, tzinfo=UTC))
+    unrelated = StrategyCard(
+        card_id="strategy-card:unrelated",
+        created_at=unrelated.created_at,
+        strategy_name=unrelated.strategy_name,
+        strategy_family=unrelated.strategy_family,
+        version=unrelated.version,
+        status=unrelated.status,
+        symbols=unrelated.symbols,
+        hypothesis=unrelated.hypothesis,
+        signal_description=unrelated.signal_description,
+        entry_rules=unrelated.entry_rules,
+        exit_rules=unrelated.exit_rules,
+        risk_rules=unrelated.risk_rules,
+        parameters=unrelated.parameters,
+        data_requirements=unrelated.data_requirements,
+        feature_snapshot_ids=unrelated.feature_snapshot_ids,
+        backtest_result_ids=unrelated.backtest_result_ids,
+        walk_forward_validation_ids=unrelated.walk_forward_validation_ids,
+        event_edge_evaluation_ids=unrelated.event_edge_evaluation_ids,
+        parent_card_id=None,
+        author=unrelated.author,
+        decision_basis=unrelated.decision_basis,
+    )
+    repository.save_strategy_card(unrelated)
+    polluted_agenda = ResearchAgenda(
+        agenda_id="research-agenda:polluted-cross-sample-revision",
+        created_at=datetime(2026, 4, 30, 13, 15, tzinfo=UTC),
+        symbol="BTC-USD",
+        title="Polluted revision cross-sample agenda",
+        hypothesis="This should not be used because it includes an unrelated card.",
+        priority="HIGH",
+        status="OPEN",
+        target_strategy_family="lineage_revision_validation",
+        strategy_card_ids=[revision.parent_card_id, revision.card_id, unrelated.card_id],
+        expected_artifacts=["paper_shadow_outcome", "research_autopilot_run"],
+        acceptance_criteria=["Polluted target list must not anchor the autopilot run."],
+        blocked_actions=["real_order_submission"],
+        decision_basis="lineage_cross_sample_validation_agenda",
+    )
+    repository.save_research_agenda(polluted_agenda)
+
+    result = record_revision_retest_autopilot_run(
+        repository=repository,
+        storage_dir=tmp_path,
+        created_at=datetime(2026, 4, 30, 13, 30, tzinfo=UTC),
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+
+    assert result.research_autopilot_run.agenda_id != polluted_agenda.agenda_id
+    chosen_agenda = next(
+        agenda
+        for agenda in repository.load_research_agendas()
+        if agenda.agenda_id == result.research_autopilot_run.agenda_id
+    )
+    assert chosen_agenda.decision_basis == "paper_shadow_strategy_revision_agenda"
+
+
 def test_cli_record_replacement_retest_autopilot_run_outputs_json(tmp_path, capsys):
     _repository, replacement_card_id = _seed_lineage_replacement_retest_through_shadow(tmp_path)
 

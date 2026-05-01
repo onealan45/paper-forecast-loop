@@ -181,10 +181,12 @@ def record_revision_retest_autopilot_run(
     missing = _missing_revision_retest_autopilot_inputs(plan)
     if missing:
         raise ValueError(f"revision_retest_autopilot_run_not_ready:{','.join(missing)}")
-    card = _find(repository.load_strategy_cards(), "card_id", plan.strategy_card_id)
+    strategy_cards = repository.load_strategy_cards()
+    card = _find(strategy_cards, "card_id", plan.strategy_card_id)
     agenda = _revision_retest_agenda(
         repository.load_research_agendas(),
         card=card if isinstance(card, StrategyCard) else None,
+        strategy_cards=strategy_cards,
         source_outcome_id=plan.source_outcome_id,
     )
     run = record_research_autopilot_run(
@@ -219,14 +221,19 @@ def _revision_retest_agenda(
     agendas: list[ResearchAgenda],
     *,
     card: StrategyCard | None,
+    strategy_cards: list[StrategyCard],
     source_outcome_id: str,
 ) -> ResearchAgenda:
     if card is None:
         raise ValueError("missing revision retest strategy card")
+    direct_cross_sample = _direct_cross_sample_agendas(
+        agendas,
+        card=card,
+        strategy_cards=strategy_cards,
+    )
+    if direct_cross_sample:
+        return _latest(direct_cross_sample)
     if _is_replacement_card(card):
-        direct_cross_sample = _replacement_cross_sample_agendas(agendas, card)
-        if direct_cross_sample:
-            return _latest(direct_cross_sample)
         candidates = _replacement_lineage_agendas(agendas, card)
     else:
         candidates = _revision_agendas(agendas, card)
@@ -250,15 +257,42 @@ def _revision_agendas(agendas: list[ResearchAgenda], card: StrategyCard) -> list
     ]
 
 
-def _replacement_cross_sample_agendas(agendas: list[ResearchAgenda], card: StrategyCard) -> list[ResearchAgenda]:
-    if not _is_replacement_card(card):
+def _direct_cross_sample_agendas(
+    agendas: list[ResearchAgenda],
+    *,
+    card: StrategyCard,
+    strategy_cards: list[StrategyCard],
+) -> list[ResearchAgenda]:
+    root_card_id = _cross_sample_root_card_id(card, strategy_cards)
+    if root_card_id is None:
         return []
+    target_ids = {root_card_id, card.card_id}
     return [
         agenda
         for agenda in agendas
-        if card.card_id in agenda.strategy_card_ids
-        and agenda.decision_basis == "lineage_cross_sample_validation_agenda"
+        if agenda.decision_basis == "lineage_cross_sample_validation_agenda"
+        and set(agenda.strategy_card_ids) == target_ids
     ]
+
+
+def _cross_sample_root_card_id(card: StrategyCard, strategy_cards: list[StrategyCard]) -> str | None:
+    if _is_replacement_card(card):
+        root_card_id = card.parameters.get("replacement_source_lineage_root_card_id")
+        return root_card_id if isinstance(root_card_id, str) and root_card_id else None
+    if card.parent_card_id is None:
+        return None
+    by_id = {candidate.card_id: candidate for candidate in strategy_cards}
+    current = card
+    visited = {card.card_id}
+    while current.parent_card_id is not None:
+        parent = by_id.get(current.parent_card_id)
+        if parent is None:
+            return current.parent_card_id
+        if parent.card_id in visited:
+            return None
+        current = parent
+        visited.add(current.card_id)
+    return current.card_id
 
 
 def _replacement_lineage_agendas(agendas: list[ResearchAgenda], card: StrategyCard) -> list[ResearchAgenda]:

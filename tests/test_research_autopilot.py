@@ -3807,6 +3807,86 @@ def test_replacement_retest_autopilot_helper_records_latest_completed_chain(tmp_
     assert saved_runs[-1] == result.research_autopilot_run
 
 
+def test_health_check_accepts_replacement_retest_run_under_lineage_agenda(tmp_path):
+    repository, replacement_card_id = _seed_lineage_replacement_retest_through_shadow(tmp_path)
+    record_revision_retest_autopilot_run(
+        repository=repository,
+        storage_dir=tmp_path,
+        created_at=datetime(2026, 4, 30, 14, 30, tzinfo=UTC),
+        symbol="BTC-USD",
+        revision_card_id=replacement_card_id,
+    )
+
+    health = run_health_check(
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=datetime(2026, 4, 30, 14, 35, tzinfo=UTC),
+        create_repair_request=False,
+    )
+    codes = {finding.code for finding in health.findings}
+
+    assert "research_autopilot_run_agenda_strategy_card_mismatch" not in codes
+
+
+def test_health_check_rejects_replacement_retest_run_under_unrelated_root_agenda(tmp_path):
+    repository, replacement_card_id = _seed_lineage_replacement_retest_through_shadow(tmp_path)
+    result = record_revision_retest_autopilot_run(
+        repository=repository,
+        storage_dir=tmp_path,
+        created_at=datetime(2026, 4, 30, 14, 30, tzinfo=UTC),
+        symbol="BTC-USD",
+        revision_card_id=replacement_card_id,
+    )
+    replacement = next(card for card in repository.load_strategy_cards() if card.card_id == replacement_card_id)
+    root_card_id = str(replacement.parameters["replacement_source_lineage_root_card_id"])
+    unrelated_agenda = ResearchAgenda(
+        agenda_id="research-agenda:unrelated-root-only",
+        created_at=datetime(2026, 4, 30, 14, 40, tzinfo=UTC),
+        symbol="BTC-USD",
+        title="Unrelated agenda",
+        hypothesis="This agenda mentions the root but is not a lineage agenda for this replacement retest.",
+        priority="LOW",
+        status="OPEN",
+        target_strategy_family="manual_research",
+        strategy_card_ids=[root_card_id],
+        expected_artifacts=["notes"],
+        acceptance_criteria=["Should not authorize replacement retest run membership."],
+        blocked_actions=["real_order_submission"],
+        decision_basis="manual_research_agenda",
+    )
+    repository.save_research_agenda(unrelated_agenda)
+    run = result.research_autopilot_run
+    repository.save_research_autopilot_run(
+        ResearchAutopilotRun(
+            run_id="research-autopilot-run:unrelated-root-agenda",
+            created_at=run.created_at,
+            symbol=run.symbol,
+            agenda_id=unrelated_agenda.agenda_id,
+            strategy_card_id=run.strategy_card_id,
+            experiment_trial_id=run.experiment_trial_id,
+            locked_evaluation_id=run.locked_evaluation_id,
+            leaderboard_entry_id=run.leaderboard_entry_id,
+            strategy_decision_id=run.strategy_decision_id,
+            paper_shadow_outcome_id=run.paper_shadow_outcome_id,
+            steps=list(run.steps),
+            loop_status=run.loop_status,
+            next_research_action=run.next_research_action,
+            blocked_reasons=list(run.blocked_reasons),
+            decision_basis=run.decision_basis,
+        )
+    )
+
+    health = run_health_check(
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=datetime(2026, 4, 30, 14, 45, tzinfo=UTC),
+        create_repair_request=False,
+    )
+    codes = {finding.code for finding in health.findings}
+
+    assert "research_autopilot_run_agenda_strategy_card_mismatch" in codes
+
+
 def test_replacement_retest_autopilot_prefers_direct_cross_sample_agenda(tmp_path):
     repository, replacement_card_id = _seed_lineage_replacement_retest_through_shadow(tmp_path)
     replacement_card = next(card for card in repository.load_strategy_cards() if card.card_id == replacement_card_id)

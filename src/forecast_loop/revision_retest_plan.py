@@ -1086,6 +1086,11 @@ def _outcome_belongs_to_replacement_lineage(
         current = by_id.get(current_id)
         if current is None:
             return False
+        if (
+            current.decision_basis == REPLACEMENT_DECISION_BASIS
+            and current.parameters.get("replacement_source_lineage_root_card_id") == root_card_id
+        ):
+            return True
         current_id = current.parent_card_id
     return False
 

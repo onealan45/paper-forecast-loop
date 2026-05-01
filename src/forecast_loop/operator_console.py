@@ -280,7 +280,7 @@ def build_operator_console_snapshot(
         latest_lineage_cross_sample_autopilot_run=lineage_cross_sample_autopilot_run,
         latest_lineage_replacement_strategy_card=lineage_replacement_card,
         latest_lineage_replacement_retest_task_plan=lineage_replacement_retest_task_plan,
-        latest_lineage_replacement_retest_task_run=_latest_revision_retest_executor_run(
+        latest_lineage_replacement_retest_task_run=_latest_revision_retest_activity_run(
             automation_runs,
             lineage_replacement_retest_task_plan,
         ),
@@ -478,6 +478,21 @@ def _latest_revision_retest_executor_run(
         and _automation_step_artifact_id(run, "source_outcome") == task_plan.source_outcome_id
     ]
     return max(matches, key=lambda run: run.completed_at) if matches else None
+
+
+def _latest_revision_retest_activity_run(
+    runs: list[AutomationRun],
+    task_plan: RevisionRetestTaskPlan | None,
+) -> AutomationRun | None:
+    candidates = [
+        run
+        for run in (
+            _latest_revision_retest_task_run(runs, task_plan),
+            _latest_revision_retest_executor_run(runs, task_plan),
+        )
+        if run is not None
+    ]
+    return max(candidates, key=lambda run: run.completed_at) if candidates else None
 
 
 def _automation_step_artifact_id(run: AutomationRun, name: str) -> str | None:
@@ -1248,7 +1263,7 @@ def _lineage_replacement_strategy_panel(
     <p>Scaffold status：{escape(scaffold_task.status if scaffold_task else "無 plan")}</p>
     <p>Retest kind：<code>{escape(_replacement_retest_kind(retest_plan))}</code></p>
     <p>Next task：<code>{escape(next_task.task_id if next_task else "none")}</code> / {escape(next_task.status if next_task else "completed")}</p>
-    <p>Latest executor run：{_artifact_id(retest_run, "automation_run_id")} / {escape(retest_run.status if retest_run else "尚未執行")}</p>
+    <p>Latest retest activity：{_artifact_id(retest_run, "automation_run_id")} / {escape(retest_run.status if retest_run else "尚未執行")}</p>
     {shadow_readiness}
     <p class="muted">這裡只顯示替代策略是否已進入 retest scaffold；不代表策略通過、晉級或下單。</p>
     <h4>替代策略 Retest Autopilot Run</h4>

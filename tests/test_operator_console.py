@@ -1885,6 +1885,8 @@ def test_operator_console_shows_lineage_cross_sample_validation_agenda(tmp_path)
 
 
 def test_operator_console_shows_lineage_replacement_retest_scaffold(tmp_path):
+    from forecast_loop.revision_retest_run_log import record_revision_retest_task_run
+
     now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
     repository = JsonFileRepository(tmp_path)
     _seed_visible_strategy_research(repository, now)
@@ -1921,6 +1923,13 @@ def test_operator_console_shows_lineage_replacement_retest_scaffold(tmp_path):
         storage_dir=tmp_path,
         symbol="BTC-USD",
         created_at=now + timedelta(minutes=60),
+        revision_card_id=executed.created_artifact_ids[0],
+    )
+    inspected = record_revision_retest_task_run(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=65),
         revision_card_id=executed.created_artifact_ids[0],
     )
     repository.save_research_autopilot_run(
@@ -2010,13 +2019,16 @@ def test_operator_console_shows_lineage_replacement_retest_scaffold(tmp_path):
     assert snapshot.latest_lineage_replacement_retest_task_plan is not None
     assert snapshot.latest_lineage_replacement_retest_task_plan.pending_trial_id == scaffolded.created_artifact_ids[0]
     assert snapshot.latest_lineage_replacement_retest_task_run is not None
-    assert snapshot.latest_lineage_replacement_retest_task_run.automation_run_id == scaffolded.automation_run.automation_run_id
+    assert snapshot.latest_lineage_replacement_retest_task_run.automation_run_id == inspected.automation_run.automation_run_id
     assert snapshot.latest_lineage_replacement_retest_autopilot_run is not None
     assert snapshot.latest_lineage_replacement_retest_autopilot_run.run_id == "research-autopilot-run:visible-replacement-retest"
     assert "替代策略 Retest Scaffold" in html
     assert "替代策略 Retest Autopilot Run" in html
+    assert "Latest retest activity" in html
     assert "research-dataset:visible-replacement-retest" in html
     assert scaffolded.created_artifact_ids[0] in html
+    assert inspected.automation_run.automation_run_id in html
+    assert inspected.automation_run.status in html
     assert "research-autopilot-run:visible-replacement-retest" in html
     assert "更新 lineage 判定 (UPDATE_LINEAGE_VERDICT)" in html
     assert "lineage_replacement" in html

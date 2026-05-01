@@ -307,6 +307,10 @@ factory:
 - PR114 surfaces that shadow readiness context in the dashboard and operator
   console with Traditional Chinese labels, so the strategy UX shows why the
   current retest is still waiting.
+- PR115 makes replacement retest panels choose the latest retest activity
+  across executor runs and read-only task-plan inspections, so a fresh blocked
+  observation check is visible instead of being hidden behind an older executor
+  run.
 - PR61 shows those cross-sample agenda strategy-card links in dashboard and
   operator console, making the root/replacement strategy targets inspectable
   from the research UX without opening raw JSON.

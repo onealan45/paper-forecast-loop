@@ -850,6 +850,9 @@ V1 MVP should include:
 - dashboard and operator console visibility for shadow-window readiness, so
   operators see the latest stored K-line, first aligned start, missing end
   boundary, and readiness state in Traditional Chinese before reading raw JSON
+- replacement retest activity visibility, so the strategy UX reports the newest
+  executor run or read-only task-plan inspection run for a replacement retest
+  instead of leaving a fresh blocked observation check invisible
 - dashboard and operator console visibility for those cross-sample agenda
   strategy-card links, so the research UX names the root and replacement
   strategy targets directly

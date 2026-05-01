@@ -139,6 +139,10 @@ The PRD follows that decision:
   `record_paper_shadow_outcome` only when explicit shadow-window observation
   inputs are supplied, preserving the no-fabricated-returns boundary while
   allowing a retest chain to close.
+- PR101 extends that shadow-outcome step so explicit shadow windows can derive
+  observed strategy return, benchmark return, max drawdown, and turnover from
+  stored candles. The window is still caller-specified and must have complete
+  candle boundary coverage.
 - PR27 adds Revision Retest Completed Chain Visibility: the strategy research
   resolver and read-only UX now treat a completed revision retest chain as
   `PASSED` evidence with no remaining `Next Required` artifacts.
@@ -223,7 +227,8 @@ Product implications:
   shadow-outcome closure: revision candidates can open a pending experiment
   trial, produce baseline/backtest/walk-forward/locked-evaluation/leaderboard
   evidence through whitelisted executor steps, and then close with explicit
-  observed shadow-window inputs.
+  observed shadow-window inputs or a caller-specified candle-derived shadow
+  observation.
 - Revision candidates must be visible in the UX so the user can inspect what
   the AI is trying to fix next, not only whether the loop is healthy.
 - Revision retest scaffolds must also be visible so the user can inspect

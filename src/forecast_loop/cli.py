@@ -567,6 +567,7 @@ def main(argv: list[str] | None = None) -> int:
     execute_retest_task_cmd.add_argument("--shadow-max-adverse-excursion", type=float)
     execute_retest_task_cmd.add_argument("--shadow-turnover", type=float)
     execute_retest_task_cmd.add_argument("--shadow-note")
+    execute_retest_task_cmd.add_argument("--derive-shadow-returns-from-candles", action="store_true")
 
     args = parser.parse_args(argv)
     try:
@@ -2095,6 +2096,7 @@ def _execute_revision_retest_next_task(args) -> int:
         shadow_max_adverse_excursion=args.shadow_max_adverse_excursion,
         shadow_turnover=args.shadow_turnover,
         shadow_note=args.shadow_note,
+        derive_shadow_returns_from_candles=args.derive_shadow_returns_from_candles,
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0

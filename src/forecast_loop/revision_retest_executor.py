@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from forecast_loop.backtest import run_backtest
 from forecast_loop.baselines import build_baseline_evaluation
 from forecast_loop.experiment_registry import record_experiment_trial
 from forecast_loop.locked_evaluation import evaluate_leaderboard_gate, lock_evaluation_protocol
-from forecast_loop.models import AutomationRun, WalkForwardValidation
+from forecast_loop.models import AutomationRun, BacktestResult, MarketCandleRecord, WalkForwardValidation
 from forecast_loop.paper_shadow import record_paper_shadow_outcome
 from forecast_loop.revision_retest import RETEST_PROTOCOL_VERSION, create_revision_retest_scaffold
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
@@ -48,6 +48,7 @@ def execute_revision_retest_next_task(
     shadow_max_adverse_excursion: float | None = None,
     shadow_turnover: float | None = None,
     shadow_note: str | None = None,
+    derive_shadow_returns_from_candles: bool = False,
 ) -> RevisionRetestTaskExecutionResult:
     if created_at.tzinfo is None or created_at.utcoffset() is None:
         raise ValueError("created_at must be timezone-aware")
@@ -67,6 +68,7 @@ def execute_revision_retest_next_task(
         shadow_window_end=shadow_window_end,
         shadow_observed_return=shadow_observed_return,
         shadow_benchmark_return=shadow_benchmark_return,
+        derive_shadow_returns_from_candles=derive_shadow_returns_from_candles,
     )
     if task.status != "ready" and not shadow_observation_override:
         raise ValueError(f"revision_retest_next_task_not_ready:{task.task_id}:{task.blocked_reason or task.status}")
@@ -117,6 +119,7 @@ def execute_revision_retest_next_task(
     elif task.task_id == "record_paper_shadow_outcome":
         created_artifact_ids = _execute_record_paper_shadow_outcome(
             repository=repository,
+            storage_dir=storage_path,
             plan=before_plan,
             created_at=created_at,
             shadow_window_start=shadow_window_start,
@@ -126,6 +129,7 @@ def execute_revision_retest_next_task(
             shadow_max_adverse_excursion=shadow_max_adverse_excursion,
             shadow_turnover=shadow_turnover,
             shadow_note=shadow_note,
+            derive_shadow_returns_from_candles=derive_shadow_returns_from_candles,
         )
     else:
         raise ValueError(f"unsupported_revision_retest_task_execution:{task.task_id}")
@@ -432,6 +436,7 @@ def _can_execute_shadow_observation_task(
     shadow_window_end: datetime | None,
     shadow_observed_return: float | None,
     shadow_benchmark_return: float | None,
+    derive_shadow_returns_from_candles: bool,
 ) -> bool:
     return (
         task.task_id == "record_paper_shadow_outcome"
@@ -439,14 +444,17 @@ def _can_execute_shadow_observation_task(
         and task.blocked_reason == "shadow_window_observation_required"
         and shadow_window_start is not None
         and shadow_window_end is not None
-        and shadow_observed_return is not None
-        and shadow_benchmark_return is not None
+        and (
+            derive_shadow_returns_from_candles
+            or (shadow_observed_return is not None and shadow_benchmark_return is not None)
+        )
     )
 
 
 def _execute_record_paper_shadow_outcome(
     *,
     repository: ArtifactRepository,
+    storage_dir: Path,
     plan: RevisionRetestTaskPlan,
     created_at: datetime,
     shadow_window_start: datetime | None,
@@ -456,6 +464,7 @@ def _execute_record_paper_shadow_outcome(
     shadow_max_adverse_excursion: float | None,
     shadow_turnover: float | None,
     shadow_note: str | None,
+    derive_shadow_returns_from_candles: bool,
 ) -> list[str]:
     if plan.leaderboard_entry_id is None:
         raise ValueError("revision_retest_leaderboard_entry_missing")
@@ -464,20 +473,42 @@ def _execute_record_paper_shadow_outcome(
         missing.append("shadow_window_start")
     if shadow_window_end is None:
         missing.append("shadow_window_end")
-    if shadow_observed_return is None:
+    if shadow_observed_return is None and not derive_shadow_returns_from_candles:
         missing.append("shadow_observed_return")
-    if shadow_benchmark_return is None:
+    if shadow_benchmark_return is None and not derive_shadow_returns_from_candles:
         missing.append("shadow_benchmark_return")
     if missing:
         raise ValueError(f"revision_retest_shadow_observation_inputs_missing:{','.join(missing)}")
     assert shadow_window_start is not None
     assert shadow_window_end is not None
-    assert shadow_observed_return is not None
-    assert shadow_benchmark_return is not None
     if shadow_window_end <= shadow_window_start:
         raise ValueError("revision_retest_shadow_window_invalid")
     if shadow_window_end > created_at:
         raise ValueError("revision_retest_shadow_window_not_complete")
+    if derive_shadow_returns_from_candles:
+        derived = _derive_shadow_observation_from_stored_candles(
+            repository=repository,
+            storage_dir=storage_dir,
+            symbol=plan.symbol,
+            created_at=created_at,
+            window_start=shadow_window_start,
+            window_end=shadow_window_end,
+        )
+        shadow_observed_return = derived.strategy_return
+        shadow_benchmark_return = derived.benchmark_return
+        shadow_max_adverse_excursion = (
+            derived.max_drawdown
+            if shadow_max_adverse_excursion is None
+            else shadow_max_adverse_excursion
+        )
+        shadow_turnover = derived.turnover if shadow_turnover is None else shadow_turnover
+        shadow_note = (
+            "derived_from_stored_candles"
+            if shadow_note is None
+            else f"{shadow_note}; derived_from_stored_candles"
+        )
+    assert shadow_observed_return is not None
+    assert shadow_benchmark_return is not None
     outcome = record_paper_shadow_outcome(
         repository=repository,
         created_at=created_at,
@@ -491,6 +522,70 @@ def _execute_record_paper_shadow_outcome(
         note=shadow_note,
     )
     return [outcome.outcome_id]
+
+
+def _derive_shadow_observation_from_stored_candles(
+    *,
+    repository: ArtifactRepository,
+    storage_dir: Path,
+    symbol: str,
+    created_at: datetime,
+    window_start: datetime,
+    window_end: datetime,
+) -> BacktestResult:
+    all_symbol_candles = [
+        candle
+        for candle in repository.load_market_candles()
+        if candle.symbol == symbol
+    ]
+    all_symbol_candles.sort(key=lambda candle: candle.timestamp)
+    candles = [
+        candle
+        for candle in all_symbol_candles
+        if window_start <= candle.timestamp <= window_end
+    ]
+    if (
+        len(candles) < 2
+        or candles[0].timestamp != window_start
+        or candles[-1].timestamp != window_end
+    ):
+        raise ValueError("revision_retest_shadow_window_candles_incomplete")
+    _ensure_complete_shadow_candle_window(candles, all_symbol_candles=all_symbol_candles)
+    return run_backtest(
+        storage_dir=storage_dir,
+        symbol=symbol,
+        start=window_start,
+        end=window_end,
+        created_at=created_at,
+    ).result
+
+
+def _ensure_complete_shadow_candle_window(
+    candles: list[MarketCandleRecord],
+    *,
+    all_symbol_candles: list[MarketCandleRecord],
+) -> None:
+    cadence = _infer_candle_cadence(all_symbol_candles)
+    if cadence is None or cadence <= timedelta(0):
+        raise ValueError("revision_retest_shadow_window_candles_incomplete")
+    timestamps = {candle.timestamp for candle in candles}
+    current = candles[0].timestamp
+    while current <= candles[-1].timestamp:
+        if current not in timestamps:
+            raise ValueError("revision_retest_shadow_window_candles_incomplete")
+        current += cadence
+
+
+def _infer_candle_cadence(candles: list[MarketCandleRecord]) -> timedelta | None:
+    timestamps = sorted({candle.timestamp for candle in candles})
+    deltas = [
+        current - previous
+        for previous, current in zip(timestamps, timestamps[1:])
+        if current > previous
+    ]
+    if not deltas:
+        return None
+    return min(deltas)
 
 
 def _execute_lock_evaluation_protocol(

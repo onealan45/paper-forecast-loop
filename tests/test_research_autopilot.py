@@ -2725,6 +2725,89 @@ def test_execute_revision_retest_shadow_outcome_next_task_records_observed_windo
     assert len(repository.load_automation_runs()) == 6
 
 
+def test_execute_revision_retest_shadow_outcome_derives_observation_from_stored_candles(tmp_path):
+    repository, revision, leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+
+    result = execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 1, 10, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+        shadow_window_start=datetime(2026, 1, 8, tzinfo=UTC),
+        shadow_window_end=datetime(2026, 1, 10, tzinfo=UTC),
+        derive_shadow_returns_from_candles=True,
+    )
+    shadow_backtest = next(
+        result
+        for result in repository.load_backtest_results()
+        if result.start == datetime(2026, 1, 8, tzinfo=UTC)
+        and result.end == datetime(2026, 1, 10, tzinfo=UTC)
+    )
+    revision_outcomes = [
+        outcome for outcome in repository.load_paper_shadow_outcomes() if outcome.strategy_card_id == revision.card_id
+    ]
+
+    assert result.executed_task_id == "record_paper_shadow_outcome"
+    assert result.before_plan.next_task_id == "record_paper_shadow_outcome"
+    assert result.after_plan.next_task_id is None
+    assert len(revision_outcomes) == 1
+    outcome = revision_outcomes[0]
+    assert outcome.leaderboard_entry_id == leaderboard_result.after_plan.leaderboard_entry_id
+    assert outcome.window_start == datetime(2026, 1, 8, tzinfo=UTC)
+    assert outcome.window_end == datetime(2026, 1, 10, tzinfo=UTC)
+    assert outcome.observed_return == shadow_backtest.strategy_return
+    assert outcome.benchmark_return == shadow_backtest.benchmark_return
+    assert outcome.max_adverse_excursion == shadow_backtest.max_drawdown
+    assert outcome.turnover == shadow_backtest.turnover
+    assert outcome.notes == ["derived_from_stored_candles"]
+    assert result.created_artifact_ids == [outcome.outcome_id]
+
+
+def test_execute_revision_retest_shadow_outcome_rejects_incomplete_derived_candle_window(tmp_path):
+    repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+
+    with pytest.raises(ValueError, match="revision_retest_shadow_window_candles_incomplete"):
+        execute_revision_retest_next_task(
+            repository=repository,
+            storage_dir=tmp_path,
+            symbol="BTC-USD",
+            created_at=datetime(2026, 1, 10, tzinfo=UTC),
+            revision_card_id=revision.card_id,
+            shadow_window_start=datetime(2026, 1, 8, 12, tzinfo=UTC),
+            shadow_window_end=datetime(2026, 1, 10, tzinfo=UTC),
+            derive_shadow_returns_from_candles=True,
+        )
+
+    revision_outcomes = [
+        outcome for outcome in repository.load_paper_shadow_outcomes() if outcome.strategy_card_id == revision.card_id
+    ]
+    assert revision_outcomes == []
+
+
+def test_execute_revision_retest_shadow_outcome_rejects_missing_interior_derived_candle(tmp_path):
+    repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+    repository.save_market_candle(_retest_full_window_candle(19, 120))
+    repository.save_market_candle(_retest_full_window_candle(21, 122))
+
+    with pytest.raises(ValueError, match="revision_retest_shadow_window_candles_incomplete"):
+        execute_revision_retest_next_task(
+            repository=repository,
+            storage_dir=tmp_path,
+            symbol="BTC-USD",
+            created_at=datetime(2026, 1, 22, tzinfo=UTC),
+            revision_card_id=revision.card_id,
+            shadow_window_start=datetime(2026, 1, 20, tzinfo=UTC),
+            shadow_window_end=datetime(2026, 1, 22, tzinfo=UTC),
+            derive_shadow_returns_from_candles=True,
+        )
+
+    revision_outcomes = [
+        outcome for outcome in repository.load_paper_shadow_outcomes() if outcome.strategy_card_id == revision.card_id
+    ]
+    assert revision_outcomes == []
+
+
 def test_cli_execute_revision_retest_shadow_outcome_next_task_outputs_json(tmp_path, capsys):
     repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
 
@@ -2766,6 +2849,39 @@ def test_cli_execute_revision_retest_shadow_outcome_next_task_outputs_json(tmp_p
     assert payload["after_plan"]["next_task_id"] is None
     assert len(revision_outcomes) == 1
     assert payload["created_artifact_ids"] == [revision_outcomes[0].outcome_id]
+
+
+def test_cli_execute_revision_retest_shadow_outcome_derives_observation_from_stored_candles(tmp_path, capsys):
+    repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+
+    assert main(
+        [
+            "execute-revision-retest-next-task",
+            "--storage-dir",
+            str(tmp_path),
+            "--revision-card-id",
+            revision.card_id,
+            "--symbol",
+            "BTC-USD",
+            "--now",
+            "2026-01-10T00:00:00+00:00",
+            "--shadow-window-start",
+            "2026-01-08T00:00:00+00:00",
+            "--shadow-window-end",
+            "2026-01-10T00:00:00+00:00",
+            "--derive-shadow-returns-from-candles",
+        ]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+    saved_repository = JsonFileRepository(tmp_path)
+    revision_outcomes = [
+        outcome for outcome in saved_repository.load_paper_shadow_outcomes() if outcome.strategy_card_id == revision.card_id
+    ]
+
+    assert payload["executed_task_id"] == "record_paper_shadow_outcome"
+    assert payload["after_plan"]["next_task_id"] is None
+    assert len(revision_outcomes) == 1
+    assert revision_outcomes[0].notes == ["derived_from_stored_candles"]
 
 
 def test_completed_revision_retest_chain_is_visible_as_done(tmp_path):

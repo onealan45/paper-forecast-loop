@@ -1767,12 +1767,16 @@ walk-forward step uses the locked full split window from `train_start` through
 current dataset, backtest, walk-forward validation, and source paper-shadow
 outcome. The leaderboard-gate step writes a locked evaluation result plus a
 leaderboard entry from the plan-linked PASSED trial evidence. The shadow-outcome
-step remains blocked unless the caller supplies `--shadow-window-start`,
-`--shadow-window-end`, `--shadow-observed-return`, and
-`--shadow-benchmark-return`; optional `--shadow-max-adverse-excursion`,
-`--shadow-turnover`, and `--shadow-note` are passed through when available. Each
-executed task writes the created artifact ids plus an execution `AutomationRun`,
-then returns before/after task plans.
+step remains blocked unless the caller supplies `--shadow-window-start` and
+`--shadow-window-end` plus either explicit `--shadow-observed-return` /
+`--shadow-benchmark-return` values or `--derive-shadow-returns-from-candles`.
+The derived mode uses stored candles in the requested window, requires candle
+coverage at both window boundaries, runs the local backtest engine, and records
+the resulting strategy return, benchmark return, max drawdown, and turnover as
+the shadow observation. Optional `--shadow-max-adverse-excursion`,
+`--shadow-turnover`, and `--shadow-note` can still override or annotate the
+derived observation. Each executed task writes the created artifact ids plus an
+execution `AutomationRun`, then returns before/after task plans.
 
 When a revision retest chain has completed through explicit shadow outcome
 recording, the strategy research resolver reports the linked retest trial as

@@ -227,6 +227,36 @@ def test_paper_shadow_blocked_leaderboard_entry_cannot_pass(tmp_path):
     assert "baseline_edge_not_positive" in outcome.blocked_reasons
 
 
+def test_paper_shadow_deduplicates_overlapping_blockers_before_persisting(tmp_path):
+    repository, _card, _trial, evaluation, entry = _seed_repository(tmp_path, rankable=False)
+    evaluation.passed = False
+    evaluation.rankable = False
+    evaluation.alpha_score = None
+    evaluation.blocked_reasons = [
+        "baseline_edge_not_positive",
+        "locked_evaluation_not_rankable",
+    ]
+    (tmp_path / "locked_evaluation_results.jsonl").write_text(
+        json.dumps(evaluation.to_dict()) + "\n",
+        encoding="utf-8",
+    )
+
+    outcome = record_paper_shadow_outcome(
+        repository=repository,
+        created_at=_now(),
+        leaderboard_entry_id=entry.entry_id,
+        window_start=_now(),
+        window_end=_now() + timedelta(hours=24),
+        observed_return=0.08,
+        benchmark_return=0.01,
+    )
+
+    assert outcome.outcome_grade == "BLOCKED"
+    assert outcome.blocked_reasons.count("baseline_edge_not_positive") == 1
+    assert outcome.blocked_reasons.count("locked_evaluation_not_rankable") == 1
+    assert repository.load_paper_shadow_outcomes()[0].blocked_reasons == outcome.blocked_reasons
+
+
 def test_paper_shadow_malformed_blocked_entry_fails_closed(tmp_path):
     repository, _card, _trial, evaluation, entry = _seed_repository(tmp_path)
     entry.rankable = True

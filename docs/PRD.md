@@ -821,6 +821,10 @@ V1 MVP should include:
   a negative after-cost lineage that is still quarantined routes to replacement
   strategy research instead of cross-sample validation, and blocked reasons can
   supply concrete failure context when failure attributions are absent
+- deduplicated paper-shadow blocker references at both write time and lineage
+  read time, so overlapping leaderboard, locked-evaluation, and link blockers
+  do not inflate failure-attribution aggregates or mislead self-evolution
+  research priorities
 - dashboard and operator console visibility for those cross-sample agenda
   strategy-card links, so the research UX names the root and replacement
   strategy targets directly

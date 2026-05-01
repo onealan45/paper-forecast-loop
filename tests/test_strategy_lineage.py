@@ -472,6 +472,43 @@ def test_strategy_lineage_summary_treats_raw_quarantine_action_as_stop_signal():
     assert summary.next_research_focus == "停止加碼此 lineage，優先研究 baseline_edge_not_positive 的修正或新策略。"
 
 
+def test_strategy_lineage_summary_deduplicates_blocked_reason_fallbacks():
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    parent = _card("strategy-card:parent")
+
+    summary = build_strategy_lineage_summary(
+        root_card=parent,
+        strategy_cards=[parent],
+        paper_shadow_outcomes=[
+            _outcome(
+                "parent-quarantine",
+                card_id=parent.card_id,
+                created_at=now,
+                action="QUARANTINE",
+                excess=-0.04,
+                attributions=[],
+                blocked_reasons=[
+                    "baseline_edge_not_positive",
+                    "baseline_edge_not_positive",
+                    "locked_evaluation_not_rankable",
+                    "locked_evaluation_not_rankable",
+                ],
+            ),
+        ],
+    )
+
+    assert summary is not None
+    assert summary.outcome_nodes[0].failure_attributions == [
+        "baseline_edge_not_positive",
+        "locked_evaluation_not_rankable",
+    ]
+    assert summary.failure_attribution_counts == {
+        "baseline_edge_not_positive": 1,
+        "locked_evaluation_not_rankable": 1,
+    }
+    assert summary.primary_failure_attribution == "baseline_edge_not_positive"
+
+
 def test_strategy_lineage_summary_preserves_branching_revision_tree_order():
     now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
     parent = _card("strategy-card:parent")

@@ -28,7 +28,7 @@ def record_paper_shadow_outcome(
     entry = _require_leaderboard_entry(repository, leaderboard_entry_id)
     evaluation = _require_locked_evaluation(repository, entry.evaluation_id)
     blocked = _link_blockers(repository, entry=entry, evaluation=evaluation)
-    blocked = [*_leaderboard_blockers(entry), *_evaluation_blockers(evaluation), *blocked]
+    blocked = _unique([*_leaderboard_blockers(entry), *_evaluation_blockers(evaluation), *blocked])
 
     excess_return = round(observed_return - benchmark_return, 8)
     grade, promotion_stage, strategy_action, attributions = _classify_outcome(

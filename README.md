@@ -275,6 +275,10 @@ factory:
   to cross-sample validation merely because it improved versus a worse prior
   run; it routes to replacement-strategy research and uses blocked reasons as
   concrete failure context when failure attributions are empty.
+- PR106 deduplicates paper-shadow blocker references at write time and lineage
+  read time, so overlapping leaderboard, locked-evaluation, and link blockers
+  do not inflate repeated-failure counts or distract the strategy research
+  loop from the real failure modes.
 - PR61 shows those cross-sample agenda strategy-card links in dashboard and
   operator console, making the root/replacement strategy targets inspectable
   from the research UX without opening raw JSON.

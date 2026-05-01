@@ -291,7 +291,17 @@ def _lineage_outcome_nodes(paper_shadow_outcomes: list[PaperShadowOutcome]) -> l
 
 
 def _outcome_failure_references(outcome: PaperShadowOutcome) -> list[str]:
-    return list(outcome.failure_attributions or outcome.blocked_reasons)
+    return _unique_strings(list(outcome.failure_attributions or outcome.blocked_reasons))
+
+
+def _unique_strings(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for item in items:
+        if item and item not in seen:
+            ordered.append(item)
+            seen.add(item)
+    return ordered
 
 
 def _lineage_performance_verdict(

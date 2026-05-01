@@ -351,3 +351,49 @@ def test_cli_replay_range_can_use_stored_historical_candles(tmp_path, capsys):
     assert replay_result["scores_created"] == 3
     assert meta["provider"] == "stored"
     assert meta["evaluation_summary"]["resolved_count"] == 3
+
+
+def test_cli_fetch_candles_stores_provider_candles_and_deduplicates(tmp_path, capsys):
+    storage_dir = tmp_path / "storage"
+    args = [
+        "fetch-candles",
+        "--provider",
+        "sample",
+        "--storage-dir",
+        str(storage_dir),
+        "--symbol",
+        "BTC-USD",
+        "--lookback-candles",
+        "3",
+        "--now",
+        "2026-04-24T12:00:00+00:00",
+        "--source",
+        "sample-runtime-seed",
+    ]
+
+    assert main(args) == 0
+    first_result = json.loads(capsys.readouterr().out)
+    first_repository = JsonFileRepository(storage_dir)
+    first_records = first_repository.load_market_candles()
+    first_provider_runs = first_repository.load_provider_runs()
+
+    assert first_result["provider"] == "sample"
+    assert first_result["fetched_count"] == 3
+    assert first_result["stored_count"] == 3
+    assert first_result["skipped_duplicate_count"] == 0
+    assert first_result["latest_candle_timestamp"] == "2026-04-24T12:00:00+00:00"
+    assert [record.source for record in first_records] == ["sample-runtime-seed"] * 3
+    assert len(first_provider_runs) == 1
+    assert first_provider_runs[0].operation == "get_recent_candles"
+    assert first_provider_runs[0].candle_count == 3
+
+    assert main(args) == 0
+    second_result = json.loads(capsys.readouterr().out)
+    second_repository = JsonFileRepository(storage_dir)
+    second_records = second_repository.load_market_candles()
+    second_provider_runs = second_repository.load_provider_runs()
+
+    assert second_result["stored_count"] == 0
+    assert second_result["skipped_duplicate_count"] == 3
+    assert len(second_records) == 3
+    assert len(second_provider_runs) == 2

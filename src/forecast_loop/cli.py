@@ -19,6 +19,7 @@ from forecast_loop.broker_reconciliation import run_broker_reconciliation
 from forecast_loop.candle_store import (
     StoredCandleProvider,
     export_market_candles,
+    fetch_market_candles,
     import_market_candles,
     run_candle_health,
 )
@@ -275,6 +276,15 @@ def main(argv: list[str] | None = None) -> int:
     import_candles.add_argument("--symbol", default="BTC-USD")
     import_candles.add_argument("--source", default="manual-jsonl")
     import_candles.add_argument("--imported-at")
+
+    fetch_candles = subparsers.add_parser("fetch-candles")
+    fetch_candles.add_argument("--provider", choices=["sample", "coingecko"], default="sample")
+    fetch_candles.add_argument("--storage-dir", required=True)
+    fetch_candles.add_argument("--symbol", default="BTC-USD")
+    fetch_candles.add_argument("--lookback-candles", type=int, default=168)
+    fetch_candles.add_argument("--source", default="provider-runtime")
+    fetch_candles.add_argument("--now")
+    fetch_candles.add_argument("--imported-at")
 
     export_candles = subparsers.add_parser("export-candles")
     export_candles.add_argument("--storage-dir", required=True)
@@ -618,6 +628,8 @@ def main(argv: list[str] | None = None) -> int:
             return _list_assets(args)
         if args.command == "import-candles":
             return _import_candles(args)
+        if args.command == "fetch-candles":
+            return _fetch_candles(args)
         if args.command == "export-candles":
             return _export_candles(args)
         if args.command == "candle-health":
@@ -1607,6 +1619,30 @@ def _import_candles(args) -> int:
         symbol=args.symbol,
         source=args.source,
         imported_at=imported_at,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _fetch_candles(args) -> int:
+    now = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    imported_at = _parse_datetime(args.imported_at) if args.imported_at else now
+    storage_dir = Path(args.storage_dir)
+    repository = JsonFileRepository(storage_dir)
+    provider = AuditedMarketDataProvider(
+        provider=_build_data_provider(args.provider, now, args.symbol),
+        provider_name=args.provider,
+        repository=repository,
+    )
+    result = fetch_market_candles(
+        storage_dir=storage_dir,
+        provider=provider,
+        provider_name=args.provider,
+        symbol=args.symbol,
+        lookback_candles=args.lookback_candles,
+        source=args.source,
+        imported_at=imported_at,
+        end_time=now,
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0

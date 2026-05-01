@@ -458,6 +458,7 @@ This version intentionally includes:
   - `risk-check`
   - `list-assets`
   - `import-candles`
+  - `fetch-candles`
   - `export-candles`
   - `candle-health`
   - `import-stock-csv`
@@ -1552,6 +1553,12 @@ Import stored historical candles for deterministic replay:
 
 ```powershell
 python run_forecast_loop.py import-candles --storage-dir .\paper_storage\manual-replay --input .\fixtures\btc-hourly.jsonl --symbol BTC-USD --source fixture
+```
+
+Fetch provider candles into `market_candles.jsonl` for research seeding:
+
+```powershell
+python run_forecast_loop.py fetch-candles --provider coingecko --storage-dir .\paper_storage\manual-research --symbol BTC-USD --lookback-candles 168 --source coingecko-runtime-seed
 ```
 
 Audit stored candle coverage before replay:

@@ -49,6 +49,36 @@ class CandleExportResult:
         }
 
 
+@dataclass(slots=True)
+class CandleFetchResult:
+    storage_dir: Path
+    symbol: str
+    provider: str
+    source: str
+    requested_lookback_candles: int
+    fetched_count: int
+    stored_count: int
+    skipped_duplicate_count: int
+    latest_candle_timestamp: datetime | None
+
+    def to_dict(self) -> dict:
+        return {
+            "storage_dir": str(self.storage_dir.resolve()),
+            "symbol": self.symbol,
+            "provider": self.provider,
+            "source": self.source,
+            "requested_lookback_candles": self.requested_lookback_candles,
+            "fetched_count": self.fetched_count,
+            "stored_count": self.stored_count,
+            "skipped_duplicate_count": self.skipped_duplicate_count,
+            "latest_candle_timestamp": (
+                self.latest_candle_timestamp.isoformat()
+                if self.latest_candle_timestamp is not None
+                else None
+            ),
+        }
+
+
 class StoredCandleProvider:
     candle_interval_minutes = 60
 
@@ -161,6 +191,62 @@ def export_market_candles(
         output_path=output_file,
         symbol=symbol,
         exported_count=len(rows),
+    )
+
+
+def fetch_market_candles(
+    *,
+    storage_dir: Path | str,
+    provider,
+    provider_name: str,
+    symbol: str,
+    lookback_candles: int,
+    source: str,
+    imported_at: datetime,
+    end_time: datetime | None = None,
+) -> CandleFetchResult:
+    if lookback_candles <= 0:
+        raise ValueError("fetch-candles lookback-candles must be greater than 0")
+    if imported_at.tzinfo is None or imported_at.utcoffset() is None:
+        raise ValueError("imported_at must be timezone-aware")
+
+    repository = JsonFileRepository(storage_dir)
+    candles = provider.get_recent_candles(
+        symbol,
+        lookback_candles=lookback_candles,
+        end_time=end_time,
+    )
+    existing_ids = {record.candle_id for record in repository.load_market_candles()}
+    stored_count = 0
+    skipped_duplicate_count = 0
+    latest_candle_timestamp: datetime | None = None
+
+    for candle in candles:
+        record = MarketCandleRecord.from_candle(
+            candle,
+            symbol=symbol,
+            source=source,
+            imported_at=imported_at.astimezone(UTC),
+        )
+        _validate_candle_record(record)
+        latest_candle_timestamp = record.timestamp.astimezone(UTC)
+        if record.candle_id in existing_ids:
+            skipped_duplicate_count += 1
+            continue
+        repository.save_market_candle(record)
+        existing_ids.add(record.candle_id)
+        stored_count += 1
+
+    return CandleFetchResult(
+        storage_dir=Path(storage_dir),
+        symbol=symbol,
+        provider=provider_name,
+        source=source,
+        requested_lookback_candles=lookback_candles,
+        fetched_count=len(candles),
+        stored_count=stored_count,
+        skipped_duplicate_count=skipped_duplicate_count,
+        latest_candle_timestamp=latest_candle_timestamp,
     )
 
 

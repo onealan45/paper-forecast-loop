@@ -165,6 +165,7 @@ def build_revision_retest_task_plan(
     walk_forward = _selected_walk_forward(
         walk_forward_validations,
         passed_trial=passed_trial,
+        backtest=backtest,
         split=split,
         symbol=symbol,
     )
@@ -1129,6 +1130,7 @@ def _selected_walk_forward(
     validations: list[WalkForwardValidation],
     *,
     passed_trial: ExperimentTrial | None,
+    backtest: BacktestResult | None,
     split: SplitManifest | None,
     symbol: str,
 ) -> WalkForwardValidation | None:
@@ -1141,7 +1143,9 @@ def _selected_walk_forward(
             ),
             None,
         )
-        if linked is not None:
+        if linked is not None and (
+            backtest is None or backtest.result_id in linked.backtest_result_ids
+        ):
             return linked
     if split is None:
         return None
@@ -1152,6 +1156,10 @@ def _selected_walk_forward(
             if validation.symbol == symbol
             and validation.start == split.train_start
             and validation.end == split.holdout_end
+            and (
+                backtest is None
+                or backtest.result_id in validation.backtest_result_ids
+            )
         ]
     )
 

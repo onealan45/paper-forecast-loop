@@ -41,8 +41,12 @@ answer.
 
 The existing revision flow originally accepted only `RETIRE` and `REVISE`
 paper-shadow actions. PR43 also accepts `REVISE_STRATEGY`, because the lineage
-surface uses that action label for revision-required strategy research. This
-keeps the generated `propose-strategy-revision` command executable.
+surface uses that action label for revision-required strategy research. PR100
+also accepts `QUARANTINE` from blocked or quarantined paper-shadow outcomes, so
+the self-evolution loop can still create a DRAFT retest hypothesis from a failed
+runtime seed instead of stopping at isolation. This keeps the generated
+`propose-strategy-revision` command executable for weak, failed, and quarantined
+research evidence.
 
 ## Non-Goals
 
@@ -62,7 +66,8 @@ Tests cover:
 - quarantined lineage routing to replacement strategy research
 - machine-readable CLI output
 - missing-agenda CLI error without traceback
-- `propose-strategy-revision` accepting lineage `REVISE_STRATEGY` actions
+- `propose-strategy-revision` accepting lineage `REVISE_STRATEGY` and
+  paper-shadow `QUARANTINE` actions
 
 Related revision and autopilot tests were also run to confirm the new action
 compatibility does not regress existing revision flows.

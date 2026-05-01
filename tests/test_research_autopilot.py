@@ -11,6 +11,7 @@ from forecast_loop.health import run_health_check
 from forecast_loop.lineage_agenda import create_lineage_research_agenda
 from forecast_loop.lineage_research_executor import execute_lineage_research_next_task
 from forecast_loop.models import (
+    BaselineEvaluation,
     ExperimentTrial,
     LeaderboardEntry,
     LockedEvaluationResult,
@@ -565,6 +566,25 @@ def test_propose_strategy_revision_creates_draft_child_card_and_agenda(tmp_path)
     assert "revision" in agenda.title.lower()
     assert "negative_excess_return" in agenda.hypothesis
     assert "paper_shadow_outcome" in agenda.expected_artifacts
+
+
+def test_propose_strategy_revision_accepts_quarantine_outcome(tmp_path):
+    repository, card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="QUARANTINE",
+    )
+
+    result = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    )
+
+    revision = result.strategy_card
+    assert revision.status == "DRAFT"
+    assert revision.parent_card_id == card.card_id
+    assert revision.parameters["revision_source_outcome_id"] == outcome.outcome_id
+    assert revision.parameters["revision_failure_attributions"] == ["negative_excess_return"]
 
 
 def test_propose_strategy_revision_rejects_promotion_ready_outcome(tmp_path):
@@ -1298,6 +1318,22 @@ def test_revision_retest_task_plan_does_not_record_passed_trial_from_unlinked_ev
     )
     repository.save_backtest_result(backtest)
     repository.save_walk_forward_validation(unlinked_walk_forward)
+    repository.save_baseline_evaluation(
+        BaselineEvaluation(
+            baseline_id="baseline:split-aligned",
+            created_at=_now(),
+            symbol="BTC-USD",
+            sample_size=10,
+            directional_accuracy=0.7,
+            baseline_accuracy=0.5,
+            model_edge=0.2,
+            recent_score=0.8,
+            evidence_grade="B",
+            forecast_ids=[],
+            score_ids=[],
+            decision_basis="test-split-aligned-baseline",
+        )
+    )
 
     plan = build_revision_retest_task_plan(
         repository=repository,
@@ -1306,10 +1342,13 @@ def test_revision_retest_task_plan_does_not_record_passed_trial_from_unlinked_ev
         revision_card_id=revision.card_id,
     )
 
+    assert plan.next_task_id == "run_walk_forward"
+    assert plan.task_by_id("run_walk_forward").status == "ready"
     passed_trial_task = plan.task_by_id("record_passed_retest_trial")
     assert passed_trial_task.status == "blocked"
     assert passed_trial_task.blocked_reason == "missing_retest_results"
-    assert "linked_backtest_walk_forward_pair" in passed_trial_task.missing_inputs
+    assert "walk_forward_validation" in passed_trial_task.missing_inputs
+    assert "linked_backtest_walk_forward_pair" not in passed_trial_task.missing_inputs
 
 
 def test_cli_revision_retest_plan_rejects_missing_storage_without_creating_directory(tmp_path, capsys):
@@ -1914,6 +1953,66 @@ def test_execute_revision_retest_walk_forward_next_task_writes_validation(tmp_pa
     assert result.created_artifact_ids == [validations[0].validation_id]
     assert backtest_result.created_artifact_ids[0] in validations[0].backtest_result_ids
     assert len(repository.load_automation_runs()) == 3
+
+
+def test_execute_revision_retest_walk_forward_links_long_holdout_backtest(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 1, 4, tzinfo=UTC),
+        validation_start=datetime(2026, 1, 5, tzinfo=UTC),
+        validation_end=datetime(2026, 1, 7, tzinfo=UTC),
+        holdout_start=datetime(2026, 1, 8, tzinfo=UTC),
+        holdout_end=datetime(2026, 1, 12, tzinfo=UTC),
+    )
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 10, 30, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+    for index, close in enumerate([100, 101, 103, 102, 104, 107, 105, 108, 110, 109, 112, 111]):
+        repository.save_market_candle(_retest_full_window_candle(index, close))
+    backtest_result = execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 11, 0, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+
+    result = execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=datetime(2026, 4, 29, 11, 30, tzinfo=UTC),
+        revision_card_id=revision.card_id,
+    )
+    validation = next(
+        item
+        for item in repository.load_walk_forward_validations()
+        if item.validation_id == result.after_plan.walk_forward_validation_id
+    )
+
+    assert result.executed_task_id == "run_walk_forward"
+    assert result.after_plan.next_task_id == "record_passed_retest_trial"
+    assert backtest_result.created_artifact_ids[0] in validation.backtest_result_ids
 
 
 def test_cli_execute_revision_retest_walk_forward_next_task_outputs_json(tmp_path, capsys):

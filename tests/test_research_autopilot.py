@@ -3317,6 +3317,7 @@ def test_revision_retest_shadow_task_exposes_aligned_window_readiness(tmp_path):
     task = plan.task_by_id("record_paper_shadow_outcome")
 
     assert task.status == "blocked"
+    assert task.command_args is None
     assert "first_aligned_window_start=2026-04-29T12:30:00+00:00" in task.rationale
     assert "next_required_window_end=missing" in task.rationale
     assert "candidate_window_ready=false" in task.rationale
@@ -3335,7 +3336,23 @@ def test_revision_retest_shadow_task_exposes_ready_aligned_window_candidate(tmp_
     task = plan.task_by_id("record_paper_shadow_outcome")
 
     assert task.status == "blocked"
-    assert task.command_args is None
+    assert task.blocked_reason == "shadow_window_observation_required"
+    assert task.command_args == [
+        "python",
+        ".\\run_forecast_loop.py",
+        "execute-revision-retest-next-task",
+        "--storage-dir",
+        str(tmp_path),
+        "--revision-card-id",
+        revision.card_id,
+        "--symbol",
+        "BTC-USD",
+        "--shadow-window-start",
+        "2026-04-29T12:30:00+00:00",
+        "--shadow-window-end",
+        "2026-04-30T12:30:00+00:00",
+        "--derive-shadow-returns-from-candles",
+    ]
     assert "first_aligned_window_start=2026-04-29T12:30:00+00:00" in task.rationale
     assert "next_required_window_end=2026-04-30T12:30:00+00:00" in task.rationale
     assert "candidate_window_ready=true" in task.rationale

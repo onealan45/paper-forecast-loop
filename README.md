@@ -311,6 +311,10 @@ factory:
   across executor runs and read-only task-plan inspections, so a fresh blocked
   observation check is visible instead of being hidden behind an older executor
   run.
+- PR116 keeps the shadow-outcome task blocked until an observation is recorded,
+  but when the aligned candle window is complete it now includes a concrete
+  `execute-revision-retest-next-task` command suggestion with candle-derived
+  shadow returns.
 - PR61 shows those cross-sample agenda strategy-card links in dashboard and
   operator console, making the root/replacement strategy targets inspectable
   from the research UX without opening raw JSON.

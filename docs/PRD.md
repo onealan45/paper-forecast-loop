@@ -871,6 +871,10 @@ V1 MVP should include:
 - readable strategy-card status copy, so strategy hypothesis, revision,
   replacement, and lineage panels show lifecycle state in human terms while
   retaining raw status codes
+- strategy research digest artifacts, so automation can consume one compact
+  machine-readable summary of the active hypothesis, paper-shadow outcome,
+  lineage failure concentration, evidence ids, and next research action without
+  scraping dashboard/operator-console HTML
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,
@@ -964,10 +968,11 @@ correctness defects:
   escaping regressions for those fields. PR37 exposes lineage performance
   trajectory, PR38 adds the human-readable lineage verdict, and PR39 adds the
   next research focus, and PR40 exposes the same summary through a read-only
-  CLI. PR41 can persist that focus as a research agenda artifact, and PR42
-  makes that lineage-derived agenda visible in the strategy UX, but
-  strong strategy generation, model training, deeper self-evolving skill loops,
-  and optimizers are not included yet
+  CLI. PR41 can persist that focus as a research agenda artifact, PR42 makes
+  that lineage-derived agenda visible in the strategy UX, and PR95 adds a
+  persisted strategy research digest for automation handoff, but strong
+  strategy generation, model training, deeper self-evolving skill loops, and
+  optimizers are not included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved
 - walk-forward validation now influences simulated BUY/SELL gates through
   M4F research-quality checks

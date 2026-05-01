@@ -347,6 +347,10 @@ factory:
   raw promotion codes visible for auditability.
 - PR94 reuses readable strategy-card status copy across strategy hypothesis,
   revision, replacement, and lineage surfaces.
+- PR95 adds a persisted strategy research digest artifact and
+  `strategy-research-digest` CLI so automation can read one compact strategy
+  summary covering the current hypothesis, paper-shadow result, lineage failure
+  concentration, evidence ids, and next research action without parsing HTML.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -429,6 +433,7 @@ This version intentionally includes:
   - `lineage-research-plan`
   - `record-lineage-research-task-run`
   - `execute-lineage-research-next-task`
+  - `strategy-research-digest`
   - `operator-control`
   - `repair-storage`
   - `decide`
@@ -1370,6 +1375,19 @@ python run_forecast_loop.py strategy-lineage --storage-dir .\paper_storage\manua
 tree, paper-shadow outcome trajectory, performance verdict, and next research
 focus used by the dashboard/operator console so automation can route research
 without parsing HTML.
+
+Persist a compact strategy research digest for the latest strategy chain:
+
+```powershell
+python run_forecast_loop.py strategy-research-digest --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD
+```
+
+`strategy-research-digest` writes `strategy_research_digests.jsonl`. Each row
+captures the current strategy hypothesis, paper-shadow grade/action,
+after-cost excess return, lineage failure concentration, linked evidence ids,
+and next research rationale. It is the machine-readable handoff for strategy
+learning loops; it does not execute the strategy, mutate cards, or place
+orders.
 
 Persist the latest strategy lineage focus as a research agenda:
 

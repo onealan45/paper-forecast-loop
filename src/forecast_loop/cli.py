@@ -69,6 +69,7 @@ from forecast_loop.stock_data import (
 from forecast_loop.strategy_evolution import propose_strategy_revision
 from forecast_loop.strategy_lineage import build_strategy_lineage_summary
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
+from forecast_loop.strategy_research_digest import record_strategy_research_digest
 from forecast_loop.revision_retest import create_revision_retest_scaffold
 from forecast_loop.revision_retest_executor import execute_revision_retest_next_task
 from forecast_loop.revision_retest_plan import build_revision_retest_task_plan
@@ -121,6 +122,11 @@ def main(argv: list[str] | None = None) -> int:
     strategy_lineage = subparsers.add_parser("strategy-lineage")
     strategy_lineage.add_argument("--storage-dir", required=True)
     strategy_lineage.add_argument("--symbol", default="BTC-USD")
+
+    strategy_research_digest = subparsers.add_parser("strategy-research-digest")
+    strategy_research_digest.add_argument("--storage-dir", required=True)
+    strategy_research_digest.add_argument("--symbol", default="BTC-USD")
+    strategy_research_digest.add_argument("--created-at")
 
     lineage_agenda_cmd = subparsers.add_parser("create-lineage-research-agenda")
     lineage_agenda_cmd.add_argument("--storage-dir", required=True)
@@ -556,6 +562,8 @@ def main(argv: list[str] | None = None) -> int:
             return _operator_console(args)
         if args.command == "strategy-lineage":
             return _strategy_lineage(args)
+        if args.command == "strategy-research-digest":
+            return _strategy_research_digest(args)
         if args.command == "create-lineage-research-agenda":
             return _create_lineage_research_agenda(args)
         if args.command == "lineage-research-plan":
@@ -1017,6 +1025,31 @@ def _strategy_lineage(args) -> int:
                 "storage_dir": str(storage_dir.resolve()),
                 "symbol": symbol,
                 "strategy_lineage": asdict(summary) if summary else None,
+            },
+            ensure_ascii=False,
+        )
+    )
+    return 0
+
+
+def _strategy_research_digest(args) -> int:
+    storage_dir = Path(args.storage_dir)
+    if not storage_dir.exists():
+        raise ValueError(f"storage directory does not exist: {storage_dir}")
+    if not storage_dir.is_dir():
+        raise ValueError(f"storage path is not a directory: {storage_dir}")
+    created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
+    digest = record_strategy_research_digest(
+        repository=JsonFileRepository(storage_dir),
+        symbol=args.symbol,
+        created_at=created_at,
+    )
+    print(
+        json.dumps(
+            {
+                "storage_dir": str(storage_dir.resolve()),
+                "symbol": args.symbol.upper(),
+                "strategy_research_digest": digest.to_dict(),
             },
             ensure_ascii=False,
         )

@@ -53,6 +53,7 @@ from forecast_loop.strategy_lineage import StrategyLineageSummary, build_strateg
 from forecast_loop.strategy_research_display import (
     build_strategy_research_conclusion,
     format_failure_attributions,
+    format_outcome_grade,
     format_research_action,
 )
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
@@ -1192,9 +1193,9 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
           <h3>Paper-shadow 歸因</h3>
           <dl>
             <dt>Outcome</dt><dd>{_dashboard_artifact_id(outcome, "outcome_id")}</dd>
-            <dt>Grade</dt><dd>{escape(outcome.outcome_grade if outcome else "n/a")}</dd>
+            <dt>Grade</dt><dd>{escape(_display_outcome_grade(outcome.outcome_grade if outcome else None))}</dd>
             <dt>Excess after costs</dt><dd>{_format_optional_ratio(outcome.excess_return_after_costs if outcome else None)}</dd>
-            <dt>Recommended</dt><dd>{escape(outcome.recommended_strategy_action if outcome else "n/a")}</dd>
+            <dt>Recommended</dt><dd>{escape(_display_research_action(outcome.recommended_strategy_action if outcome else None))}</dd>
             <dt>Failure attribution</dt><dd>{_dashboard_list_inline(_display_failure_attributions(outcome))}</dd>
           </dl>
         </div>
@@ -2473,6 +2474,12 @@ def _display_research_action(action: str | None) -> str:
     if not action:
         return "none"
     return format_research_action(action)
+
+
+def _display_outcome_grade(grade: str | None) -> str:
+    if not grade:
+        return "n/a"
+    return format_outcome_grade(grade)
 
 
 def _display_lineage_next_research_focus(summary: StrategyLineageSummary) -> str:

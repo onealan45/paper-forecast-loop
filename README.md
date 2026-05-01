@@ -341,6 +341,8 @@ factory:
 - PR91 reuses readable failure-attribution copy for lineage failure-count
   aggregates, so raw failure keys no longer dominate the aggregate strategy
   lineage panels.
+- PR92 reuses readable paper-shadow grade and recommended-action copy in the
+  detailed research panels and operator overview preview.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

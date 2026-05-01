@@ -875,6 +875,8 @@ def test_research_page_surfaces_strategy_hypothesis_gates_shadow_and_autopilot(t
     assert "leaderboard-entry:visible" in html
     assert "Paper-shadow 歸因" in html
     paper_shadow_section = html[html.index("Paper-shadow 歸因") : html.index("策略規則")]
+    assert "Grade：失敗 (FAIL)" in paper_shadow_section
+    assert "Recommended：修訂策略 (REVISE_STRATEGY)" in paper_shadow_section
     assert "負超額報酬 (negative_excess_return)" in paper_shadow_section
     assert "突破後反轉 (breakout_reversed)" in paper_shadow_section
     assert "negative_excess_return" in html
@@ -1227,6 +1229,8 @@ def test_operator_console_strategy_lineage_includes_multi_generation_revisions(t
         "weak_baseline_edge": 1,
     }
     for html in (research_html, overview_html):
+        if html is overview_html:
+            assert "Paper-shadow：修訂策略 (REVISE_STRATEGY) / 失敗 (FAIL)" in html
         action_start = html.index("Action counts")
         action_end = html.index("Failure attribution", action_start)
         action_count_section = html[action_start:action_end]

@@ -304,6 +304,9 @@ factory:
 - PR113 adds aligned shadow-window readiness context, so blocked retest plans
   show the first legal candle-aligned start, the next required end candle, and
   whether a complete candidate window is available.
+- PR114 surfaces that shadow readiness context in the dashboard and operator
+  console with Traditional Chinese labels, so the strategy UX shows why the
+  current retest is still waiting.
 - PR61 shows those cross-sample agenda strategy-card links in dashboard and
   operator console, making the root/replacement strategy targets inspectable
   from the research UX without opening raw JSON.

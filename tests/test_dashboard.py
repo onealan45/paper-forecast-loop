@@ -1275,6 +1275,147 @@ def test_dashboard_revision_retest_task_plan_translates_missing_inputs():
     assert "訓練開始, 驗證結束, storage 目錄 (train_start, validation_end, storage_dir)" in html
 
 
+def test_dashboard_revision_retest_task_plan_shows_shadow_readiness_copy():
+    from forecast_loop.dashboard import _render_revision_retest_task_plan
+    from forecast_loop.revision_retest_plan import RevisionRetestTask, RevisionRetestTaskPlan
+
+    plan = RevisionRetestTaskPlan(
+        symbol="BTC-USD",
+        strategy_card_id="strategy-card:test",
+        source_outcome_id="paper-shadow-outcome:test",
+        pending_trial_id="experiment-trial:test",
+        passed_trial_id="experiment-trial:passed",
+        dataset_id="market-candles:test",
+        split_manifest_id="split-manifest:test",
+        cost_model_id="cost-model:test",
+        baseline_id="baseline:test",
+        backtest_result_id="backtest-result:test",
+        walk_forward_validation_id="walk-forward:test",
+        locked_evaluation_id="locked-evaluation:test",
+        leaderboard_entry_id="leaderboard-entry:test",
+        paper_shadow_outcome_id=None,
+        next_task_id="record_paper_shadow_outcome",
+        tasks=[
+            RevisionRetestTask(
+                task_id="record_paper_shadow_outcome",
+                title="Record paper shadow outcome",
+                status="blocked",
+                required_artifact="paper_shadow_outcome",
+                artifact_id=None,
+                command_args=None,
+                blocked_reason="shadow_window_observation_required",
+                missing_inputs=["window_start", "window_end"],
+                rationale=(
+                    "The planner does not fabricate future shadow-window returns. "
+                    "earliest_window_start=2026-05-01T17:27:48+00:00; "
+                    "latest_stored_candle=2026-05-01T18:00:00+00:00; "
+                    "first_aligned_window_start=2026-05-01T18:00:00+00:00; "
+                    "next_required_window_end=missing; "
+                    "candidate_window_ready=false."
+                ),
+            )
+        ],
+    )
+
+    html = _render_revision_retest_task_plan(plan)
+
+    assert "Shadow 觀察 readiness" in html
+    assert "最早合法觀察開始" in html
+    assert "2026-05-01T17:27:48+00:00" in html
+    assert "第一個 K 線對齊開始" in html
+    assert "下一個需要的結束 K 線" in html
+    assert "候選視窗尚未完整" in html
+
+
+def test_dashboard_lineage_replacement_retest_panel_shows_shadow_readiness_copy():
+    from forecast_loop.dashboard import _render_lineage_replacement_strategy
+    from forecast_loop.revision_retest_plan import RevisionRetestTask, RevisionRetestTaskPlan
+
+    now = datetime(2026, 5, 1, 18, 0, tzinfo=UTC)
+    card = StrategyCard(
+        card_id="strategy-card:replacement-readiness",
+        created_at=now,
+        strategy_name="Replacement readiness",
+        strategy_family="replacement",
+        version="v1",
+        status="DRAFT",
+        symbols=["BTC-USD"],
+        hypothesis="Show replacement retest readiness.",
+        signal_description="Replacement signal.",
+        entry_rules=["entry"],
+        exit_rules=["exit"],
+        risk_rules=["risk"],
+        parameters={
+            "replacement_source_outcome_id": "paper-shadow-outcome:source",
+            "replacement_source_lineage_root_card_id": "strategy-card:root",
+            "replacement_failure_attributions": ["missing_shadow_window"],
+        },
+        data_requirements=[],
+        feature_snapshot_ids=[],
+        backtest_result_ids=[],
+        walk_forward_validation_ids=[],
+        event_edge_evaluation_ids=[],
+        parent_card_id=None,
+        author="codex",
+        decision_basis="lineage_replacement_strategy_hypothesis",
+    )
+    plan = RevisionRetestTaskPlan(
+        symbol="BTC-USD",
+        strategy_card_id=card.card_id,
+        source_outcome_id="paper-shadow-outcome:source",
+        pending_trial_id="experiment-trial:replacement",
+        passed_trial_id="experiment-trial:passed",
+        dataset_id="market-candles:replacement",
+        split_manifest_id="split-manifest:replacement",
+        cost_model_id="cost-model:replacement",
+        baseline_id="baseline:replacement",
+        backtest_result_id="backtest-result:replacement",
+        walk_forward_validation_id="walk-forward:replacement",
+        locked_evaluation_id="locked-evaluation:replacement",
+        leaderboard_entry_id="leaderboard-entry:replacement",
+        paper_shadow_outcome_id=None,
+        next_task_id="record_paper_shadow_outcome",
+        tasks=[
+            RevisionRetestTask(
+                task_id="create_revision_retest_scaffold",
+                title="Create revision retest scaffold",
+                status="completed",
+                required_artifact="experiment_trial",
+                artifact_id="experiment-trial:replacement",
+                command_args=None,
+                blocked_reason=None,
+                missing_inputs=[],
+                rationale="scaffolded",
+            ),
+            RevisionRetestTask(
+                task_id="record_paper_shadow_outcome",
+                title="Record paper shadow outcome",
+                status="blocked",
+                required_artifact="paper_shadow_outcome",
+                artifact_id=None,
+                command_args=None,
+                blocked_reason="shadow_window_observation_required",
+                missing_inputs=["window_start", "window_end"],
+                rationale=(
+                    "The planner does not fabricate future shadow-window returns. "
+                    "earliest_window_start=2026-05-01T17:27:48+00:00; "
+                    "latest_stored_candle=2026-05-01T18:00:00+00:00; "
+                    "first_aligned_window_start=2026-05-01T18:00:00+00:00; "
+                    "next_required_window_end=missing; "
+                    "candidate_window_ready=false."
+                ),
+            ),
+        ],
+    )
+
+    html = _render_lineage_replacement_strategy(card, plan, None, None)
+
+    assert "Shadow 觀察 readiness" in html
+    assert "第一個 K 線對齊開始" in html
+    assert "下一個需要的結束 K 線" in html
+    assert "候選視窗尚未完整" in html
+
+
 def test_dashboard_shows_revision_retest_task_run_log(tmp_path):
     from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
 

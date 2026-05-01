@@ -8,7 +8,12 @@ from pathlib import Path
 import socket
 from urllib.parse import urlparse
 
-from forecast_loop.automation_step_display import display_required_artifacts, display_step_artifact, display_step_name
+from forecast_loop.automation_step_display import (
+    display_required_artifacts,
+    display_shadow_readiness_from_rationale,
+    display_step_artifact,
+    display_step_name,
+)
 from forecast_loop.control import PaperControlState, current_control_state
 from forecast_loop.health import run_health_check
 from forecast_loop.models import (
@@ -1218,6 +1223,7 @@ def _lineage_replacement_strategy_panel(
     attribution_list = [str(item) for item in attributions] if isinstance(attributions, list) else [str(attributions)]
     scaffold_task = retest_plan.task_by_id("create_revision_retest_scaffold") if retest_plan else None
     next_task = retest_plan.task_by_id(retest_plan.next_task_id) if retest_plan and retest_plan.next_task_id else None
+    shadow_readiness = _shadow_readiness_panel(next_task.rationale if next_task else "")
     return f"""
   <article class="panel wide">
     <h3>Lineage 替代策略假說</h3>
@@ -1243,6 +1249,7 @@ def _lineage_replacement_strategy_panel(
     <p>Retest kind：<code>{escape(_replacement_retest_kind(retest_plan))}</code></p>
     <p>Next task：<code>{escape(next_task.task_id if next_task else "none")}</code> / {escape(next_task.status if next_task else "completed")}</p>
     <p>Latest executor run：{_artifact_id(retest_run, "automation_run_id")} / {escape(retest_run.status if retest_run else "尚未執行")}</p>
+    {shadow_readiness}
     <p class="muted">這裡只顯示替代策略是否已進入 retest scaffold；不代表策略通過、晉級或下單。</p>
     <h4>替代策略 Retest Autopilot Run</h4>
     <p>Status：<span class="{_automation_status_class(autopilot_run.loop_status) if autopilot_run else "status-muted"}">{escape(autopilot_run.loop_status if autopilot_run else "尚未記錄")}</span></p>
@@ -1804,6 +1811,7 @@ def _revision_retest_task_plan_panel(plan: RevisionRetestTaskPlan | None) -> str
         if next_task and next_task.missing_inputs
         else "無"
     )
+    shadow_readiness = _shadow_readiness_panel(next_task.rationale if next_task else "")
     return f"""
     <h4>下一個 retest 研究任務</h4>
     <p>Task：<code>{escape(next_task.task_id if next_task else "none")}</code> / {escape(next_task.status if next_task else "completed")}</p>
@@ -1812,6 +1820,20 @@ def _revision_retest_task_plan_panel(plan: RevisionRetestTaskPlan | None) -> str
     <p>Missing inputs：<code>{escape(missing_inputs)}</code></p>
     <p>Command args：<code>{escape(command)}</code></p>
     <p class="muted">只顯示，不執行。</p>
+    {shadow_readiness}
+"""
+
+
+def _shadow_readiness_panel(rationale: str) -> str:
+    rows = display_shadow_readiness_from_rationale(rationale)
+    if not rows:
+        return ""
+    items = "\n".join(f"<p>{escape(label)}：{escape(value)}</p>" for label, value in rows)
+    return f"""
+    <section class="panel compact">
+      <h4>Shadow 觀察 readiness</h4>
+      {items}
+    </section>
 """
 
 

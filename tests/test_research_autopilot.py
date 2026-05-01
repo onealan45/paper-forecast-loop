@@ -3847,6 +3847,24 @@ def test_replacement_retest_autopilot_helper_records_latest_completed_chain(tmp_
     assert saved_runs[-1] == result.research_autopilot_run
 
 
+def test_replacement_retest_autopilot_helper_refreshes_digest_after_run_is_saved(tmp_path):
+    repository, replacement_card_id = _seed_lineage_replacement_retest_through_shadow(tmp_path)
+
+    result = record_revision_retest_autopilot_run(
+        repository=repository,
+        storage_dir=tmp_path,
+        created_at=datetime(2026, 4, 30, 14, 30, tzinfo=UTC),
+        symbol="BTC-USD",
+        revision_card_id=replacement_card_id,
+    )
+    saved_digests = repository.load_strategy_research_digests()
+
+    assert saved_digests == [result.strategy_research_digest]
+    assert result.strategy_research_digest.strategy_card_id == replacement_card_id
+    assert result.strategy_research_digest.paper_shadow_outcome_id == result.revision_retest_task_plan.paper_shadow_outcome_id
+    assert result.strategy_research_digest.autopilot_run_id == result.research_autopilot_run.run_id
+
+
 def test_health_check_accepts_replacement_retest_run_under_lineage_agenda(tmp_path):
     repository, replacement_card_id = _seed_lineage_replacement_retest_through_shadow(tmp_path)
     record_revision_retest_autopilot_run(
@@ -4103,6 +4121,9 @@ def test_cli_record_replacement_retest_autopilot_run_outputs_json(tmp_path, caps
     assert payload["revision_retest_task_plan"]["next_task_id"] is None
     assert payload["research_autopilot_run"]["strategy_card_id"] == replacement_card_id
     assert payload["research_autopilot_run"]["paper_shadow_outcome_id"] == payload["revision_retest_task_plan"]["paper_shadow_outcome_id"]
+    assert payload["strategy_research_digest"]["strategy_card_id"] == replacement_card_id
+    assert payload["strategy_research_digest"]["paper_shadow_outcome_id"] == payload["revision_retest_task_plan"]["paper_shadow_outcome_id"]
+    assert payload["strategy_research_digest"]["autopilot_run_id"] == payload["research_autopilot_run"]["run_id"]
     assert "agenda_strategy_card_mismatch" not in payload["research_autopilot_run"]["blocked_reasons"]
     assert "strategy_decision_missing" not in payload["research_autopilot_run"]["blocked_reasons"]
 

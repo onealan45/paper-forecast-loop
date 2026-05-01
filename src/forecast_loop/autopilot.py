@@ -10,11 +10,13 @@ from forecast_loop.models import (
     PaperShadowOutcome,
     ResearchAgenda,
     ResearchAutopilotRun,
+    StrategyResearchDigest,
     StrategyCard,
 )
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.storage import ArtifactRepository
 from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
+from forecast_loop.strategy_research_digest import record_strategy_research_digest
 from forecast_loop.strategy_research import REVISION_REQUIRED_ACTIONS
 from forecast_loop.strategy_research import REVISION_CARD_BASIS
 
@@ -23,11 +25,13 @@ from forecast_loop.strategy_research import REVISION_CARD_BASIS
 class RevisionRetestAutopilotRunResult:
     revision_retest_task_plan: RevisionRetestTaskPlan
     research_autopilot_run: ResearchAutopilotRun
+    strategy_research_digest: StrategyResearchDigest
 
     def to_dict(self) -> dict:
         return {
             "revision_retest_task_plan": self.revision_retest_task_plan.to_dict(),
             "research_autopilot_run": self.research_autopilot_run.to_dict(),
+            "strategy_research_digest": self.strategy_research_digest.to_dict(),
         }
 
 
@@ -199,7 +203,12 @@ def record_revision_retest_autopilot_run(
         leaderboard_entry_id=plan.leaderboard_entry_id,
         paper_shadow_outcome_id=plan.paper_shadow_outcome_id,
     )
-    return RevisionRetestAutopilotRunResult(plan, run)
+    digest = record_strategy_research_digest(
+        repository=repository,
+        symbol=symbol,
+        created_at=created_at,
+    )
+    return RevisionRetestAutopilotRunResult(plan, run, digest)
 
 
 def _missing_revision_retest_autopilot_inputs(plan: RevisionRetestTaskPlan) -> list[str]:

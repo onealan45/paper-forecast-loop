@@ -283,6 +283,10 @@ factory:
   paper-shadow `QUARANTINE` source outcomes as replacement-required evidence,
   keeping retest execution aligned with PR105 lineage routing instead of
   rejecting active storage replacement cards.
+- PR108 prevents retest plans from reusing stale split-aligned backtest or
+  walk-forward artifacts that were created before the current retest trial,
+  so replacement strategy cards cannot inherit older revision evidence merely
+  because the symbol and split window match.
 - PR61 shows those cross-sample agenda strategy-card links in dashboard and
   operator console, making the root/replacement strategy targets inspectable
   from the research UX without opening raw JSON.

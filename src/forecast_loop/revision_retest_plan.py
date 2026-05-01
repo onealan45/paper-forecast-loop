@@ -159,12 +159,14 @@ def build_revision_retest_task_plan(
     backtest = _selected_backtest(
         backtest_results,
         passed_trial=passed_trial,
+        pending_trial=pending_trial,
         split=split,
         symbol=symbol,
     )
     walk_forward = _selected_walk_forward(
         walk_forward_validations,
         passed_trial=passed_trial,
+        pending_trial=pending_trial,
         backtest=backtest,
         split=split,
         symbol=symbol,
@@ -1042,6 +1044,10 @@ def _latest_valid_passed_retest_trial(
         walk_forward = walk_forwards_by_id.get(trial.walk_forward_validation_id)
         if backtest is None or walk_forward is None:
             continue
+        if not _artifact_belongs_to_retest_trial(backtest, trial):
+            continue
+        if not _artifact_belongs_to_retest_trial(walk_forward, trial):
+            continue
         if backtest.symbol != symbol or walk_forward.symbol != symbol:
             continue
         if backtest.start != split.holdout_start or backtest.end != split.holdout_end:
@@ -1106,20 +1112,22 @@ def _selected_backtest(
     results: list[BacktestResult],
     *,
     passed_trial: ExperimentTrial | None,
+    pending_trial: ExperimentTrial | None,
     split: SplitManifest | None,
     symbol: str,
 ) -> BacktestResult | None:
     if passed_trial is not None and passed_trial.backtest_result_id is not None:
         linked = next((item for item in results if item.result_id == passed_trial.backtest_result_id), None)
-        if linked is not None:
+        if linked is not None and _artifact_belongs_to_retest_trial(linked, passed_trial):
             return linked
-    if split is None:
+    if split is None or pending_trial is None:
         return None
     return _latest(
         [
             result
             for result in results
             if result.symbol == symbol
+            and _artifact_belongs_to_retest_trial(result, pending_trial)
             and result.start == split.holdout_start
             and result.end == split.holdout_end
         ]
@@ -1130,6 +1138,7 @@ def _selected_walk_forward(
     validations: list[WalkForwardValidation],
     *,
     passed_trial: ExperimentTrial | None,
+    pending_trial: ExperimentTrial | None,
     backtest: BacktestResult | None,
     split: SplitManifest | None,
     symbol: str,
@@ -1145,15 +1154,16 @@ def _selected_walk_forward(
         )
         if linked is not None and (
             backtest is None or backtest.result_id in linked.backtest_result_ids
-        ):
+        ) and _artifact_belongs_to_retest_trial(linked, passed_trial):
             return linked
-    if split is None:
+    if split is None or pending_trial is None:
         return None
     return _latest(
         [
             validation
             for validation in validations
             if validation.symbol == symbol
+            and _artifact_belongs_to_retest_trial(validation, pending_trial)
             and validation.start == split.train_start
             and validation.end == split.holdout_end
             and (
@@ -1162,6 +1172,13 @@ def _selected_walk_forward(
             )
         ]
     )
+
+
+def _artifact_belongs_to_retest_trial(
+    artifact: BacktestResult | WalkForwardValidation,
+    trial: ExperimentTrial,
+) -> bool:
+    return artifact.created_at >= (trial.started_at or trial.created_at)
 
 
 def _latest_locked_evaluation(

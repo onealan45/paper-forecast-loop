@@ -829,6 +829,9 @@ V1 MVP should include:
   paper-shadow source outcomes, so a replacement card created from current
   lineage routing can enter the retest chain instead of being rejected as not
   replacement-required
+- retest evidence freshness checks, so split-aligned backtest and walk-forward
+  artifacts are not reused for a newer revision or replacement retest when
+  they were created before that retest trial started
 - dashboard and operator console visibility for those cross-sample agenda
   strategy-card links, so the research UX names the root and replacement
   strategy targets directly

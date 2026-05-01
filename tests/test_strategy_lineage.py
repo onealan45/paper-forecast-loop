@@ -110,6 +110,7 @@ def _outcome(
     action: str,
     excess: float | None,
     attributions: list[str],
+    blocked_reasons: list[str] | None = None,
 ) -> PaperShadowOutcome:
     return PaperShadowOutcome(
         outcome_id=outcome_id,
@@ -130,7 +131,7 @@ def _outcome(
         failure_attributions=attributions,
         recommended_promotion_stage="PAPER_SHADOW_FAILED",
         recommended_strategy_action=action,
-        blocked_reasons=[],
+        blocked_reasons=blocked_reasons or [],
         notes=[],
         decision_basis="test",
     )
@@ -432,6 +433,43 @@ def test_strategy_lineage_summary_includes_multi_generation_revisions():
     assert summary.primary_failure_attribution == "drawdown_breach"
     assert summary.latest_recommended_strategy_action == "QUARANTINE_STRATEGY"
     assert summary.next_research_focus == "停止加碼此 lineage，優先研究 drawdown_breach 的修正或新策略。"
+
+
+def test_strategy_lineage_summary_treats_raw_quarantine_action_as_stop_signal():
+    now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
+    parent = _card("strategy-card:parent")
+    revision = _card("strategy-card:revision", parent_card_id=parent.card_id, status="DRAFT")
+
+    summary = build_strategy_lineage_summary(
+        root_card=parent,
+        strategy_cards=[parent, revision],
+        paper_shadow_outcomes=[
+            _outcome(
+                "parent-fail",
+                card_id=parent.card_id,
+                created_at=now,
+                action="REVISE_STRATEGY",
+                excess=-0.05,
+                attributions=["negative_excess_return"],
+            ),
+            _outcome(
+                "revision-quarantine",
+                card_id=revision.card_id,
+                created_at=now + timedelta(hours=1),
+                action="QUARANTINE",
+                excess=-0.04,
+                attributions=[],
+                blocked_reasons=["baseline_edge_not_positive"],
+            ),
+        ],
+    )
+
+    assert summary is not None
+    assert summary.performance_verdict == "改善"
+    assert summary.failure_attribution_counts == {"baseline_edge_not_positive": 1, "negative_excess_return": 1}
+    assert summary.primary_failure_attribution == "baseline_edge_not_positive"
+    assert summary.latest_recommended_strategy_action == "QUARANTINE"
+    assert summary.next_research_focus == "停止加碼此 lineage，優先研究 baseline_edge_not_positive 的修正或新策略。"
 
 
 def test_strategy_lineage_summary_preserves_branching_revision_tree_order():

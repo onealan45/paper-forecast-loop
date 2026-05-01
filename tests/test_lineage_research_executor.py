@@ -83,7 +83,15 @@ def _outcome(
     action: str,
     attributions: list[str],
     excess: float = -0.11,
+    outcome_grade: str = "FAIL",
+    recommended_promotion_stage: str = "PAPER_SHADOW_FAILED",
+    blocked_reasons: list[str] | None = None,
+    observed_return: float = -0.08,
+    benchmark_return: float = 0.02,
+    max_adverse_excursion: float = 0.18,
 ) -> PaperShadowOutcome:
+    if blocked_reasons is None:
+        blocked_reasons = ["paper_shadow_failed"]
     return PaperShadowOutcome(
         outcome_id=outcome_id,
         created_at=created_at,
@@ -94,16 +102,16 @@ def _outcome(
         symbol="BTC-USD",
         window_start=created_at - timedelta(hours=24),
         window_end=created_at,
-        observed_return=-0.08,
-        benchmark_return=0.02,
+        observed_return=observed_return,
+        benchmark_return=benchmark_return,
         excess_return_after_costs=excess,
-        max_adverse_excursion=0.18,
+        max_adverse_excursion=max_adverse_excursion,
         turnover=2.1,
-        outcome_grade="FAIL",
+        outcome_grade=outcome_grade,
         failure_attributions=attributions,
-        recommended_promotion_stage="PAPER_SHADOW_FAILED",
+        recommended_promotion_stage=recommended_promotion_stage,
         recommended_strategy_action=action,
-        blocked_reasons=["paper_shadow_failed"],
+        blocked_reasons=blocked_reasons,
         notes=[],
         decision_basis="test",
     )
@@ -314,9 +322,15 @@ def test_execute_lineage_research_next_task_targets_latest_revision_for_cross_sa
             "paper-shadow-outcome:revision-improved",
             card_id=revision.card_id,
             created_at=now + timedelta(hours=1),
-            action="QUARANTINE",
+            action="CONTINUE_SHADOW",
             attributions=[],
-            excess=-0.01,
+            excess=0.01,
+            outcome_grade="PASS",
+            recommended_promotion_stage="PAPER_SHADOW_CONTINUES",
+            blocked_reasons=[],
+            observed_return=0.03,
+            benchmark_return=0.02,
+            max_adverse_excursion=0.02,
         )
     )
     create_lineage_research_agenda(repository=repository, created_at=now + timedelta(hours=2), symbol="BTC-USD")
@@ -365,9 +379,15 @@ def test_execute_lineage_research_next_task_ignores_stale_root_only_cross_sample
             "paper-shadow-outcome:revision-improved",
             card_id=revision.card_id,
             created_at=now + timedelta(hours=1),
-            action="QUARANTINE",
+            action="CONTINUE_SHADOW",
             attributions=[],
-            excess=-0.01,
+            excess=0.01,
+            outcome_grade="PASS",
+            recommended_promotion_stage="PAPER_SHADOW_CONTINUES",
+            blocked_reasons=[],
+            observed_return=0.03,
+            benchmark_return=0.02,
+            max_adverse_excursion=0.02,
         )
     )
     repository.save_research_agenda(
@@ -439,9 +459,15 @@ def test_execute_lineage_research_next_task_ignores_cross_sample_agenda_with_unr
             "paper-shadow-outcome:revision-improved",
             card_id=revision.card_id,
             created_at=now + timedelta(hours=1),
-            action="QUARANTINE",
+            action="CONTINUE_SHADOW",
             attributions=[],
-            excess=-0.01,
+            excess=0.01,
+            outcome_grade="PASS",
+            recommended_promotion_stage="PAPER_SHADOW_CONTINUES",
+            blocked_reasons=[],
+            observed_return=0.03,
+            benchmark_return=0.02,
+            max_adverse_excursion=0.02,
         )
     )
     repository.save_research_agenda(

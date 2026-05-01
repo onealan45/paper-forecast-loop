@@ -7,6 +7,8 @@ from forecast_loop.models import PaperShadowOutcome, StrategyCard
 
 
 REPLACEMENT_DECISION_BASIS = "lineage_replacement_strategy_hypothesis"
+QUARANTINE_ACTIONS = {"QUARANTINE", "QUARANTINE_STRATEGY"}
+REVISION_ACTIONS = {"REVISE", "REVISE_STRATEGY"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,7 +109,7 @@ def build_strategy_lineage_summary(
             Counter(
                 attribution
                 for outcome in lineage_outcomes
-                for attribution in outcome.failure_attributions
+                for attribution in _outcome_failure_references(outcome)
             ).items()
         )
     )
@@ -280,12 +282,16 @@ def _lineage_outcome_nodes(paper_shadow_outcomes: list[PaperShadowOutcome]) -> l
                 delta_vs_previous_excess=delta,
                 change_label=_change_label(delta, baseline=current_excess is not None and previous_excess is None),
                 recommended_strategy_action=outcome.recommended_strategy_action,
-                failure_attributions=list(outcome.failure_attributions),
+                failure_attributions=_outcome_failure_references(outcome),
             )
         )
         if current_excess is not None:
             previous_excess = current_excess
     return nodes
+
+
+def _outcome_failure_references(outcome: PaperShadowOutcome) -> list[str]:
+    return list(outcome.failure_attributions or outcome.blocked_reasons)
 
 
 def _lineage_performance_verdict(
@@ -349,9 +355,9 @@ def _next_research_focus(
     failure = primary_failure_attribution or "主要失敗"
     if performance_verdict == "證據不足":
         return "先補齊 paper-shadow outcome 證據，再判斷修正方向。"
-    if latest_recommended_strategy_action == "QUARANTINE_STRATEGY":
+    if latest_recommended_strategy_action in QUARANTINE_ACTIONS:
         return f"停止加碼此 lineage，優先研究 {failure} 的修正或新策略。"
-    if latest_recommended_strategy_action == "REVISE_STRATEGY" or performance_verdict in {"惡化", "偏弱"}:
+    if latest_recommended_strategy_action in REVISION_ACTIONS or performance_verdict in {"惡化", "偏弱"}:
         return f"優先修正 {failure}，再重跑 locked retest。"
     if performance_verdict in {"改善", "偏強"}:
         return "保留此 lineage，下一步驗證改善是否能跨樣本持續。"

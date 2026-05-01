@@ -127,6 +127,7 @@ def _outcome(
     excess: float | None,
     attributions: list[str],
     symbol: str = "BTC-USD",
+    blocked_reasons: list[str] | None = None,
 ) -> PaperShadowOutcome:
     return PaperShadowOutcome(
         outcome_id=outcome_id,
@@ -147,7 +148,7 @@ def _outcome(
         failure_attributions=attributions,
         recommended_promotion_stage="PAPER_SHADOW_FAILED",
         recommended_strategy_action=action,
-        blocked_reasons=[],
+        blocked_reasons=blocked_reasons or [],
         notes=[],
         decision_basis="test",
     )
@@ -243,6 +244,53 @@ def test_lineage_research_task_plan_quarantine_requests_new_strategy_hypothesis(
     assert next_task.required_artifact == "strategy_card"
     assert "新策略" in next_task.worker_prompt
     assert "drawdown_breach" in next_task.worker_prompt
+
+
+def test_lineage_research_task_plan_routes_raw_quarantine_to_replacement_even_if_improved(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    parent = _card("strategy-card:parent")
+    revision = _revision_card(
+        "strategy-card:revision",
+        parent_card_id=parent.card_id,
+        source_outcome_id="paper-shadow-outcome:parent-fail",
+        failure_attributions=["negative_excess_return"],
+    )
+    repository.save_strategy_card(parent)
+    repository.save_strategy_card(revision)
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:parent-fail",
+            card_id=parent.card_id,
+            created_at=now,
+            action="REVISE_STRATEGY",
+            excess=-0.05,
+            attributions=["negative_excess_return"],
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:revision-quarantine",
+            card_id=revision.card_id,
+            created_at=now + timedelta(hours=1),
+            action="QUARANTINE",
+            excess=-0.04,
+            attributions=[],
+            blocked_reasons=["baseline_edge_not_positive"],
+        )
+    )
+    create_lineage_research_agenda(repository=repository, created_at=now, symbol="BTC-USD")
+
+    plan = build_lineage_research_task_plan(repository=repository, storage_dir=tmp_path, symbol="BTC-USD")
+
+    assert plan.performance_verdict == "改善"
+    assert plan.latest_recommended_strategy_action == "QUARANTINE"
+    assert plan.next_task_id == "draft_replacement_strategy_hypothesis"
+    next_task = plan.task_by_id("draft_replacement_strategy_hypothesis")
+    assert next_task.status == "ready"
+    assert next_task.required_artifact == "strategy_card"
+    assert "baseline_edge_not_positive" in next_task.worker_prompt
+    assert "cross-sample" not in next_task.worker_prompt
 
 
 def test_lineage_research_task_plan_filters_agendas_by_requested_symbol(tmp_path):

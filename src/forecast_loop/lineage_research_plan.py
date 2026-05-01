@@ -7,6 +7,8 @@ from forecast_loop.models import PaperShadowOutcome, ResearchAgenda, ResearchAut
 from forecast_loop.storage import ArtifactRepository
 from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
 from forecast_loop.strategy_lineage import (
+    QUARANTINE_ACTIONS,
+    REVISION_ACTIONS,
     StrategyLineageReplacementNode,
     StrategyLineageSummary,
     build_strategy_lineage_summary,
@@ -197,9 +199,9 @@ def _build_tasks(
 ) -> list[LineageResearchTask]:
     tasks = [_agenda_task(agenda, summary)]
     latest_outcome = _latest_outcome(summary.latest_outcome_id, paper_shadow_outcomes)
-    if summary.latest_recommended_strategy_action == "QUARANTINE_STRATEGY":
+    if summary.latest_recommended_strategy_action in QUARANTINE_ACTIONS:
         tasks.append(_replacement_strategy_task(strategy_cards, summary, latest_outcome))
-    elif summary.latest_recommended_strategy_action == "REVISE_STRATEGY" or summary.performance_verdict in {"惡化", "偏弱"}:
+    elif summary.latest_recommended_strategy_action in REVISION_ACTIONS or summary.performance_verdict in {"惡化", "偏弱"}:
         tasks.append(_revision_task(storage, symbol, strategy_cards, summary, latest_outcome))
     elif summary.performance_verdict in {"改善", "偏強"}:
         tasks.extend(_cross_sample_tasks(summary, research_agendas, research_autopilot_runs, paper_shadow_outcomes))

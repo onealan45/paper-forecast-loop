@@ -756,6 +756,7 @@ def _run_once(args) -> int:
         result=result,
     )
     decision = None
+    strategy_research_digest = None
     health_result = None
     notifications = []
     if args.also_decide:
@@ -800,6 +801,27 @@ def _run_once(args) -> int:
                 ",".join(notification.notification_id for notification in notifications) if notifications else None,
             )
         )
+        if _has_strategy_research_artifacts(repository=repository, symbol=args.symbol):
+            strategy_research_digest = record_strategy_research_digest(
+                repository=repository,
+                symbol=args.symbol,
+                created_at=now,
+            )
+            steps.append(
+                automation_step(
+                    "strategy_research_digest",
+                    "completed",
+                    strategy_research_digest.digest_id,
+                )
+            )
+        else:
+            steps.append(
+                automation_step(
+                    "strategy_research_digest",
+                    "skipped",
+                    "no_strategy_research_artifacts",
+                )
+            )
     automation_status = "repair_required" if health_result and health_result.repair_required else "completed"
     automation_run = record_automation_run(
         repository=repository,
@@ -823,12 +845,37 @@ def _run_once(args) -> int:
                 "proposal_created": result.proposal is not None,
                 "decision_id": decision.decision_id if decision else None,
                 "decision_action": decision.action if decision else None,
+                "strategy_research_digest_id": (
+                    strategy_research_digest.digest_id if strategy_research_digest else None
+                ),
                 "automation_run_id": automation_run.automation_run_id,
                 "notification_count": len(notifications),
             }
         )
     )
     return 0 if result.new_forecast is not None else 1
+
+
+def _has_strategy_research_artifacts(repository: JsonFileRepository, symbol: str) -> bool:
+    normalized_symbol = symbol.upper()
+    return (
+        any(
+            normalized_symbol in card.symbols
+            for card in repository.load_strategy_cards()
+        )
+        or any(
+            outcome.symbol == normalized_symbol
+            for outcome in repository.load_paper_shadow_outcomes()
+        )
+        or any(
+            agenda.symbol == normalized_symbol
+            for agenda in repository.load_research_agendas()
+        )
+        or any(
+            run.symbol == normalized_symbol
+            for run in repository.load_research_autopilot_runs()
+        )
+    )
 
 
 def _cycle_steps(result) -> list[dict[str, str | None]]:

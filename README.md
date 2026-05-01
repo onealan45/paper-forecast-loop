@@ -355,6 +355,10 @@ factory:
   operator console, so the UX shows the compact strategy summary, repeated
   failure concentration, evidence ids, and next research rationale before
   lower-level artifact tables.
+- PR97 refreshes the strategy research digest during `run-once --also-decide`
+  when strategy research artifacts already exist, so automation cycles keep the
+  dashboard/operator-console strategy summary current without creating empty
+  `no_strategy_card` digest noise in fresh storage.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -1392,6 +1396,12 @@ after-cost excess return, lineage failure concentration, linked evidence ids,
 and next research rationale. It is the machine-readable handoff for strategy
 learning loops; it does not execute the strategy, mutate cards, or place
 orders.
+
+`run-once --also-decide` also refreshes this digest when the storage already
+contains strategy research artifacts for the requested symbol. Fresh storage
+without strategy cards, paper-shadow outcomes, research agendas, or autopilot
+runs returns `"strategy_research_digest_id": null` and does not write a
+placeholder digest.
 
 Persist the latest strategy lineage focus as a research agenda:
 

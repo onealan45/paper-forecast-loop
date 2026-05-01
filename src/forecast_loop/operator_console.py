@@ -52,6 +52,7 @@ from forecast_loop.strategy_research_display import (
     format_outcome_grade,
     format_promotion_stage,
     format_research_action,
+    format_strategy_card_status,
 )
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.storage import JsonFileRepository
@@ -993,7 +994,7 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
     <div class="badge-row">
       <span class="status">Family {escape(card.strategy_family if card else "n/a")}</span>
       <span class="status">Version {escape(card.version if card else "n/a")}</span>
-      <span class="status">Status {escape(card.status if card else "n/a")}</span>
+      <span class="status">Status {escape(_display_strategy_card_status(card.status if card else None))}</span>
     </div>
     <p>ID：{_artifact_id(card, "card_id")}</p>
     <p>Signal：{escape(card.signal_description if card else "n/a")}</p>
@@ -1213,7 +1214,7 @@ def _lineage_replacement_strategy_panel(
   <article class="panel wide">
     <h3>Lineage 替代策略假說</h3>
     <p class="metric">{escape(card.strategy_name)}</p>
-    <p>ID：{_artifact_id(card, "card_id")} / {escape(card.status)}</p>
+    <p>ID：{_artifact_id(card, "card_id")} / {escape(_display_strategy_card_status(card.status))}</p>
     <p>Basis：{escape(card.decision_basis)}</p>
     <p>來源 lineage：<code>{escape(root_card_id)}</code></p>
     <p>來源 outcome：<code>{escape(source_outcome_id)}</code></p>
@@ -1299,7 +1300,7 @@ def _strategy_lineage_tree(summary: StrategyLineageSummary | None) -> str:
     return _plain_list(
         [
             f"Depth {node.depth} / Parent {node.parent_card_id} / {node.card_id}"
-            f" / {node.status} / Name {node.strategy_name}"
+            f" / {_display_strategy_card_status(node.status)} / Name {node.strategy_name}"
             f" / Hypothesis {node.hypothesis}"
             f" / Source {node.source_outcome_id or 'none'}"
             f" / Fixes {_display_failure_attribution_codes(node.failure_attributions)}"
@@ -1318,7 +1319,7 @@ def _strategy_lineage_replacements(summary: StrategyLineageSummary | None) -> st
             f" / Latest {node.latest_outcome_id or 'none'}"
             f" / Action {_display_research_action(node.latest_recommended_strategy_action)}"
             f" / Excess {_format_number(node.latest_excess_return_after_costs)}"
-            f" / Status {node.status}"
+            f" / Status {_display_strategy_card_status(node.status)}"
             f" / Hypothesis {node.hypothesis}"
             f" / Failures {_display_failure_attribution_codes(node.failure_attributions)}"
             for node in summary.replacement_nodes
@@ -1641,6 +1642,12 @@ def _display_promotion_stage(stage: str | None) -> str:
     return format_promotion_stage(stage)
 
 
+def _display_strategy_card_status(status: str | None) -> str:
+    if not status:
+        return "n/a"
+    return format_strategy_card_status(status)
+
+
 def _display_lineage_next_research_focus(summary: StrategyLineageSummary) -> str:
     focus = summary.next_research_focus
     failure = summary.primary_failure_attribution
@@ -1744,7 +1751,7 @@ def _revision_candidate_panel(snapshot: OperatorConsoleSnapshot, *, wide: bool) 
     <p class="metric">{escape(revision.strategy_name)}</p>
     <p>{escape(revision.hypothesis)}</p>
     <div class="badge-row">
-      <span class="status">Status {escape(revision.status)}</span>
+      <span class="status">Status {escape(_display_strategy_card_status(revision.status))}</span>
       <span class="status">Version {escape(revision.version)}</span>
       <span class="status">Source {_artifact_id(source, "outcome_id")}</span>
     </div>

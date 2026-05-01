@@ -1,7 +1,11 @@
 from datetime import UTC, datetime, timedelta
 
 from forecast_loop.models import PaperShadowOutcome, ResearchAutopilotRun, StrategyCard
-from forecast_loop.strategy_research_display import build_strategy_research_conclusion, format_promotion_stage
+from forecast_loop.strategy_research_display import (
+    build_strategy_research_conclusion,
+    format_promotion_stage,
+    format_strategy_card_status,
+)
 
 
 def _strategy_card(now: datetime) -> StrategyCard:
@@ -118,3 +122,10 @@ def test_format_promotion_stage_keeps_raw_code_with_readable_label():
     assert format_promotion_stage("CANDIDATE") == "候選策略 (CANDIDATE)"
     assert format_promotion_stage("BLOCKED") == "已阻擋 (BLOCKED)"
     assert format_promotion_stage("UNKNOWN_STAGE") == "UNKNOWN_STAGE"
+
+
+def test_format_strategy_card_status_keeps_raw_code_with_readable_label():
+    assert format_strategy_card_status("ACTIVE") == "啟用 (ACTIVE)"
+    assert format_strategy_card_status("DRAFT") == "草稿 (DRAFT)"
+    assert format_strategy_card_status("QUARANTINED") == "隔離中 (QUARANTINED)"
+    assert format_strategy_card_status("UNKNOWN_STATUS") == "UNKNOWN_STATUS"

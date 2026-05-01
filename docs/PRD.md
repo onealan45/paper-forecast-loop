@@ -804,6 +804,12 @@ V1 MVP should include:
 - structured replacement-card links in `lineage_cross_sample_validation_agenda`
   artifacts, so research tooling can trace the exact improving replacement
   hypothesis as well as the source lineage root without parsing prompts
+- structured revision-card links in `lineage_cross_sample_validation_agenda`
+  artifacts, so improving DRAFT revisions are validated as the fresh-sample
+  target alongside the root lineage instead of silently falling back to the
+  stale root-only strategy target; existing stale root-only agendas for the
+  same latest outcome are ignored until a corrected current-target agenda is
+  created
 - dashboard and operator console visibility for those cross-sample agenda
   strategy-card links, so the research UX names the root and replacement
   strategy targets directly

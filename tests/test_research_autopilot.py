@@ -3304,6 +3304,43 @@ def test_revision_retest_shadow_task_exposes_post_entry_readiness_context(tmp_pa
     assert "latest_stored_candle=2026-04-29T12:30:00+00:00" in task.rationale
 
 
+def test_revision_retest_shadow_task_exposes_aligned_window_readiness(tmp_path):
+    repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+    repository.save_market_candle(_post_leaderboard_shadow_candle(0, 120))
+
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+    task = plan.task_by_id("record_paper_shadow_outcome")
+
+    assert task.status == "blocked"
+    assert "first_aligned_window_start=2026-04-29T12:30:00+00:00" in task.rationale
+    assert "next_required_window_end=missing" in task.rationale
+    assert "candidate_window_ready=false" in task.rationale
+
+
+def test_revision_retest_shadow_task_exposes_ready_aligned_window_candidate(tmp_path):
+    repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+    _seed_post_leaderboard_shadow_candles(repository)
+
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+    task = plan.task_by_id("record_paper_shadow_outcome")
+
+    assert task.status == "blocked"
+    assert task.command_args is None
+    assert "first_aligned_window_start=2026-04-29T12:30:00+00:00" in task.rationale
+    assert "next_required_window_end=2026-04-30T12:30:00+00:00" in task.rationale
+    assert "candidate_window_ready=true" in task.rationale
+
+
 def test_execute_revision_retest_shadow_outcome_rejects_unfinished_window(tmp_path):
     repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
 

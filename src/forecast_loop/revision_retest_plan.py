@@ -124,7 +124,8 @@ def build_revision_retest_task_plan(
     experiment_trials = repository.load_experiment_trials()
     backtest_results = repository.load_backtest_results()
     walk_forward_validations = repository.load_walk_forward_validations()
-    latest_stored_candle = _latest_stored_candle(repository.load_market_candles(), symbol)
+    market_candles = repository.load_market_candles()
+    latest_stored_candle = _latest_stored_candle(market_candles, symbol)
     pending_trial = _latest_retest_trial(
         experiment_trials,
         card,
@@ -217,6 +218,7 @@ def build_revision_retest_task_plan(
         leaderboard_entry=leaderboard_entry,
         shadow_outcome=shadow_outcome,
         latest_stored_candle=latest_stored_candle,
+        market_candles=market_candles,
     )
     next_task = next((task for task in tasks if task.status != "completed"), None)
     return RevisionRetestTaskPlan(
@@ -257,6 +259,7 @@ def _build_tasks(
     leaderboard_entry: LeaderboardEntry | None,
     shadow_outcome: PaperShadowOutcome | None,
     latest_stored_candle: MarketCandleRecord | None,
+    market_candles: list[MarketCandleRecord],
 ) -> list[RevisionRetestTask]:
     tasks = [
         _scaffold_task(
@@ -306,6 +309,7 @@ def _build_tasks(
             leaderboard_entry=leaderboard_entry,
             shadow_outcome=shadow_outcome,
             latest_stored_candle=latest_stored_candle,
+            market_candles=market_candles,
         ),
     ]
     return tasks
@@ -828,6 +832,7 @@ def _paper_shadow_task(
     leaderboard_entry: LeaderboardEntry | None,
     shadow_outcome: PaperShadowOutcome | None,
     latest_stored_candle: MarketCandleRecord | None,
+    market_candles: list[MarketCandleRecord],
 ) -> RevisionRetestTask:
     if shadow_outcome is not None:
         return _task(
@@ -863,6 +868,13 @@ def _paper_shadow_task(
         readiness_parts.append(f"latest_stored_candle={latest_stored_candle.timestamp.isoformat()}")
     else:
         readiness_parts.append("latest_stored_candle=missing")
+    readiness_parts.extend(
+        _aligned_shadow_window_readiness_parts(
+            market_candles,
+            leaderboard_entry.symbol,
+            leaderboard_entry,
+        )
+    )
     return _task(
         "record_paper_shadow_outcome",
         "Record paper shadow outcome",
@@ -908,6 +920,37 @@ def _task(
 def _latest_stored_candle(candles: list[MarketCandleRecord], symbol: str) -> MarketCandleRecord | None:
     symbol_candles = [candle for candle in candles if candle.symbol == symbol]
     return max(symbol_candles, key=lambda candle: candle.timestamp) if symbol_candles else None
+
+
+def _aligned_shadow_window_readiness_parts(
+    candles: list[MarketCandleRecord],
+    symbol: str,
+    leaderboard_entry: LeaderboardEntry,
+) -> list[str]:
+    post_entry_timestamps = sorted(
+        candle.timestamp
+        for candle in candles
+        if candle.symbol == symbol and candle.timestamp >= leaderboard_entry.created_at
+    )
+    if not post_entry_timestamps:
+        return [
+            "first_aligned_window_start=missing",
+            "next_required_window_end=missing",
+            "candidate_window_ready=false",
+        ]
+    first_aligned_start = post_entry_timestamps[0]
+    if len(post_entry_timestamps) == 1:
+        return [
+            f"first_aligned_window_start={first_aligned_start.isoformat()}",
+            "next_required_window_end=missing",
+            "candidate_window_ready=false",
+        ]
+    next_window_end = post_entry_timestamps[1]
+    return [
+        f"first_aligned_window_start={first_aligned_start.isoformat()}",
+        f"next_required_window_end={next_window_end.isoformat()}",
+        "candidate_window_ready=true",
+    ]
 
 
 def _revision_card(

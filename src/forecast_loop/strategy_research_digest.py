@@ -196,6 +196,11 @@ def _next_step_rationale(
     lineage_focus: str | None,
     primary_failure: str | None,
 ) -> str:
+    if next_research_action == "WAIT_FOR_PAPER_SHADOW_OUTCOME":
+        return (
+            "已有 leaderboard entry，但尚未有 post-entry paper-shadow observation；"
+            "等待下一個完整觀察視窗，不捏造未來報酬。"
+        )
     if lineage_focus:
         if primary_failure:
             readable_failure = format_failure_attributions([primary_failure])

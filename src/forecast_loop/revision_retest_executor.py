@@ -10,7 +10,12 @@ from forecast_loop.experiment_registry import record_experiment_trial
 from forecast_loop.locked_evaluation import evaluate_leaderboard_gate, lock_evaluation_protocol
 from forecast_loop.models import AutomationRun, BacktestResult, MarketCandleRecord, WalkForwardValidation
 from forecast_loop.paper_shadow import record_paper_shadow_outcome
-from forecast_loop.revision_retest import RETEST_PROTOCOL_VERSION, create_revision_retest_scaffold
+from forecast_loop.revision_retest import (
+    RETEST_EVIDENCE_CONTEXT_PARAMETER,
+    RETEST_PROTOCOL_VERSION,
+    create_revision_retest_scaffold,
+    revision_retest_evidence_context,
+)
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.storage import ArtifactRepository
 from forecast_loop.walk_forward import run_walk_forward_validation
@@ -360,6 +365,10 @@ def _execute_record_passed_retest_trial(
             "revision_retest_source_card_id": plan.strategy_card_id,
             "revision_source_outcome_id": plan.source_outcome_id,
             "revision_parent_card_id": revision_card.parent_card_id,
+            RETEST_EVIDENCE_CONTEXT_PARAMETER: revision_retest_evidence_context(
+                backtest_result_id=plan.backtest_result_id,
+                walk_forward_validation_id=plan.walk_forward_validation_id,
+            ),
         },
         started_at=pending_trial.started_at,
         completed_at=created_at,

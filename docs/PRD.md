@@ -835,6 +835,9 @@ V1 MVP should include:
 - retest-specific evidence ID context for executor-created backtest and
   walk-forward artifacts, so fresh retest evidence can be generated even when a
   generic artifact already exists for the same symbol and split window
+- retest-specific PASSED trial evidence context, so recording a fresh retest
+  trial cannot collide with a stale PASSED trial that reused the same strategy
+  card, trial index, status, seed, and source-outcome parameters
 - dashboard and operator console visibility for those cross-sample agenda
   strategy-card links, so the research UX names the root and replacement
   strategy targets directly

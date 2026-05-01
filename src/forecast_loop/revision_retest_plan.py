@@ -16,7 +16,12 @@ from forecast_loop.models import (
     StrategyCard,
     WalkForwardValidation,
 )
-from forecast_loop.revision_retest import REPLACEMENT_REQUIRED_ACTIONS, RETEST_PROTOCOL_VERSION
+from forecast_loop.revision_retest import (
+    REPLACEMENT_REQUIRED_ACTIONS,
+    RETEST_EVIDENCE_CONTEXT_PARAMETER,
+    RETEST_PROTOCOL_VERSION,
+    revision_retest_evidence_context,
+)
 from forecast_loop.storage import ArtifactRepository
 from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
 from forecast_loop.strategy_research import REVISION_CARD_BASIS
@@ -701,6 +706,11 @@ def _passed_trial_task(
         f"revision_source_outcome_id={source_outcome.outcome_id}",
         "--parameter",
         f"revision_parent_card_id={card.parent_card_id}",
+        "--parameter",
+        (
+            f"{RETEST_EVIDENCE_CONTEXT_PARAMETER}="
+            f"{revision_retest_evidence_context(backtest_result_id=backtest.result_id, walk_forward_validation_id=walk_forward.validation_id)}"
+        ),
     ]
     if pending_trial.seed is not None:
         command.extend(["--seed", str(pending_trial.seed)])

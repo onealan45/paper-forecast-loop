@@ -12,6 +12,11 @@ from forecast_loop.strategy_research import REVISION_REQUIRED_ACTIONS
 
 RETEST_PROTOCOL_VERSION = "pr14-v1"
 REPLACEMENT_REQUIRED_ACTIONS = {"QUARANTINE", "QUARANTINE_STRATEGY"}
+RETEST_EVIDENCE_CONTEXT_PARAMETER = "revision_retest_evidence_context"
+
+
+def revision_retest_evidence_context(*, backtest_result_id: str, walk_forward_validation_id: str) -> str:
+    return f"backtest_{backtest_result_id}__walk_forward_{walk_forward_validation_id}"
 
 
 @dataclass(frozen=True, slots=True)

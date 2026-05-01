@@ -35,6 +35,7 @@ def run_backtest(
     fee_bps: float = 5.0,
     slippage_bps: float = 10.0,
     moving_average_window: int = 3,
+    id_context: str | None = None,
 ) -> BacktestEngineResult:
     _validate_inputs(
         storage_dir=storage_dir,
@@ -69,6 +70,7 @@ def run_backtest(
             slippage_bps=slippage_bps,
             moving_average_window=moving_average_window,
             candle_ids=[candle.candle_id for candle in candles],
+            id_context=id_context,
         ),
         created_at=created_at,
         symbol=symbol,
@@ -83,6 +85,7 @@ def run_backtest(
         decision_basis=(
             "paper-only moving-average trend backtest using stored candles; "
             "target is 100% long when the prior candle close is above its prior moving average, otherwise cash"
+            + (f"; id_context={id_context}" if id_context else "")
         ),
     )
     result = _simulate(

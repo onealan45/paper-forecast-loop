@@ -832,6 +832,9 @@ V1 MVP should include:
 - retest evidence freshness checks, so split-aligned backtest and walk-forward
   artifacts are not reused for a newer revision or replacement retest when
   they were created before that retest trial started
+- retest-specific evidence ID context for executor-created backtest and
+  walk-forward artifacts, so fresh retest evidence can be generated even when a
+  generic artifact already exists for the same symbol and split window
 - dashboard and operator console visibility for those cross-sample agenda
   strategy-card links, so the research UX names the root and replacement
   strategy targets directly

@@ -5,6 +5,7 @@ import pytest
 
 from forecast_loop.autopilot import create_research_agenda, record_research_autopilot_run
 from forecast_loop.autopilot import record_revision_retest_autopilot_run
+from forecast_loop.backtest import run_backtest
 from forecast_loop.cli import main
 from forecast_loop.experiment_registry import record_experiment_trial
 from forecast_loop.health import run_health_check
@@ -33,6 +34,7 @@ from forecast_loop.revision_retest_plan import build_revision_retest_task_plan
 from forecast_loop.revision_retest_run_log import record_revision_retest_task_run
 from forecast_loop.strategy_evolution import propose_strategy_revision
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
+from forecast_loop.walk_forward import run_walk_forward_validation
 
 
 def _now() -> datetime:
@@ -2005,6 +2007,142 @@ def test_execute_revision_retest_baseline_next_task_writes_baseline(tmp_path):
     assert len(repository.load_baseline_evaluations()) == 1
     assert result.created_artifact_ids == [repository.load_baseline_evaluations()[0].baseline_id]
     assert repository.load_automation_runs() == [result.automation_run]
+
+
+def test_execute_revision_retest_backtest_writes_retest_specific_result_when_generic_result_exists(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    _seed_retest_full_window_candles(repository)
+    generic = run_backtest(
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        start=datetime(2026, 1, 8, tzinfo=UTC),
+        end=datetime(2026, 1, 10, tzinfo=UTC),
+        created_at=_now(),
+    ).result
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now() + timedelta(hours=1),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 1, 4, tzinfo=UTC),
+        validation_start=datetime(2026, 1, 5, tzinfo=UTC),
+        validation_end=datetime(2026, 1, 7, tzinfo=UTC),
+        holdout_start=datetime(2026, 1, 8, tzinfo=UTC),
+        holdout_end=datetime(2026, 1, 10, tzinfo=UTC),
+    )
+    repository.save_baseline_evaluation(
+        BaselineEvaluation(
+            baseline_id="baseline:executor-context-backtest",
+            created_at=_now(),
+            symbol="BTC-USD",
+            sample_size=10,
+            directional_accuracy=0.7,
+            baseline_accuracy=0.5,
+            model_edge=0.2,
+            recent_score=0.8,
+            evidence_grade="B",
+            forecast_ids=[],
+            score_ids=[],
+            decision_basis="test-baseline",
+        )
+    )
+
+    result = execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=_now() + timedelta(hours=2),
+        revision_card_id=revision.card_id,
+    )
+
+    assert result.executed_task_id == "run_backtest"
+    assert result.created_artifact_ids != [generic.result_id]
+    assert result.after_plan.backtest_result_id == result.created_artifact_ids[0]
+    assert result.after_plan.next_task_id == "run_walk_forward"
+
+
+def test_execute_revision_retest_walk_forward_writes_retest_specific_validation_when_generic_validation_exists(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    _seed_retest_full_window_candles(repository)
+    generic = run_walk_forward_validation(
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        start=datetime(2026, 1, 1, tzinfo=UTC),
+        end=datetime(2026, 1, 10, tzinfo=UTC),
+        created_at=_now(),
+    ).validation
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now() + timedelta(hours=1),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 1, 4, tzinfo=UTC),
+        validation_start=datetime(2026, 1, 5, tzinfo=UTC),
+        validation_end=datetime(2026, 1, 7, tzinfo=UTC),
+        holdout_start=datetime(2026, 1, 8, tzinfo=UTC),
+        holdout_end=datetime(2026, 1, 10, tzinfo=UTC),
+    )
+    repository.save_baseline_evaluation(
+        BaselineEvaluation(
+            baseline_id="baseline:executor-context-walk-forward",
+            created_at=_now(),
+            symbol="BTC-USD",
+            sample_size=10,
+            directional_accuracy=0.7,
+            baseline_accuracy=0.5,
+            model_edge=0.2,
+            recent_score=0.8,
+            evidence_grade="B",
+            forecast_ids=[],
+            score_ids=[],
+            decision_basis="test-baseline",
+        )
+    )
+    backtest_result = execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=_now() + timedelta(hours=2),
+        revision_card_id=revision.card_id,
+    )
+
+    result = execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=_now() + timedelta(hours=3),
+        revision_card_id=revision.card_id,
+    )
+
+    assert backtest_result.executed_task_id == "run_backtest"
+    assert result.executed_task_id == "run_walk_forward"
+    assert result.created_artifact_ids != [generic.validation_id]
+    assert result.after_plan.walk_forward_validation_id == result.created_artifact_ids[0]
+    assert result.after_plan.next_task_id == "record_passed_retest_trial"
 
 
 def test_cli_execute_revision_retest_baseline_next_task_outputs_json(tmp_path, capsys):

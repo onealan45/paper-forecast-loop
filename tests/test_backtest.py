@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 import json
+from hashlib import sha1
 
 import pytest
 
@@ -100,6 +101,34 @@ def test_backtest_window_is_part_of_artifact_identity(tmp_path, capsys):
     assert second_payload["run"]["moving_average_window"] == 4
     assert first_payload["run"]["backtest_id"] != second_payload["run"]["backtest_id"]
     assert len(repository.load_backtest_runs()) == 2
+
+
+def test_backtest_run_id_preserves_generic_identity_without_context():
+    payload = {
+        "symbol": "BTC-USD",
+        "start": "2026-04-01T00:00:00+00:00",
+        "end": "2026-04-06T00:00:00+00:00",
+        "strategy_name": "moving_average_trend",
+        "initial_cash": 10000.0,
+        "fee_bps": 5.0,
+        "slippage_bps": 10.0,
+        "moving_average_window": 2,
+        "candle_ids": ["market-candle:bt:0", "market-candle:bt:1"],
+    }
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    digest = sha1(serialized).hexdigest()[:16]
+
+    assert BacktestRun.build_id(
+        symbol="BTC-USD",
+        start=datetime(2026, 4, 1, tzinfo=UTC),
+        end=datetime(2026, 4, 6, tzinfo=UTC),
+        strategy_name="moving_average_trend",
+        initial_cash=10000.0,
+        fee_bps=5.0,
+        slippage_bps=10.0,
+        moving_average_window=2,
+        candle_ids=["market-candle:bt:1", "market-candle:bt:0"],
+    ) == f"backtest-run:{digest}"
 
 
 def test_cli_backtest_missing_storage_is_operator_friendly(tmp_path, capsys):

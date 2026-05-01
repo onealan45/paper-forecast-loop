@@ -394,20 +394,24 @@ class BacktestRun:
         slippage_bps: float,
         moving_average_window: int,
         candle_ids: list[str],
+        id_context: str | None = None,
     ) -> str:
+        payload = {
+            "symbol": symbol,
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "strategy_name": strategy_name,
+            "initial_cash": round(initial_cash, 8),
+            "fee_bps": round(fee_bps, 8),
+            "slippage_bps": round(slippage_bps, 8),
+            "moving_average_window": moving_average_window,
+            "candle_ids": sorted(candle_ids),
+        }
+        if id_context is not None:
+            payload["id_context"] = id_context
         return _stable_artifact_id(
             "backtest-run",
-            {
-                "symbol": symbol,
-                "start": start.isoformat(),
-                "end": end.isoformat(),
-                "strategy_name": strategy_name,
-                "initial_cash": round(initial_cash, 8),
-                "fee_bps": round(fee_bps, 8),
-                "slippage_bps": round(slippage_bps, 8),
-                "moving_average_window": moving_average_window,
-                "candle_ids": sorted(candle_ids),
-            },
+            payload,
         )
 
     def to_dict(self) -> dict:

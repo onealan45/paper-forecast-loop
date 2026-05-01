@@ -271,6 +271,67 @@ def test_strategy_research_digest_cli_writes_digest_artifact(tmp_path, capsys):
     assert result["strategy_research_digest"]["next_research_action"] == "REVISE_STRATEGY"
 
 
+def test_run_once_also_decide_refreshes_strategy_research_digest_when_research_artifacts_exist(
+    tmp_path, capsys
+):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+    artifacts = _seed_strategy_research_chain(repository, now)
+
+    assert (
+        main(
+            [
+                "run-once",
+                "--provider",
+                "sample",
+                "--symbol",
+                "BTC-USD",
+                "--storage-dir",
+                str(tmp_path),
+                "--now",
+                "2026-05-01T08:30:00+00:00",
+                "--also-decide",
+            ]
+        )
+        == 0
+    )
+    result = json.loads(capsys.readouterr().out)
+
+    saved = repository.load_strategy_research_digests()
+    assert len(saved) == 1
+    assert result["strategy_research_digest_id"] == saved[0].digest_id
+    assert saved[0].strategy_card_id == artifacts["card"].card_id
+    assert saved[0].autopilot_run_id == artifacts["autopilot"].run_id
+
+
+def test_run_once_also_decide_skips_strategy_research_digest_without_research_artifacts(
+    tmp_path, capsys
+):
+    repository = JsonFileRepository(tmp_path)
+
+    assert (
+        main(
+            [
+                "run-once",
+                "--provider",
+                "sample",
+                "--symbol",
+                "BTC-USD",
+                "--storage-dir",
+                str(tmp_path),
+                "--now",
+                "2026-05-01T08:30:00+00:00",
+                "--also-decide",
+            ]
+        )
+        == 0
+    )
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["strategy_research_digest_id"] is None
+    assert repository.load_strategy_research_digests() == []
+
+
 def test_strategy_research_digest_round_trips_through_sqlite_repository(tmp_path):
     now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
     digest = StrategyResearchDigest(

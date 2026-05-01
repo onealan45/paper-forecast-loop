@@ -878,6 +878,10 @@ V1 MVP should include:
 - strategy research digest visibility in dashboard and operator console, so
   human review sees the compact strategy summary, failure concentration,
   evidence ids, and next research rationale before lower-level artifact tables
+- strategy research digest refresh during `run-once --also-decide`, so
+  automation cycles keep the visible strategy summary current when research
+  artifacts exist, while fresh storage does not get placeholder
+  `no_strategy_card` digest rows
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,
@@ -973,9 +977,10 @@ correctness defects:
   next research focus, and PR40 exposes the same summary through a read-only
   CLI. PR41 can persist that focus as a research agenda artifact, PR42 makes
   that lineage-derived agenda visible in the strategy UX, and PR95 adds a
-  persisted strategy research digest for automation handoff, but strong
-  strategy generation, model training, deeper self-evolving skill loops, and
-  optimizers are not included yet
+  persisted strategy research digest for automation handoff. PR97 refreshes
+  that digest during `run-once --also-decide` when strategy research artifacts
+  exist, but strong strategy generation, model training, deeper self-evolving
+  skill loops, and optimizers are not included yet
 - backtests are local simulations over stored candles; no broker or live execution path is involved
 - walk-forward validation now influences simulated BUY/SELL gates through
   M4F research-quality checks

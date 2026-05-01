@@ -3343,6 +3343,26 @@ def test_revision_retest_shadow_task_exposes_aligned_window_readiness(tmp_path):
     assert "candidate_window_ready=false" in task.rationale
 
 
+def test_revision_retest_shadow_task_exposes_expected_window_before_first_post_entry_candle(tmp_path):
+    repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+    repository.save_market_candle(_retest_full_window_candle(9, 109))
+
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+    task = plan.task_by_id("record_paper_shadow_outcome")
+
+    assert task.status == "blocked"
+    assert task.command_args is None
+    assert "earliest_window_start=2026-04-29T12:30:00+00:00" in task.rationale
+    assert "first_aligned_window_start=2026-04-30T00:00:00+00:00" in task.rationale
+    assert "next_required_window_end=2026-05-01T00:00:00+00:00" in task.rationale
+    assert "candidate_window_ready=false" in task.rationale
+
+
 def test_revision_retest_shadow_task_exposes_ready_aligned_window_candidate(tmp_path):
     repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
     _seed_post_leaderboard_shadow_candles(repository)

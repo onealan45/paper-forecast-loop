@@ -967,14 +967,32 @@ def _aligned_shadow_window_readiness(
         if candle.symbol == symbol and candle.timestamp >= leaderboard_entry.created_at
     )
     if not post_entry_timestamps:
+        first_aligned_start = _expected_first_aligned_candle_timestamp(
+            candles,
+            symbol,
+            leaderboard_entry.created_at,
+        )
+        expected_window_end = (
+            _expected_next_candle_timestamp(candles, symbol, first_aligned_start)
+            if first_aligned_start is not None
+            else None
+        )
         return _AlignedShadowWindowReadiness(
             rationale_parts=(
-                "first_aligned_window_start=missing",
-                "next_required_window_end=missing",
+                (
+                    f"first_aligned_window_start={first_aligned_start.isoformat()}"
+                    if first_aligned_start is not None
+                    else "first_aligned_window_start=missing"
+                ),
+                (
+                    f"next_required_window_end={expected_window_end.isoformat()}"
+                    if expected_window_end is not None
+                    else "next_required_window_end=missing"
+                ),
                 "candidate_window_ready=false",
             ),
-            first_aligned_window_start=None,
-            next_required_window_end=None,
+            first_aligned_window_start=first_aligned_start,
+            next_required_window_end=expected_window_end,
             next_required_window_observed=False,
         )
     first_aligned_start = post_entry_timestamps[0]
@@ -1016,6 +1034,24 @@ def _expected_next_candle_timestamp(
     if interval is None:
         return None
     return first_aligned_start + interval
+
+
+def _expected_first_aligned_candle_timestamp(
+    candles: list[MarketCandleRecord],
+    symbol: str,
+    earliest_window_start: datetime,
+) -> datetime | None:
+    interval = _infer_candle_interval(candles, symbol)
+    if interval is None:
+        return None
+    timestamps = sorted({candle.timestamp for candle in candles if candle.symbol == symbol})
+    if not timestamps:
+        return None
+    anchor = max((timestamp for timestamp in timestamps if timestamp <= earliest_window_start), default=timestamps[0])
+    candidate = anchor
+    while candidate < earliest_window_start:
+        candidate += interval
+    return candidate
 
 
 def _infer_candle_interval(candles: list[MarketCandleRecord], symbol: str) -> timedelta | None:

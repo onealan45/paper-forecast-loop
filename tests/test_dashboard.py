@@ -1419,8 +1419,15 @@ def test_dashboard_strategy_lineage_includes_multi_generation_revisions(tmp_path
         "QUARANTINE_STRATEGY": 2,
         "REVISE_STRATEGY": 1,
     }
+    assert snapshot.latest_strategy_lineage_summary.failure_attribution_counts == {
+        "drawdown_breach": 2,
+        "negative_excess_return": 2,
+        "weak_baseline_edge": 1,
+    }
     assert "隔離策略 (QUARANTINE_STRATEGY)</code>=2" in html
     assert "修訂策略 (REVISE_STRATEGY)</code>=1" in html
+    assert "回撤超標 (drawdown_breach)</code>=2" in html
+    assert "基準優勢不足 (weak_baseline_edge)</code>=1" in html
     assert "Revision Tree" in html
     assert "Depth 2" in html
     assert "Parent strategy-card:dashboard-revision" in html

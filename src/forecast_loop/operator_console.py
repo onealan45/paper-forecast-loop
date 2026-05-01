@@ -1284,7 +1284,7 @@ def _strategy_lineage_panel(summary: StrategyLineageSummary | None) -> str:
     <h4>Action counts</h4>
     {_action_count_rows(summary.action_counts)}
     <h4>Failure attribution</h4>
-    {_dict_rows(summary.failure_attribution_counts)}
+    {_failure_attribution_count_rows(summary.failure_attribution_counts)}
     <p>Best / worst excess：{_format_number(summary.best_excess_return_after_costs)} / {_format_number(summary.worst_excess_return_after_costs)}</p>
     <p>Latest outcome：<code>{escape(summary.latest_outcome_id or "none")}</code></p>
   </article>
@@ -1668,6 +1668,26 @@ def _action_count_labels(values: dict[str, object]) -> list[str]:
     ]
 
 
+def _failure_attribution_count_rows(values: dict[str, object]) -> str:
+    if not values:
+        return '<p class="muted">none</p>'
+    rows = "".join(
+        "<tr>"
+        f"<td><code>{escape(_display_failure_attribution_code(str(key)))}</code></td>"
+        f"<td>{escape(_format_artifact_value(value))}</td>"
+        "</tr>"
+        for key, value in sorted(values.items(), key=lambda item: str(item[0]))
+    )
+    return f"<table><tbody>{rows}</tbody></table>"
+
+
+def _failure_attribution_count_labels(values: dict[str, object]) -> list[str]:
+    return [
+        f"{_display_failure_attribution_code(str(key))}: {_format_artifact_value(value)}"
+        for key, value in sorted(values.items(), key=lambda item: str(item[0]))
+    ]
+
+
 def _format_artifact_value(value: object) -> str:
     if isinstance(value, float):
         return _format_number(value)
@@ -1834,7 +1854,7 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
 <p>Action counts</p>
 {_plain_list(_action_count_labels(lineage.action_counts) if lineage else [], empty="目前沒有 lineage action")}
 <p>Failure attribution</p>
-{_plain_list(list(lineage.failure_attribution_counts.keys()) if lineage else [], empty="目前沒有 lineage failure attribution")}
+{_plain_list(_failure_attribution_count_labels(lineage.failure_attribution_counts) if lineage else [], empty="目前沒有 lineage failure attribution")}
 {_revision_retest_task_plan_panel(snapshot.latest_strategy_revision_retest_task_plan)}
 {_revision_retest_task_run_panel(snapshot.latest_strategy_revision_retest_task_run)}
 {_revision_retest_autopilot_run_panel(snapshot.latest_strategy_revision_retest_autopilot_run)}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from forecast_loop.models import (
@@ -98,6 +99,17 @@ class RevisionRetestTaskPlan:
             "next_task_id": self.next_task_id,
             "tasks": [task.to_dict() for task in self.tasks],
         }
+
+
+@dataclass(frozen=True, slots=True)
+class _AlignedShadowWindowReadiness:
+    rationale_parts: tuple[str, ...]
+    first_aligned_window_start: datetime | None
+    next_required_window_end: datetime | None
+
+    @property
+    def candidate_window_ready(self) -> bool:
+        return self.first_aligned_window_start is not None and self.next_required_window_end is not None
 
 
 def build_revision_retest_task_plan(
@@ -868,20 +880,37 @@ def _paper_shadow_task(
         readiness_parts.append(f"latest_stored_candle={latest_stored_candle.timestamp.isoformat()}")
     else:
         readiness_parts.append("latest_stored_candle=missing")
-    readiness_parts.extend(
-        _aligned_shadow_window_readiness_parts(
-            market_candles,
-            leaderboard_entry.symbol,
-            leaderboard_entry,
-        )
+    aligned_readiness = _aligned_shadow_window_readiness(
+        market_candles,
+        leaderboard_entry.symbol,
+        leaderboard_entry,
     )
+    readiness_parts.extend(aligned_readiness.rationale_parts)
+    command_args = None
+    if aligned_readiness.candidate_window_ready and storage is not None:
+        assert aligned_readiness.first_aligned_window_start is not None
+        assert aligned_readiness.next_required_window_end is not None
+        command_args = _base_command(storage) + [
+            "execute-revision-retest-next-task",
+            "--storage-dir",
+            str(storage),
+            "--revision-card-id",
+            leaderboard_entry.strategy_card_id,
+            "--symbol",
+            leaderboard_entry.symbol,
+            "--shadow-window-start",
+            aligned_readiness.first_aligned_window_start.isoformat(),
+            "--shadow-window-end",
+            aligned_readiness.next_required_window_end.isoformat(),
+            "--derive-shadow-returns-from-candles",
+        ]
     return _task(
         "record_paper_shadow_outcome",
         "Record paper shadow outcome",
         "blocked",
         "paper_shadow_outcome",
         None,
-        None,
+        command_args,
         "shadow_window_observation_required",
         [
             "window_start",
@@ -922,35 +951,47 @@ def _latest_stored_candle(candles: list[MarketCandleRecord], symbol: str) -> Mar
     return max(symbol_candles, key=lambda candle: candle.timestamp) if symbol_candles else None
 
 
-def _aligned_shadow_window_readiness_parts(
+def _aligned_shadow_window_readiness(
     candles: list[MarketCandleRecord],
     symbol: str,
     leaderboard_entry: LeaderboardEntry,
-) -> list[str]:
+) -> _AlignedShadowWindowReadiness:
     post_entry_timestamps = sorted(
         candle.timestamp
         for candle in candles
         if candle.symbol == symbol and candle.timestamp >= leaderboard_entry.created_at
     )
     if not post_entry_timestamps:
-        return [
-            "first_aligned_window_start=missing",
-            "next_required_window_end=missing",
-            "candidate_window_ready=false",
-        ]
+        return _AlignedShadowWindowReadiness(
+            rationale_parts=(
+                "first_aligned_window_start=missing",
+                "next_required_window_end=missing",
+                "candidate_window_ready=false",
+            ),
+            first_aligned_window_start=None,
+            next_required_window_end=None,
+        )
     first_aligned_start = post_entry_timestamps[0]
     if len(post_entry_timestamps) == 1:
-        return [
-            f"first_aligned_window_start={first_aligned_start.isoformat()}",
-            "next_required_window_end=missing",
-            "candidate_window_ready=false",
-        ]
+        return _AlignedShadowWindowReadiness(
+            rationale_parts=(
+                f"first_aligned_window_start={first_aligned_start.isoformat()}",
+                "next_required_window_end=missing",
+                "candidate_window_ready=false",
+            ),
+            first_aligned_window_start=first_aligned_start,
+            next_required_window_end=None,
+        )
     next_window_end = post_entry_timestamps[1]
-    return [
-        f"first_aligned_window_start={first_aligned_start.isoformat()}",
-        f"next_required_window_end={next_window_end.isoformat()}",
-        "candidate_window_ready=true",
-    ]
+    return _AlignedShadowWindowReadiness(
+        rationale_parts=(
+            f"first_aligned_window_start={first_aligned_start.isoformat()}",
+            f"next_required_window_end={next_window_end.isoformat()}",
+            "candidate_window_ready=true",
+        ),
+        first_aligned_window_start=first_aligned_start,
+        next_required_window_end=next_window_end,
+    )
 
 
 def _revision_card(

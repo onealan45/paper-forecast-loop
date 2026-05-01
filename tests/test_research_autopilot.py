@@ -1400,6 +1400,224 @@ def test_revision_retest_task_plan_does_not_record_passed_trial_from_unlinked_ev
     assert "linked_backtest_walk_forward_pair" not in passed_trial_task.missing_inputs
 
 
+def test_revision_retest_task_plan_does_not_reuse_preexisting_split_evidence_for_new_card(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now() + timedelta(hours=1),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 1, 4, tzinfo=UTC),
+        validation_start=datetime(2026, 1, 5, tzinfo=UTC),
+        validation_end=datetime(2026, 1, 7, tzinfo=UTC),
+        holdout_start=datetime(2026, 1, 8, tzinfo=UTC),
+        holdout_end=datetime(2026, 1, 10, tzinfo=UTC),
+    )
+    stale_backtest = BacktestResult(
+        result_id="backtest-result:preexisting-split-aligned",
+        backtest_id="backtest:preexisting-split-aligned",
+        created_at=_now(),
+        symbol="BTC-USD",
+        start=datetime(2026, 1, 8, tzinfo=UTC),
+        end=datetime(2026, 1, 10, tzinfo=UTC),
+        initial_cash=10_000.0,
+        final_equity=10_500.0,
+        strategy_return=0.05,
+        benchmark_return=0.01,
+        max_drawdown=0.02,
+        sharpe=1.2,
+        turnover=1.0,
+        win_rate=0.6,
+        trade_count=3,
+        equity_curve=[],
+        decision_basis="test-preexisting-split-aligned",
+    )
+    stale_walk_forward = WalkForwardValidation(
+        validation_id="walk-forward:preexisting-split-aligned",
+        created_at=_now(),
+        symbol="BTC-USD",
+        start=datetime(2026, 1, 1, tzinfo=UTC),
+        end=datetime(2026, 1, 10, tzinfo=UTC),
+        strategy_name="moving_average_trend",
+        train_size=4,
+        validation_size=3,
+        test_size=3,
+        step_size=1,
+        initial_cash=10_000.0,
+        fee_bps=5.0,
+        slippage_bps=10.0,
+        moving_average_window=3,
+        window_count=1,
+        average_validation_return=0.03,
+        average_test_return=0.04,
+        average_benchmark_return=0.01,
+        average_excess_return=0.03,
+        test_win_rate=1.0,
+        overfit_window_count=0,
+        overfit_risk_flags=[],
+        backtest_result_ids=[stale_backtest.result_id],
+        windows=[],
+        decision_basis="test-preexisting-split-aligned",
+    )
+    repository.save_backtest_result(stale_backtest)
+    repository.save_walk_forward_validation(stale_walk_forward)
+    repository.save_baseline_evaluation(
+        BaselineEvaluation(
+            baseline_id="baseline:preexisting-split-aligned",
+            created_at=_now(),
+            symbol="BTC-USD",
+            sample_size=10,
+            directional_accuracy=0.7,
+            baseline_accuracy=0.5,
+            model_edge=0.2,
+            recent_score=0.8,
+            evidence_grade="B",
+            forecast_ids=[],
+            score_ids=[],
+            decision_basis="test-baseline",
+        )
+    )
+
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+
+    assert plan.backtest_result_id is None
+    assert plan.walk_forward_validation_id is None
+    assert plan.next_task_id == "run_backtest"
+    assert plan.task_by_id("run_backtest").status == "ready"
+    assert plan.task_by_id("record_passed_retest_trial").status == "blocked"
+
+
+def test_revision_retest_task_plan_rejects_passed_trial_with_pretrial_evidence(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    pending = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now() + timedelta(hours=1),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 1, 4, tzinfo=UTC),
+        validation_start=datetime(2026, 1, 5, tzinfo=UTC),
+        validation_end=datetime(2026, 1, 7, tzinfo=UTC),
+        holdout_start=datetime(2026, 1, 8, tzinfo=UTC),
+        holdout_end=datetime(2026, 1, 10, tzinfo=UTC),
+    ).experiment_trial
+    stale_backtest = BacktestResult(
+        result_id="backtest-result:pretrial-linked",
+        backtest_id="backtest:pretrial-linked",
+        created_at=_now(),
+        symbol="BTC-USD",
+        start=datetime(2026, 1, 8, tzinfo=UTC),
+        end=datetime(2026, 1, 10, tzinfo=UTC),
+        initial_cash=10_000.0,
+        final_equity=10_500.0,
+        strategy_return=0.05,
+        benchmark_return=0.01,
+        max_drawdown=0.02,
+        sharpe=1.2,
+        turnover=1.0,
+        win_rate=0.6,
+        trade_count=3,
+        equity_curve=[],
+        decision_basis="test-pretrial-linked",
+    )
+    stale_walk_forward = WalkForwardValidation(
+        validation_id="walk-forward:pretrial-linked",
+        created_at=_now(),
+        symbol="BTC-USD",
+        start=datetime(2026, 1, 1, tzinfo=UTC),
+        end=datetime(2026, 1, 10, tzinfo=UTC),
+        strategy_name="moving_average_trend",
+        train_size=4,
+        validation_size=3,
+        test_size=3,
+        step_size=1,
+        initial_cash=10_000.0,
+        fee_bps=5.0,
+        slippage_bps=10.0,
+        moving_average_window=3,
+        window_count=1,
+        average_validation_return=0.03,
+        average_test_return=0.04,
+        average_benchmark_return=0.01,
+        average_excess_return=0.03,
+        test_win_rate=1.0,
+        overfit_window_count=0,
+        overfit_risk_flags=[],
+        backtest_result_ids=[stale_backtest.result_id],
+        windows=[],
+        decision_basis="test-pretrial-linked",
+    )
+    repository.save_backtest_result(stale_backtest)
+    repository.save_walk_forward_validation(stale_walk_forward)
+    stale_passed = ExperimentTrial.from_dict(
+        {
+            **pending.to_dict(),
+            "trial_id": "experiment-trial:pretrial-evidence-passed",
+            "status": "PASSED",
+            "backtest_result_id": stale_backtest.result_id,
+            "walk_forward_validation_id": stale_walk_forward.validation_id,
+            "completed_at": (_now() + timedelta(hours=2)).isoformat(),
+        }
+    )
+    repository.save_experiment_trial(stale_passed)
+    repository.save_baseline_evaluation(
+        BaselineEvaluation(
+            baseline_id="baseline:pretrial-linked",
+            created_at=_now(),
+            symbol="BTC-USD",
+            sample_size=10,
+            directional_accuracy=0.7,
+            baseline_accuracy=0.5,
+            model_edge=0.2,
+            recent_score=0.8,
+            evidence_grade="B",
+            forecast_ids=[],
+            score_ids=[],
+            decision_basis="test-baseline",
+        )
+    )
+
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+
+    assert plan.passed_trial_id is None
+    assert plan.backtest_result_id is None
+    assert plan.walk_forward_validation_id is None
+    assert plan.next_task_id == "run_backtest"
+
+
 def test_cli_revision_retest_plan_rejects_missing_storage_without_creating_directory(tmp_path, capsys):
     missing_storage = tmp_path / "typo-storage"
 

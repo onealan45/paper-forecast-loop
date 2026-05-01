@@ -444,6 +444,7 @@ This version intentionally includes:
   - `strategy-research-digest`
   - `operator-control`
   - `repair-storage`
+  - `repair-request`
   - `decide`
   - `decide-all`
   - `health-check`
@@ -1067,6 +1068,17 @@ The health checker also writes a Codex-ready prompt under:
 ```text
 .codex/repair_requests/pending/<repair_request_id>.md
 ```
+
+After a blocking issue is fixed or intentionally dismissed, mark the request so
+the repair queue remains audit-friendly instead of showing stale pending work:
+
+```powershell
+python run_forecast_loop.py repair-request --storage-dir .\paper_storage\manual-coingecko --repair-request-id repair:abc123 --status resolved --reason "health-check returned healthy after refresh"
+python run_forecast_loop.py repair-request --storage-dir .\paper_storage\manual-coingecko --repair-request-id repair:abc123 --status ignored --reason "superseded by newer health-check"
+```
+
+`repair-request` updates only the existing request status, status timestamp, and
+reason. It does not run repairs, modify forecasts, or delete prompts.
 
 ## Idempotency and Rerun Safety
 

@@ -1385,7 +1385,7 @@ def _render_health(snapshot: OperatorConsoleSnapshot) -> str:
         f"<td><code>{escape(repair.repair_request_id)}</code></td>"
         f"<td>{escape(repair.status)}</td>"
         f"<td>{escape(repair.severity)}</td>"
-        f"<td>{escape(repair.observed_failure)}</td>"
+        f"<td>{escape(repair.status_reason or repair.observed_failure)}</td>"
         "</tr>"
         for repair in sorted(snapshot.repair_requests, key=lambda item: item.created_at, reverse=True)[:20]
     )
@@ -1506,6 +1506,8 @@ def _repair_request_card(repair: RepairRequest) -> str:
   </header>
   <p>{escape(repair.observed_failure)}</p>
   <p>嚴重度：{escape(repair.severity)}</p>
+  <p>狀態原因：{escape(repair.status_reason or "none")}</p>
+  <p>狀態更新：{escape(_format_dt(repair.status_updated_at) if repair.status_updated_at else "none")}</p>
   <p>Prompt：<code>{escape(repair.prompt_path or "none")}</code></p>
   <h5>重現指令</h5>
   <p><code>{escape(repair.reproduction_command)}</code></p>

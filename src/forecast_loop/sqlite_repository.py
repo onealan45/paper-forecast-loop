@@ -421,6 +421,17 @@ class SQLiteRepository:
     def load_repair_requests(self) -> list[RepairRequest]:
         return self._load("repair_requests", RepairRequest.from_dict)
 
+    def replace_repair_requests(self, repair_requests: list[RepairRequest]) -> None:
+        with self._connect() as connection:
+            connection.execute("DELETE FROM artifacts WHERE artifact_type = ?", ("repair_requests",))
+            for repair_request in repair_requests:
+                self._save_unique_with_connection(
+                    connection,
+                    "repair_requests",
+                    repair_request.repair_request_id,
+                    repair_request.to_dict(),
+                )
+
     def save_research_dataset(self, dataset: ResearchDataset) -> None:
         self._save_unique("research_datasets", dataset.dataset_id, dataset.to_dict())
 

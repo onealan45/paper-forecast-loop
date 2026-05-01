@@ -889,6 +889,9 @@ V1 MVP should include:
 - health/repair queue view exposing current health, blocking findings, repair
   request status, repair prompts, affected artifacts, recommended tests, and
   acceptance criteria
+- repair request status updates, so fixed or obsolete requests can be marked
+  `resolved` or `ignored` with an audit reason instead of remaining as stale
+  pending queue noise
 - audited simulated-control event artifacts with confirmation requirements for
   risky controls and paper-order blocking gates for emergency stop, pause, stop
   new entries, reduce risk, and max position

@@ -180,6 +180,8 @@ class ArtifactRepository(Protocol):
 
     def load_repair_requests(self) -> list[RepairRequest]: ...
 
+    def replace_repair_requests(self, repair_requests: list[RepairRequest]) -> None: ...
+
     def save_research_dataset(self, dataset: ResearchDataset) -> None: ...
 
     def load_research_datasets(self) -> list[ResearchDataset]: ...
@@ -606,6 +608,11 @@ class JsonFileRepository:
 
     def load_repair_requests(self) -> list[RepairRequest]:
         return self._load_lines(self.repair_requests_path, RepairRequest.from_dict)
+
+    def replace_repair_requests(self, repair_requests: list[RepairRequest]) -> None:
+        with self.repair_requests_path.open("w", encoding="utf-8") as handle:
+            for repair_request in repair_requests:
+                handle.write(json.dumps(repair_request.to_dict(), ensure_ascii=False) + "\n")
 
     def save_research_dataset(self, dataset: ResearchDataset) -> None:
         self._append_unique(

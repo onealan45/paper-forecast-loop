@@ -3366,6 +3366,8 @@ class RepairRequest:
     acceptance_criteria: list[str]
     finding_codes: list[str]
     prompt_path: str | None = None
+    status_updated_at: datetime | None = None
+    status_reason: str | None = None
 
     @classmethod
     def build_id(cls, *, created_at: datetime, finding_codes: list[str], observed_failure: str) -> str:
@@ -3381,6 +3383,9 @@ class RepairRequest:
     def to_dict(self) -> dict:
         payload = asdict(self)
         payload["created_at"] = self.created_at.isoformat()
+        payload["status_updated_at"] = (
+            self.status_updated_at.isoformat() if self.status_updated_at else None
+        )
         return payload
 
     @classmethod
@@ -3399,6 +3404,12 @@ class RepairRequest:
             acceptance_criteria=payload.get("acceptance_criteria", []),
             finding_codes=payload.get("finding_codes", []),
             prompt_path=payload.get("prompt_path"),
+            status_updated_at=(
+                datetime.fromisoformat(payload["status_updated_at"])
+                if payload.get("status_updated_at")
+                else None
+            ),
+            status_reason=payload.get("status_reason"),
         )
 
 

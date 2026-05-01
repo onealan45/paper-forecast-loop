@@ -859,6 +859,9 @@ V1 MVP should include:
 - chained replacement retest compatibility, so a replacement strategy created
   from a quarantined replacement outcome can start its own retest scaffold and
   plan under the same lineage root
+- source-agnostic market-candle timestamp integrity, so overlapping candles
+  from seed imports and provider refreshes are skipped during ingestion and
+  surfaced as blocking health findings if already present
 - dashboard and operator console visibility for those cross-sample agenda
   strategy-card links, so the research UX names the root and replacement
   strategy targets directly

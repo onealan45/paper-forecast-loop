@@ -134,7 +134,9 @@ def import_market_candles(
     if imported_at.tzinfo is None or imported_at.utcoffset() is None:
         raise ValueError("imported_at must be timezone-aware")
 
-    existing_ids = {record.candle_id for record in repository.load_market_candles()}
+    existing_records = repository.load_market_candles()
+    existing_ids = {record.candle_id for record in existing_records}
+    existing_boundaries = {_candle_boundary_key(record) for record in existing_records}
     imported_count = 0
     skipped_duplicate_count = 0
     total_rows = 0
@@ -153,11 +155,13 @@ def import_market_candles(
             _validate_candle_record(record)
         except Exception as exc:
             raise ValueError(f"{input_file}:{line_number} cannot be imported: {exc}") from exc
-        if record.candle_id in existing_ids:
+        boundary_key = _candle_boundary_key(record)
+        if record.candle_id in existing_ids or boundary_key in existing_boundaries:
             skipped_duplicate_count += 1
             continue
         repository.save_market_candle(record)
         existing_ids.add(record.candle_id)
+        existing_boundaries.add(boundary_key)
         imported_count += 1
 
     return CandleImportResult(
@@ -216,7 +220,9 @@ def fetch_market_candles(
         lookback_candles=lookback_candles,
         end_time=end_time,
     )
-    existing_ids = {record.candle_id for record in repository.load_market_candles()}
+    existing_records = repository.load_market_candles()
+    existing_ids = {record.candle_id for record in existing_records}
+    existing_boundaries = {_candle_boundary_key(record) for record in existing_records}
     stored_count = 0
     skipped_duplicate_count = 0
     latest_candle_timestamp: datetime | None = None
@@ -230,11 +236,13 @@ def fetch_market_candles(
         )
         _validate_candle_record(record)
         latest_candle_timestamp = record.timestamp.astimezone(UTC)
-        if record.candle_id in existing_ids:
+        boundary_key = _candle_boundary_key(record)
+        if record.candle_id in existing_ids or boundary_key in existing_boundaries:
             skipped_duplicate_count += 1
             continue
         repository.save_market_candle(record)
         existing_ids.add(record.candle_id)
+        existing_boundaries.add(boundary_key)
         stored_count += 1
 
     return CandleFetchResult(
@@ -447,6 +455,10 @@ def _validate_candle_record(record: MarketCandleRecord) -> None:
         raise ValueError("candle low must be <= open, close, and high")
     if record.volume < 0:
         raise ValueError("candle volume must be non-negative")
+
+
+def _candle_boundary_key(record: MarketCandleRecord) -> tuple[str, datetime]:
+    return (record.symbol, record.timestamp.astimezone(UTC))
 
 
 def _candle_health_result(

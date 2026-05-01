@@ -585,6 +585,9 @@ action label first, raw action code retained beside it.
 Lineage action-count aggregates should use the same display rule in dashboard
 and operator-console UX: readable action label first, raw action code retained
 beside it, while stored lineage artifacts keep machine keys unchanged.
+Lineage failure-attribution aggregate counts should also render readable
+failure labels first with raw failure codes retained beside them, while stored
+lineage artifacts keep machine keys unchanged.
 
 ## 10.3 Data Scope
 
@@ -847,6 +850,9 @@ V1 MVP should include:
 - readable lineage action-count aggregates in dashboard and operator console,
   so operators can scan quarantined/revised strategy action concentration
   without losing the raw action codes needed for auditability
+- readable lineage failure-attribution aggregate counts in dashboard and
+  operator console, so operators can scan repeated failure concentration before
+  reading raw machine-code detail
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

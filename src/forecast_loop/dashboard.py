@@ -1409,7 +1409,7 @@ def _render_strategy_lineage_summary(summary: StrategyLineageSummary | None) -> 
           <dt>表現軌跡</dt><dd>{_dashboard_performance_trajectory(summary)}</dd>
           <dt>Shadow Outcomes</dt><dd>{summary.outcome_count}</dd>
           <dt>Actions</dt><dd>{_dashboard_action_counts_inline(summary.action_counts)}</dd>
-          <dt>Failure Attribution</dt><dd>{_dashboard_dict_inline(summary.failure_attribution_counts)}</dd>
+          <dt>Failure Attribution</dt><dd>{_dashboard_failure_attribution_counts_inline(summary.failure_attribution_counts)}</dd>
           <dt>Best / Worst Excess</dt><dd>{_format_optional_number(summary.best_excess_return_after_costs)} / {_format_optional_number(summary.worst_excess_return_after_costs)}</dd>
           <dt>Latest Outcome</dt><dd><code>{escape(summary.latest_outcome_id or "none")}</code></dd>
         </dl>
@@ -2503,6 +2503,15 @@ def _dashboard_action_counts_inline(values: dict[str, object]) -> str:
         return '<span class="empty">none</span>'
     return "；".join(
         f"<code>{escape(_display_research_action(str(key)))}</code>={escape(_dashboard_value(value))}"
+        for key, value in sorted(values.items(), key=lambda item: str(item[0]))
+    )
+
+
+def _dashboard_failure_attribution_counts_inline(values: dict[str, object]) -> str:
+    if not values:
+        return '<span class="empty">none</span>'
+    return "；".join(
+        f"<code>{escape(_display_failure_attribution_code(str(key)))}</code>={escape(_dashboard_value(value))}"
         for key, value in sorted(values.items(), key=lambda item: str(item[0]))
     )
 

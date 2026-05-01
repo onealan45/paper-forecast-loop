@@ -8,7 +8,7 @@ from forecast_loop.backtest import run_backtest
 from forecast_loop.baselines import build_baseline_evaluation
 from forecast_loop.experiment_registry import record_experiment_trial
 from forecast_loop.locked_evaluation import evaluate_leaderboard_gate, lock_evaluation_protocol
-from forecast_loop.models import AutomationRun, BacktestResult, MarketCandleRecord, WalkForwardValidation
+from forecast_loop.models import AutomationRun, BacktestResult, LeaderboardEntry, MarketCandleRecord, WalkForwardValidation
 from forecast_loop.paper_shadow import record_paper_shadow_outcome
 from forecast_loop.revision_retest import (
     RETEST_EVIDENCE_CONTEXT_PARAMETER,
@@ -496,6 +496,9 @@ def _execute_record_paper_shadow_outcome(
         raise ValueError("revision_retest_shadow_window_invalid")
     if shadow_window_end > created_at:
         raise ValueError("revision_retest_shadow_window_not_complete")
+    leaderboard_entry = _require_leaderboard_entry(repository, plan.leaderboard_entry_id)
+    if shadow_window_start < leaderboard_entry.created_at:
+        raise ValueError("revision_retest_shadow_window_starts_before_leaderboard_entry")
     if derive_shadow_returns_from_candles:
         derived = _derive_shadow_observation_from_stored_candles(
             repository=repository,
@@ -533,6 +536,16 @@ def _execute_record_paper_shadow_outcome(
         note=shadow_note,
     )
     return [outcome.outcome_id]
+
+
+def _require_leaderboard_entry(
+    repository: ArtifactRepository,
+    leaderboard_entry_id: str,
+) -> LeaderboardEntry:
+    for entry in repository.load_leaderboard_entries():
+        if entry.entry_id == leaderboard_entry_id:
+            return entry
+    raise ValueError(f"missing_leaderboard_entry:{leaderboard_entry_id}")
 
 
 def _derive_shadow_observation_from_stored_candles(

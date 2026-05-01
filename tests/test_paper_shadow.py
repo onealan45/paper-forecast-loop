@@ -186,6 +186,23 @@ def test_paper_shadow_positive_outcome_becomes_promotion_ready(tmp_path):
     assert repository.load_paper_shadow_outcomes() == [outcome]
 
 
+def test_paper_shadow_rejects_window_starting_before_leaderboard_entry(tmp_path):
+    repository, _card, _trial, _evaluation, entry = _seed_repository(tmp_path)
+
+    with pytest.raises(ValueError, match="paper_shadow_window_starts_before_leaderboard_entry"):
+        record_paper_shadow_outcome(
+            repository=repository,
+            created_at=_now() + timedelta(hours=24),
+            leaderboard_entry_id=entry.entry_id,
+            window_start=_now() - timedelta(hours=1),
+            window_end=_now() + timedelta(hours=24),
+            observed_return=0.05,
+            benchmark_return=0.01,
+        )
+
+    assert repository.load_paper_shadow_outcomes() == []
+
+
 def test_paper_shadow_negative_outcome_retires_candidate(tmp_path):
     repository, _card, _trial, _evaluation, entry = _seed_repository(tmp_path)
 

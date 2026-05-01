@@ -28,6 +28,7 @@ _RESEARCH_ACTION_LABELS = {
     "RETIRE": "淘汰策略",
     "REVISE_STRATEGY": "修訂策略",
     "UPDATE_LINEAGE_VERDICT": "更新 lineage 判定",
+    "WAIT_FOR_PAPER_SHADOW_OUTCOME": "等待 paper-shadow 視窗",
 }
 
 _OUTCOME_GRADE_LABELS = {
@@ -59,13 +60,16 @@ def build_strategy_research_conclusion(
     card: StrategyCard | None,
     outcome: PaperShadowOutcome | None,
     autopilot: ResearchAutopilotRun | None,
+    next_research_action: str | None = None,
 ) -> str:
     if card is None:
         return "目前沒有策略卡，無法形成策略研究結論。"
 
     conclusion = f"目前策略 {card.strategy_name}"
     if outcome is None:
-        next_action = autopilot.next_research_action if autopilot else "n/a"
+        next_action = next_research_action or (
+            autopilot.next_research_action if autopilot else "n/a"
+        )
         return f"{conclusion}：尚未有 paper-shadow 結果；下一步 {format_research_action(next_action)}。"
 
     parts = [f"paper-shadow {format_outcome_grade(outcome.outcome_grade)}"]
@@ -74,7 +78,9 @@ def build_strategy_research_conclusion(
     if outcome.failure_attributions:
         parts.append(f"失敗歸因 {format_failure_attributions(outcome.failure_attributions)}")
 
-    next_action = autopilot.next_research_action if autopilot else outcome.recommended_strategy_action
+    next_action = next_research_action or (
+        autopilot.next_research_action if autopilot else outcome.recommended_strategy_action
+    )
     return f"{conclusion}：{'，'.join(parts)}；下一步 {format_research_action(next_action)}。"
 
 

@@ -53,6 +53,7 @@ def resolve_latest_strategy_research_chain(
     paper_shadow_outcomes: list[PaperShadowOutcome],
     research_agendas: list[ResearchAgenda],
     research_autopilot_runs: list[ResearchAutopilotRun],
+    prefer_latest_anchor: bool = False,
 ) -> StrategyResearchChain:
     cards = [item for item in strategy_cards if symbol in item.symbols]
     trials = [item for item in experiment_trials if item.symbol == symbol]
@@ -86,7 +87,12 @@ def resolve_latest_strategy_research_chain(
     )
 
     latest_run = _latest(runs)
-    if latest_run is not None:
+    latest_anchor = _latest_anchor(cards, trials, evaluations, entries, outcomes, agendas)
+    if latest_run is not None and (
+        not prefer_latest_anchor
+        or latest_anchor is None
+        or latest_run.created_at >= getattr(latest_anchor[1], "created_at")
+    ):
         chain = _chain_from_ids(
             symbol=symbol,
             strategy_card_id=latest_run.strategy_card_id,
@@ -107,7 +113,6 @@ def resolve_latest_strategy_research_chain(
         chain.revision_candidate = revision_candidate
         return chain
 
-    latest_anchor = _latest_anchor(cards, trials, evaluations, entries, outcomes, agendas)
     if latest_anchor is None:
         return StrategyResearchChain(None, None, None, None, None, None, None, revision_candidate)
 
@@ -463,16 +468,29 @@ def _latest_anchor(
     outcomes: list[PaperShadowOutcome],
     agendas: list[ResearchAgenda],
 ) -> tuple[str, object] | None:
-    anchors: list[tuple[datetime, str, object]] = []
-    anchors.extend((item.created_at, "card", item) for item in cards)
-    anchors.extend((item.created_at, "trial", item) for item in trials)
-    anchors.extend((item.created_at, "evaluation", item) for item in evaluations)
-    anchors.extend((item.created_at, "entry", item) for item in entries)
-    anchors.extend((item.created_at, "outcome", item) for item in outcomes)
-    anchors.extend((item.created_at, "agenda", item) for item in agendas)
+    priority_by_kind = {
+        "card": 0,
+        "agenda": 1,
+        "trial": 2,
+        "evaluation": 3,
+        "entry": 4,
+        "outcome": 5,
+    }
+    anchors: list[tuple[datetime, int, str, object]] = []
+    anchors.extend((item.created_at, priority_by_kind["card"], "card", item) for item in cards)
+    anchors.extend((item.created_at, priority_by_kind["trial"], "trial", item) for item in trials)
+    anchors.extend(
+        (item.created_at, priority_by_kind["evaluation"], "evaluation", item)
+        for item in evaluations
+    )
+    anchors.extend((item.created_at, priority_by_kind["entry"], "entry", item) for item in entries)
+    anchors.extend(
+        (item.created_at, priority_by_kind["outcome"], "outcome", item) for item in outcomes
+    )
+    anchors.extend((item.created_at, priority_by_kind["agenda"], "agenda", item) for item in agendas)
     if not anchors:
         return None
-    _, kind, item = max(anchors, key=lambda value: value[0])
+    _, _, kind, item = max(anchors, key=lambda value: (value[0], value[1]))
     return kind, item
 
 

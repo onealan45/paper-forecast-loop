@@ -211,6 +211,7 @@ def _seed_strategy_research_chain(repository, now: datetime) -> dict:
     return {
         "card": card,
         "outcome": outcome,
+        "revision": revision,
         "revision_outcome": revision_outcome,
         "autopilot": autopilot,
     }
@@ -229,21 +230,126 @@ def test_record_strategy_research_digest_persists_current_strategy_and_lineage_c
 
     assert repository.load_strategy_research_digests() == [digest]
     assert digest.symbol == "BTC-USD"
-    assert digest.strategy_card_id == artifacts["card"].card_id
-    assert digest.paper_shadow_outcome_id == artifacts["outcome"].outcome_id
-    assert digest.autopilot_run_id == artifacts["autopilot"].run_id
-    assert digest.strategy_status == "ACTIVE"
+    assert digest.strategy_card_id == artifacts["revision"].card_id
+    assert digest.paper_shadow_outcome_id == artifacts["revision_outcome"].outcome_id
+    assert digest.autopilot_run_id is None
+    assert digest.strategy_status == "DRAFT"
     assert digest.outcome_grade == "FAIL"
-    assert digest.recommended_strategy_action == "REVISE_STRATEGY"
+    assert digest.recommended_strategy_action == "QUARANTINE_STRATEGY"
     assert digest.lineage_root_card_id == artifacts["card"].card_id
     assert digest.lineage_revision_count == 1
     assert digest.lineage_outcome_count == 2
     assert digest.lineage_primary_failure_attribution == "drawdown_breach"
     assert digest.top_failure_attributions == ["negative_excess_return", "drawdown_breach"]
+    assert artifacts["outcome"].outcome_id in digest.evidence_artifact_ids
     assert artifacts["revision_outcome"].outcome_id in digest.evidence_artifact_ids
     assert "BTC breakout research" in digest.research_summary
     assert "paper-shadow" in digest.research_summary
     assert "回撤超標" in digest.next_step_rationale
+
+
+def test_strategy_research_digest_prefers_newer_retest_leaderboard_over_stale_autopilot_run(
+    tmp_path,
+):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+    _seed_strategy_research_chain(repository, now)
+    revision = StrategyCard(
+        card_id="strategy-card:digest-active-retest",
+        created_at=now + timedelta(minutes=20),
+        strategy_name="BTC active retest strategy",
+        strategy_family="breakout_reversal",
+        version="v2",
+        status="DRAFT",
+        symbols=["BTC-USD"],
+        hypothesis="A newer replacement strategy is in retest and must own the digest.",
+        signal_description="Replacement retest signal.",
+        entry_rules=["Enter only after retest evidence passes."],
+        exit_rules=["Exit when retest invalidates."],
+        risk_rules=["Wait for paper-shadow outcome before promotion."],
+        parameters={"revision_source_outcome_id": "paper-shadow-outcome:digest-revision"},
+        data_requirements=["market_candles:BTC-USD:1h"],
+        feature_snapshot_ids=[],
+        backtest_result_ids=["backtest-result:active-retest"],
+        walk_forward_validation_ids=["walk-forward:active-retest"],
+        event_edge_evaluation_ids=[],
+        parent_card_id="strategy-card:digest-revision",
+        author="codex-runtime",
+        decision_basis="paper_shadow_strategy_revision_candidate",
+    )
+    trial = ExperimentTrial(
+        trial_id="experiment-trial:active-retest",
+        created_at=now + timedelta(minutes=21),
+        strategy_card_id=revision.card_id,
+        trial_index=1,
+        status="PASSED",
+        symbol="BTC-USD",
+        seed=11,
+        dataset_id="research-dataset:active-retest",
+        backtest_result_id="backtest-result:active-retest",
+        walk_forward_validation_id="walk-forward:active-retest",
+        event_edge_evaluation_id=None,
+        prompt_hash="prompt-active-retest",
+        code_hash="code-active-retest",
+        parameters={"revision_retest_protocol": "pr14-v1"},
+        metric_summary={"alpha_score": None},
+        failure_reason=None,
+        started_at=now + timedelta(minutes=20),
+        completed_at=now + timedelta(minutes=21),
+        decision_basis="test",
+    )
+    evaluation = LockedEvaluationResult(
+        evaluation_id="locked-evaluation:active-retest",
+        created_at=now + timedelta(minutes=22),
+        strategy_card_id=revision.card_id,
+        trial_id=trial.trial_id,
+        split_manifest_id="split-manifest:active-retest",
+        cost_model_id="cost-model:active-retest",
+        baseline_id="baseline:active-retest",
+        backtest_result_id="backtest-result:active-retest",
+        walk_forward_validation_id="walk-forward:active-retest",
+        event_edge_evaluation_id=None,
+        passed=False,
+        rankable=False,
+        alpha_score=None,
+        blocked_reasons=["leaderboard_entry_not_rankable"],
+        gate_metrics={"holdout_excess_return": -0.01},
+        decision_basis="test",
+    )
+    leaderboard = LeaderboardEntry(
+        entry_id="leaderboard-entry:active-retest",
+        created_at=now + timedelta(minutes=22),
+        strategy_card_id=revision.card_id,
+        evaluation_id=evaluation.evaluation_id,
+        trial_id=trial.trial_id,
+        symbol="BTC-USD",
+        rankable=False,
+        alpha_score=None,
+        promotion_stage="BLOCKED",
+        blocked_reasons=["leaderboard_entry_not_rankable"],
+        leaderboard_rules_version="pr7-v1",
+        decision_basis="test",
+    )
+    repository.save_strategy_card(revision)
+    repository.save_experiment_trial(trial)
+    repository.save_locked_evaluation_result(evaluation)
+    repository.save_leaderboard_entry(leaderboard)
+
+    digest = record_strategy_research_digest(
+        repository=repository,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=24),
+    )
+
+    assert digest.strategy_card_id == revision.card_id
+    assert digest.paper_shadow_outcome_id is None
+    assert evaluation.evaluation_id in digest.evidence_artifact_ids
+    assert leaderboard.entry_id in digest.evidence_artifact_ids
+    assert digest.autopilot_run_id is None
+    assert "BTC active retest strategy" in digest.research_summary
+    assert digest.next_research_action == "WAIT_FOR_PAPER_SHADOW_OUTCOME"
+    assert "等待 paper-shadow 視窗" in digest.research_summary
+    assert "尚未有 paper-shadow 結果" in digest.research_summary
 
 
 def test_strategy_research_digest_cli_writes_digest_artifact(tmp_path, capsys):
@@ -268,7 +374,7 @@ def test_strategy_research_digest_cli_writes_digest_artifact(tmp_path, capsys):
     assert len(saved) == 1
     assert result["strategy_research_digest"]["digest_id"] == saved[0].digest_id
     assert result["strategy_research_digest"]["symbol"] == "BTC-USD"
-    assert result["strategy_research_digest"]["next_research_action"] == "REVISE_STRATEGY"
+    assert result["strategy_research_digest"]["next_research_action"] == "QUARANTINE_STRATEGY"
 
 
 def test_run_once_also_decide_refreshes_strategy_research_digest_when_research_artifacts_exist(
@@ -300,8 +406,8 @@ def test_run_once_also_decide_refreshes_strategy_research_digest_when_research_a
     saved = repository.load_strategy_research_digests()
     assert len(saved) == 1
     assert result["strategy_research_digest_id"] == saved[0].digest_id
-    assert saved[0].strategy_card_id == artifacts["card"].card_id
-    assert saved[0].autopilot_run_id == artifacts["autopilot"].run_id
+    assert saved[0].strategy_card_id == artifacts["revision"].card_id
+    assert saved[0].autopilot_run_id is None
 
 
 def test_run_once_also_decide_skips_strategy_research_digest_without_research_artifacts(

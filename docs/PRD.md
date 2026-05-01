@@ -841,6 +841,9 @@ V1 MVP should include:
 - post-leaderboard shadow-window enforcement, so paper-shadow outcomes cannot
   be recorded from candles or explicit returns that begin before the leaderboard
   candidate existed
+- paper-shadow observation readiness context in revision retest plans, so a
+  blocked shadow-outcome task reports the earliest legal window start and
+  latest stored candle instead of only saying future returns are not fabricated
 - dashboard and operator console visibility for those cross-sample agenda
   strategy-card links, so the research UX names the root and replacement
   strategy targets directly

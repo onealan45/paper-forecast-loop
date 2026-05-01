@@ -3285,6 +3285,25 @@ def test_execute_revision_retest_shadow_outcome_requires_observation_inputs(tmp_
     assert revision_outcomes == []
 
 
+def test_revision_retest_shadow_task_exposes_post_entry_readiness_context(tmp_path):
+    repository, revision, leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+    repository.save_market_candle(_retest_full_window_candle(9, 109))
+    repository.save_market_candle(_post_leaderboard_shadow_candle(0, 120))
+
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+    task = plan.task_by_id("record_paper_shadow_outcome")
+
+    assert task.status == "blocked"
+    assert task.blocked_reason == "shadow_window_observation_required"
+    assert "earliest_window_start=2026-04-29T12:30:00+00:00" in task.rationale
+    assert "latest_stored_candle=2026-04-29T12:30:00+00:00" in task.rationale
+
+
 def test_execute_revision_retest_shadow_outcome_rejects_unfinished_window(tmp_path):
     repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
 

@@ -10,6 +10,7 @@ from forecast_loop.models import (
     ExperimentTrial,
     LeaderboardEntry,
     LockedEvaluationResult,
+    MarketCandleRecord,
     PaperShadowOutcome,
     ResearchDataset,
     SplitManifest,
@@ -123,6 +124,7 @@ def build_revision_retest_task_plan(
     experiment_trials = repository.load_experiment_trials()
     backtest_results = repository.load_backtest_results()
     walk_forward_validations = repository.load_walk_forward_validations()
+    latest_stored_candle = _latest_stored_candle(repository.load_market_candles(), symbol)
     pending_trial = _latest_retest_trial(
         experiment_trials,
         card,
@@ -214,6 +216,7 @@ def build_revision_retest_task_plan(
         locked_evaluation=locked_evaluation,
         leaderboard_entry=leaderboard_entry,
         shadow_outcome=shadow_outcome,
+        latest_stored_candle=latest_stored_candle,
     )
     next_task = next((task for task in tasks if task.status != "completed"), None)
     return RevisionRetestTaskPlan(
@@ -253,6 +256,7 @@ def _build_tasks(
     locked_evaluation: LockedEvaluationResult | None,
     leaderboard_entry: LeaderboardEntry | None,
     shadow_outcome: PaperShadowOutcome | None,
+    latest_stored_candle: MarketCandleRecord | None,
 ) -> list[RevisionRetestTask]:
     tasks = [
         _scaffold_task(
@@ -301,6 +305,7 @@ def _build_tasks(
             storage=storage,
             leaderboard_entry=leaderboard_entry,
             shadow_outcome=shadow_outcome,
+            latest_stored_candle=latest_stored_candle,
         ),
     ]
     return tasks
@@ -822,6 +827,7 @@ def _paper_shadow_task(
     storage: Path | None,
     leaderboard_entry: LeaderboardEntry | None,
     shadow_outcome: PaperShadowOutcome | None,
+    latest_stored_candle: MarketCandleRecord | None,
 ) -> RevisionRetestTask:
     if shadow_outcome is not None:
         return _task(
@@ -852,6 +858,11 @@ def _paper_shadow_task(
             missing,
             "Shadow outcome recording requires a concrete leaderboard entry.",
         )
+    readiness_parts = [f"earliest_window_start={leaderboard_entry.created_at.isoformat()}"]
+    if latest_stored_candle is not None:
+        readiness_parts.append(f"latest_stored_candle={latest_stored_candle.timestamp.isoformat()}")
+    else:
+        readiness_parts.append("latest_stored_candle=missing")
     return _task(
         "record_paper_shadow_outcome",
         "Record paper shadow outcome",
@@ -866,7 +877,7 @@ def _paper_shadow_task(
             "observed_return",
             "benchmark_return",
         ],
-        "The planner does not fabricate future shadow-window returns.",
+        "The planner does not fabricate future shadow-window returns. " + "; ".join(readiness_parts) + ".",
     )
 
 
@@ -892,6 +903,11 @@ def _task(
         missing_inputs=missing_inputs,
         rationale=rationale,
     )
+
+
+def _latest_stored_candle(candles: list[MarketCandleRecord], symbol: str) -> MarketCandleRecord | None:
+    symbol_candles = [candle for candle in candles if candle.symbol == symbol]
+    return max(symbol_candles, key=lambda candle: candle.timestamp) if symbol_candles else None
 
 
 def _revision_card(

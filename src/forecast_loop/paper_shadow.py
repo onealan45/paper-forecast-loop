@@ -26,6 +26,8 @@ def record_paper_shadow_outcome(
     note: str | None = None,
 ) -> PaperShadowOutcome:
     entry = _require_leaderboard_entry(repository, leaderboard_entry_id)
+    if window_start < entry.created_at:
+        raise ValueError("paper_shadow_window_starts_before_leaderboard_entry")
     evaluation = _require_locked_evaluation(repository, entry.evaluation_id)
     blocked = _link_blockers(repository, entry=entry, evaluation=evaluation)
     blocked = _unique([*_leaderboard_blockers(entry), *_evaluation_blockers(evaluation), *blocked])

@@ -267,6 +267,27 @@ def _seed_retest_full_window_candles(repository: JsonFileRepository) -> None:
         repository.save_market_candle(_retest_full_window_candle(index, close))
 
 
+def _post_leaderboard_shadow_candle(index: int, close: float) -> MarketCandleRecord:
+    timestamp = datetime(2026, 4, 29, 12, 30, tzinfo=UTC) + timedelta(days=index)
+    return MarketCandleRecord(
+        candle_id=f"market-candle:post-leaderboard-shadow:{index}",
+        symbol="BTC-USD",
+        timestamp=timestamp,
+        open=close - 1,
+        high=close + 1,
+        low=close - 2,
+        close=close,
+        volume=3000 + index,
+        source="post-leaderboard-shadow-fixture",
+        imported_at=datetime(2026, 5, 1, 12, 30, tzinfo=UTC),
+    )
+
+
+def _seed_post_leaderboard_shadow_candles(repository: JsonFileRepository) -> None:
+    for index, close in enumerate([120, 121, 123]):
+        repository.save_market_candle(_post_leaderboard_shadow_candle(index, close))
+
+
 def test_json_repository_round_trips_research_autopilot_artifacts(tmp_path):
     repository, card, _trial, _evaluation, _entry, _decision, _outcome = _seed_repository(tmp_path)
     agenda = ResearchAgenda(
@@ -3335,22 +3356,23 @@ def test_execute_revision_retest_shadow_outcome_next_task_records_observed_windo
 
 def test_execute_revision_retest_shadow_outcome_derives_observation_from_stored_candles(tmp_path):
     repository, revision, leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+    _seed_post_leaderboard_shadow_candles(repository)
 
     result = execute_revision_retest_next_task(
         repository=repository,
         storage_dir=tmp_path,
         symbol="BTC-USD",
-        created_at=datetime(2026, 1, 10, tzinfo=UTC),
+        created_at=datetime(2026, 5, 1, 12, 30, tzinfo=UTC),
         revision_card_id=revision.card_id,
-        shadow_window_start=datetime(2026, 1, 8, tzinfo=UTC),
-        shadow_window_end=datetime(2026, 1, 10, tzinfo=UTC),
+        shadow_window_start=datetime(2026, 4, 29, 12, 30, tzinfo=UTC),
+        shadow_window_end=datetime(2026, 5, 1, 12, 30, tzinfo=UTC),
         derive_shadow_returns_from_candles=True,
     )
     shadow_backtest = next(
         result
         for result in repository.load_backtest_results()
-        if result.start == datetime(2026, 1, 8, tzinfo=UTC)
-        and result.end == datetime(2026, 1, 10, tzinfo=UTC)
+        if result.start == datetime(2026, 4, 29, 12, 30, tzinfo=UTC)
+        and result.end == datetime(2026, 5, 1, 12, 30, tzinfo=UTC)
     )
     revision_outcomes = [
         outcome for outcome in repository.load_paper_shadow_outcomes() if outcome.strategy_card_id == revision.card_id
@@ -3362,8 +3384,8 @@ def test_execute_revision_retest_shadow_outcome_derives_observation_from_stored_
     assert len(revision_outcomes) == 1
     outcome = revision_outcomes[0]
     assert outcome.leaderboard_entry_id == leaderboard_result.after_plan.leaderboard_entry_id
-    assert outcome.window_start == datetime(2026, 1, 8, tzinfo=UTC)
-    assert outcome.window_end == datetime(2026, 1, 10, tzinfo=UTC)
+    assert outcome.window_start == datetime(2026, 4, 29, 12, 30, tzinfo=UTC)
+    assert outcome.window_end == datetime(2026, 5, 1, 12, 30, tzinfo=UTC)
     assert outcome.observed_return == shadow_backtest.strategy_return
     assert outcome.benchmark_return == shadow_backtest.benchmark_return
     assert outcome.max_adverse_excursion == shadow_backtest.max_drawdown
@@ -3372,18 +3394,48 @@ def test_execute_revision_retest_shadow_outcome_derives_observation_from_stored_
     assert result.created_artifact_ids == [outcome.outcome_id]
 
 
+def test_execute_revision_retest_shadow_outcome_rejects_pre_leaderboard_derived_window_without_side_effects(tmp_path):
+    repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+    repository.save_market_candle(_retest_full_window_candle(19, 120))
+    repository.save_market_candle(_retest_full_window_candle(20, 121))
+    repository.save_market_candle(_retest_full_window_candle(21, 122))
+
+    with pytest.raises(ValueError, match="revision_retest_shadow_window_starts_before_leaderboard_entry"):
+        execute_revision_retest_next_task(
+            repository=repository,
+            storage_dir=tmp_path,
+            symbol="BTC-USD",
+            created_at=datetime(2026, 1, 22, tzinfo=UTC),
+            revision_card_id=revision.card_id,
+            shadow_window_start=datetime(2026, 1, 20, tzinfo=UTC),
+            shadow_window_end=datetime(2026, 1, 22, tzinfo=UTC),
+            derive_shadow_returns_from_candles=True,
+        )
+
+    assert not any(
+        result.start == datetime(2026, 1, 20, tzinfo=UTC)
+        and result.end == datetime(2026, 1, 22, tzinfo=UTC)
+        for result in repository.load_backtest_results()
+    )
+    revision_outcomes = [
+        outcome for outcome in repository.load_paper_shadow_outcomes() if outcome.strategy_card_id == revision.card_id
+    ]
+    assert revision_outcomes == []
+
+
 def test_execute_revision_retest_shadow_outcome_rejects_incomplete_derived_candle_window(tmp_path):
     repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+    _seed_post_leaderboard_shadow_candles(repository)
 
     with pytest.raises(ValueError, match="revision_retest_shadow_window_candles_incomplete"):
         execute_revision_retest_next_task(
             repository=repository,
             storage_dir=tmp_path,
             symbol="BTC-USD",
-            created_at=datetime(2026, 1, 10, tzinfo=UTC),
+            created_at=datetime(2026, 5, 1, 12, 30, tzinfo=UTC),
             revision_card_id=revision.card_id,
-            shadow_window_start=datetime(2026, 1, 8, 12, tzinfo=UTC),
-            shadow_window_end=datetime(2026, 1, 10, tzinfo=UTC),
+            shadow_window_start=datetime(2026, 4, 29, 13, 30, tzinfo=UTC),
+            shadow_window_end=datetime(2026, 5, 1, 12, 30, tzinfo=UTC),
             derive_shadow_returns_from_candles=True,
         )
 
@@ -3395,18 +3447,18 @@ def test_execute_revision_retest_shadow_outcome_rejects_incomplete_derived_candl
 
 def test_execute_revision_retest_shadow_outcome_rejects_missing_interior_derived_candle(tmp_path):
     repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
-    repository.save_market_candle(_retest_full_window_candle(19, 120))
-    repository.save_market_candle(_retest_full_window_candle(21, 122))
+    repository.save_market_candle(_post_leaderboard_shadow_candle(0, 120))
+    repository.save_market_candle(_post_leaderboard_shadow_candle(2, 122))
 
     with pytest.raises(ValueError, match="revision_retest_shadow_window_candles_incomplete"):
         execute_revision_retest_next_task(
             repository=repository,
             storage_dir=tmp_path,
             symbol="BTC-USD",
-            created_at=datetime(2026, 1, 22, tzinfo=UTC),
+            created_at=datetime(2026, 5, 1, 12, 30, tzinfo=UTC),
             revision_card_id=revision.card_id,
-            shadow_window_start=datetime(2026, 1, 20, tzinfo=UTC),
-            shadow_window_end=datetime(2026, 1, 22, tzinfo=UTC),
+            shadow_window_start=datetime(2026, 4, 29, 12, 30, tzinfo=UTC),
+            shadow_window_end=datetime(2026, 5, 1, 12, 30, tzinfo=UTC),
             derive_shadow_returns_from_candles=True,
         )
 
@@ -3461,6 +3513,7 @@ def test_cli_execute_revision_retest_shadow_outcome_next_task_outputs_json(tmp_p
 
 def test_cli_execute_revision_retest_shadow_outcome_derives_observation_from_stored_candles(tmp_path, capsys):
     repository, revision, _leaderboard_result = _seed_revision_retest_through_leaderboard(tmp_path)
+    _seed_post_leaderboard_shadow_candles(repository)
 
     assert main(
         [
@@ -3472,11 +3525,11 @@ def test_cli_execute_revision_retest_shadow_outcome_derives_observation_from_sto
             "--symbol",
             "BTC-USD",
             "--now",
-            "2026-01-10T00:00:00+00:00",
+            "2026-05-01T12:30:00+00:00",
             "--shadow-window-start",
-            "2026-01-08T00:00:00+00:00",
+            "2026-04-29T12:30:00+00:00",
             "--shadow-window-end",
-            "2026-01-10T00:00:00+00:00",
+            "2026-05-01T12:30:00+00:00",
             "--derive-shadow-returns-from-candles",
         ]
     ) == 0

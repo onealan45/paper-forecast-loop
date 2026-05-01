@@ -295,6 +295,9 @@ factory:
   parameter, so stale PASSED trials with the same strategy card, trial index,
   status, and seed cannot block a fresh retest chain from advancing to the
   leaderboard gate.
+- PR111 blocks paper-shadow outcome windows that start before the leaderboard
+  entry exists, preventing retest chains from using pre-entry candles or
+  explicit returns as if they were fresh shadow observations.
 - PR61 shows those cross-sample agenda strategy-card links in dashboard and
   operator console, making the root/replacement strategy targets inspectable
   from the research UX without opening raw JSON.

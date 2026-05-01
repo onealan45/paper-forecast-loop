@@ -838,6 +838,9 @@ V1 MVP should include:
 - retest-specific PASSED trial evidence context, so recording a fresh retest
   trial cannot collide with a stale PASSED trial that reused the same strategy
   card, trial index, status, seed, and source-outcome parameters
+- post-leaderboard shadow-window enforcement, so paper-shadow outcomes cannot
+  be recorded from candles or explicit returns that begin before the leaderboard
+  candidate existed
 - dashboard and operator console visibility for those cross-sample agenda
   strategy-card links, so the research UX names the root and replacement
   strategy targets directly

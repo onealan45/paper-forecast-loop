@@ -2145,6 +2145,161 @@ def test_execute_revision_retest_walk_forward_writes_retest_specific_validation_
     assert result.after_plan.next_task_id == "record_passed_retest_trial"
 
 
+def test_execute_revision_retest_passed_trial_writes_evidence_specific_trial_when_stale_trial_id_exists(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    scaffold = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now() + timedelta(hours=1),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 1, 4, tzinfo=UTC),
+        validation_start=datetime(2026, 1, 5, tzinfo=UTC),
+        validation_end=datetime(2026, 1, 7, tzinfo=UTC),
+        holdout_start=datetime(2026, 1, 8, tzinfo=UTC),
+        holdout_end=datetime(2026, 1, 10, tzinfo=UTC),
+    )
+    stale_backtest = BacktestResult(
+        result_id="backtest-result:stale-passed-collision",
+        backtest_id="backtest-run:stale-passed-collision",
+        created_at=_now(),
+        symbol="BTC-USD",
+        start=datetime(2026, 1, 8, tzinfo=UTC),
+        end=datetime(2026, 1, 10, tzinfo=UTC),
+        initial_cash=10_000.0,
+        final_equity=10_500.0,
+        strategy_return=0.05,
+        benchmark_return=0.01,
+        max_drawdown=0.02,
+        sharpe=1.2,
+        turnover=1.0,
+        win_rate=0.6,
+        trade_count=3,
+        equity_curve=[],
+        decision_basis="test-stale-passed-collision",
+    )
+    stale_walk_forward = WalkForwardValidation(
+        validation_id="walk-forward:stale-passed-collision",
+        created_at=_now(),
+        symbol="BTC-USD",
+        start=datetime(2026, 1, 1, tzinfo=UTC),
+        end=datetime(2026, 1, 10, tzinfo=UTC),
+        strategy_name="moving_average_trend",
+        train_size=4,
+        validation_size=3,
+        test_size=3,
+        step_size=1,
+        initial_cash=10_000.0,
+        fee_bps=5.0,
+        slippage_bps=10.0,
+        moving_average_window=3,
+        window_count=1,
+        average_validation_return=0.03,
+        average_test_return=0.04,
+        average_benchmark_return=0.01,
+        average_excess_return=0.03,
+        test_win_rate=1.0,
+        overfit_window_count=0,
+        overfit_risk_flags=[],
+        backtest_result_ids=[stale_backtest.result_id],
+        windows=[],
+        decision_basis="test-stale-passed-collision",
+    )
+    repository.save_backtest_result(stale_backtest)
+    repository.save_walk_forward_validation(stale_walk_forward)
+    stale_trial = record_experiment_trial(
+        repository=repository,
+        created_at=_now(),
+        strategy_card_id=revision.card_id,
+        trial_index=scaffold.experiment_trial.trial_index,
+        status="PASSED",
+        symbol="BTC-USD",
+        max_trials=20,
+        seed=scaffold.experiment_trial.seed,
+        dataset_id=scaffold.experiment_trial.dataset_id,
+        backtest_result_id=stale_backtest.result_id,
+        walk_forward_validation_id=stale_walk_forward.validation_id,
+        parameters={
+            "revision_retest_protocol": RETEST_PROTOCOL_VERSION,
+            "revision_retest_source_card_id": revision.card_id,
+            "revision_source_outcome_id": outcome.outcome_id,
+            "revision_parent_card_id": revision.parent_card_id,
+        },
+        started_at=scaffold.experiment_trial.started_at,
+        completed_at=_now(),
+    )
+    _seed_retest_full_window_candles(repository)
+    repository.save_baseline_evaluation(
+        BaselineEvaluation(
+            baseline_id="baseline:passed-context",
+            created_at=_now(),
+            symbol="BTC-USD",
+            sample_size=10,
+            directional_accuracy=0.7,
+            baseline_accuracy=0.5,
+            model_edge=0.2,
+            recent_score=0.8,
+            evidence_grade="B",
+            forecast_ids=[],
+            score_ids=[],
+            decision_basis="test-baseline",
+        )
+    )
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=_now() + timedelta(hours=2),
+        revision_card_id=revision.card_id,
+    )
+    execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=_now() + timedelta(hours=3),
+        revision_card_id=revision.card_id,
+    )
+    ready_plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+    ready_task_args = ready_plan.task_by_id("record_passed_retest_trial").command_args
+
+    assert ready_task_args is not None
+    context_args = [str(arg) for arg in ready_task_args if str(arg).startswith("revision_retest_evidence_context=")]
+    assert len(context_args) == 1
+    for power_shell_meta in (";", "|", "&", ">", "<", "`", "$", '"', "'"):
+        assert power_shell_meta not in context_args[0]
+    assert context_args[0].startswith("revision_retest_evidence_context=backtest_backtest-result:")
+    assert "__walk_forward_walk-forward:" in context_args[0]
+
+    result = execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=_now() + timedelta(hours=4),
+        revision_card_id=revision.card_id,
+    )
+
+    assert result.executed_task_id == "record_passed_retest_trial"
+    assert result.created_artifact_ids != [stale_trial.trial_id]
+    assert result.after_plan.passed_trial_id == result.created_artifact_ids[0]
+    assert result.after_plan.next_task_id == "evaluate_leaderboard_gate"
+
+
 def test_cli_execute_revision_retest_baseline_next_task_outputs_json(tmp_path, capsys):
     repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
         tmp_path,

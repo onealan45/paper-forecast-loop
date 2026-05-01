@@ -291,6 +291,10 @@ factory:
   retest-specific ID context, so a current replacement/revision retest can
   generate fresh evidence even when generic same-window artifacts already
   exist in storage.
+- PR110 gives executor-recorded PASSED retest trials an evidence-context
+  parameter, so stale PASSED trials with the same strategy card, trial index,
+  status, and seed cannot block a fresh retest chain from advancing to the
+  leaderboard gate.
 - PR61 shows those cross-sample agenda strategy-card links in dashboard and
   operator console, making the root/replacement strategy targets inspectable
   from the research UX without opening raw JSON.

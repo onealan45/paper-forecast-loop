@@ -1112,6 +1112,11 @@ def test_operator_console_surfaces_strategy_research_digest_in_research_and_over
         assert "Walk-forward" in digest_section
         assert "excess -0.09%" in digest_section
         assert "windows 176" in digest_section
+        metric_section = html[html.index("策略證據指標", digest_start) : html.index("<p>證據", digest_start)]
+        assert "&lt;code&gt;" not in metric_section
+        assert "<code>event-edge:visible</code>" in metric_section
+        assert "<code>backtest-result:visible</code>" in metric_section
+        assert "<code>walk-forward:visible</code>" in metric_section
         assert "策略規則摘要" in digest_section
         assert "Digest strategy rules" not in digest_section
         assert "Failure concentration" not in digest_section

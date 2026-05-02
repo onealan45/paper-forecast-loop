@@ -1405,7 +1405,7 @@ def _render_digest_evidence_metrics(evidence: StrategyDigestEvidence | None) -> 
             f"overfit windows {walk_forward.overfit_window_count}；"
             f"flags {escape(', '.join(walk_forward.overfit_risk_flags[:5]) if walk_forward.overfit_risk_flags else 'none')}"
         )
-    return _dashboard_list_block(items, css_class="digest-rule-list")
+    return "<ul class=\"digest-rule-list\">" + "".join(f"<li>{item}</li>" for item in items) + "</ul>"
 
 
 def _render_lineage_research_agenda(agenda: ResearchAgenda | None) -> str:

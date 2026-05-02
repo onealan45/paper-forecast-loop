@@ -1982,18 +1982,18 @@ def _digest_evidence_metrics(evidence: StrategyDigestEvidence | None) -> str:
         edge = evidence.event_edge
         items.append(
             "Event edge "
-            f"{edge.evaluation_id}："
+            f"<code>{escape(edge.evaluation_id)}</code>："
             f"樣本 {edge.sample_n}；"
             f"after-cost edge {_format_signed_pct(edge.average_excess_return_after_costs)}；"
             f"hit-rate {_format_pct(edge.hit_rate)}；"
             f"pass {'是' if edge.passed else '否'}；"
-            f"flags {', '.join(edge.flags[:5]) if edge.flags else 'none'}"
+            f"flags {escape(', '.join(edge.flags[:5]) if edge.flags else 'none')}"
         )
     if evidence.backtest is not None:
         backtest = evidence.backtest
         items.append(
             "Backtest "
-            f"{backtest.result_id}："
+            f"<code>{escape(backtest.result_id)}</code>："
             f"策略 {_format_signed_pct(backtest.strategy_return)}；"
             f"benchmark {_format_pct(backtest.benchmark_return)}；"
             f"max DD {_format_pct(backtest.max_drawdown)}；"
@@ -2004,14 +2004,14 @@ def _digest_evidence_metrics(evidence: StrategyDigestEvidence | None) -> str:
         walk_forward = evidence.walk_forward
         items.append(
             "Walk-forward "
-            f"{walk_forward.validation_id}："
+            f"<code>{escape(walk_forward.validation_id)}</code>："
             f"excess {_format_signed_pct(walk_forward.average_excess_return)}；"
             f"windows {walk_forward.window_count}；"
             f"test win-rate {_format_pct(walk_forward.test_win_rate)}；"
             f"overfit windows {walk_forward.overfit_window_count}；"
-            f"flags {', '.join(walk_forward.overfit_risk_flags[:5]) if walk_forward.overfit_risk_flags else 'none'}"
+            f"flags {escape(', '.join(walk_forward.overfit_risk_flags[:5]) if walk_forward.overfit_risk_flags else 'none')}"
         )
-    return _plain_list(items)
+    return "<ul class=\"conditions\">" + "".join(f"<li>{item}</li>" for item in items) + "</ul>"
 
 
 def _digest_decision_blockers(digest: StrategyResearchDigest) -> str:

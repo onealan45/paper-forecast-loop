@@ -7,7 +7,11 @@ from pathlib import Path
 from forecast_loop.lineage_research_plan import LineageResearchTaskPlan, build_lineage_research_task_plan
 from forecast_loop.models import AutomationRun, ResearchAgenda
 from forecast_loop.storage import ArtifactRepository
-from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS, draft_replacement_strategy_hypothesis
+from forecast_loop.strategy_evolution import (
+    REPLACEMENT_DECISION_BASIS,
+    draft_replacement_strategy_hypothesis,
+    refresh_replacement_strategy_hypothesis,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +55,13 @@ def execute_lineage_research_next_task(
         raise ValueError(f"lineage_research_next_task_not_ready:{task.task_id}:{task.blocked_reason or task.status}")
     if task.task_id == "draft_replacement_strategy_hypothesis":
         created_artifact_ids = _execute_draft_replacement_strategy_hypothesis(
+            repository=repository,
+            plan=before_plan,
+            created_at=created_at,
+            author=author,
+        )
+    elif task.task_id == "refresh_replacement_strategy_hypothesis":
+        created_artifact_ids = _execute_refresh_replacement_strategy_hypothesis(
             repository=repository,
             plan=before_plan,
             created_at=created_at,
@@ -114,6 +125,26 @@ def _execute_draft_replacement_strategy_hypothesis(
         created_at=created_at,
         root_card_id=plan.root_card_id,
         paper_shadow_outcome_id=plan.latest_outcome_id,
+        author=author,
+    )
+    return [result.strategy_card.card_id]
+
+
+def _execute_refresh_replacement_strategy_hypothesis(
+    *,
+    repository: ArtifactRepository,
+    plan: LineageResearchTaskPlan,
+    created_at: datetime,
+    author: str,
+) -> list[str]:
+    task = plan.task_by_id("refresh_replacement_strategy_hypothesis")
+    replacement_card_id = _replacement_card_id_from_refresh_task(task.command_args)
+    if replacement_card_id is None:
+        raise ValueError("lineage_research_replacement_refresh_card_missing")
+    result = refresh_replacement_strategy_hypothesis(
+        repository=repository,
+        created_at=created_at,
+        replacement_card_id=replacement_card_id,
         author=author,
     )
     return [result.strategy_card.card_id]
@@ -226,6 +257,15 @@ def _card_belongs_to_lineage(
             return False
         parent_id = parent.parent_card_id
     return False
+
+
+def _replacement_card_id_from_refresh_task(command_args: list[str] | None) -> str | None:
+    if command_args is None:
+        return None
+    for index, item in enumerate(command_args):
+        if item == "--replacement-card-id" and index + 1 < len(command_args):
+            return command_args[index + 1]
+    return None
 
 
 def _automation_steps(

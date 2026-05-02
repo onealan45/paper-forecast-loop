@@ -949,6 +949,9 @@ V1 MVP should include:
   can be superseded by a failure-aware successor card without rewriting old
   artifacts or pretending older retest evidence was produced under the newer
   rules
+- lineage task-plan and executor support for that refresh path, so automation
+  treats legacy replacement cards as actionable research work instead of
+  silently considering the replacement step complete
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

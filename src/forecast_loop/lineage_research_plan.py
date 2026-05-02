@@ -200,7 +200,7 @@ def _build_tasks(
     tasks = [_agenda_task(agenda, summary)]
     latest_outcome = _latest_outcome(summary.latest_outcome_id, paper_shadow_outcomes)
     if summary.latest_recommended_strategy_action in QUARANTINE_ACTIONS:
-        tasks.append(_replacement_strategy_task(strategy_cards, summary, latest_outcome))
+        tasks.append(_replacement_strategy_task(storage, strategy_cards, summary, latest_outcome))
     elif summary.latest_recommended_strategy_action in REVISION_ACTIONS or summary.performance_verdict in {"惡化", "偏弱"}:
         tasks.append(_revision_task(storage, symbol, strategy_cards, summary, latest_outcome))
     elif summary.performance_verdict in {"改善", "偏強"}:
@@ -282,6 +282,7 @@ def _revision_task(
 
 
 def _replacement_strategy_task(
+    storage: Path | None,
     strategy_cards: list[StrategyCard],
     summary: StrategyLineageSummary,
     latest_outcome: PaperShadowOutcome | None,
@@ -290,6 +291,37 @@ def _replacement_strategy_task(
     outcome_id = latest_outcome.outcome_id if latest_outcome is not None else "latest lineage outcome"
     existing_replacement = _replacement_for_source_outcome(strategy_cards, outcome_id)
     if existing_replacement is not None:
+        if _replacement_needs_failure_aware_refresh(existing_replacement):
+            missing = []
+            if storage is None:
+                missing.append("storage_dir")
+            command = None
+            if storage is not None:
+                command = _base_command() + [
+                    "refresh-replacement-strategy-card",
+                    "--storage-dir",
+                    str(storage),
+                    "--replacement-card-id",
+                    existing_replacement.card_id,
+                ]
+            return LineageResearchTask(
+                task_id="refresh_replacement_strategy_hypothesis",
+                title="Refresh replacement strategy hypothesis",
+                status="ready" if command is not None else "blocked",
+                required_artifact="strategy_card",
+                artifact_id=None,
+                command_args=command,
+                worker_prompt=(
+                    f"Replacement strategy {existing_replacement.card_id} uses the legacy template. "
+                    f"Create a failure-aware successor for {outcome_id} without rewriting old evidence."
+                ),
+                blocked_reason="storage_dir_required" if command is None else None,
+                missing_inputs=missing,
+                rationale=(
+                    "The latest quarantined lineage already has a replacement, "
+                    "but it predates failure-aware replacement rules."
+                ),
+            )
         return LineageResearchTask(
             task_id="draft_replacement_strategy_hypothesis",
             title="Draft replacement strategy hypothesis",
@@ -705,6 +737,10 @@ def _replacement_for_source_outcome(cards: list[StrategyCard], outcome_id: str) 
         and card.parameters.get("replacement_source_outcome_id") == outcome_id
     ]
     return max(matches, key=lambda card: (card.created_at, card.card_id)) if matches else None
+
+
+def _replacement_needs_failure_aware_refresh(card: StrategyCard) -> bool:
+    return not bool(card.parameters.get("replacement_strategy_archetype"))
 
 
 def _base_command() -> list[str]:

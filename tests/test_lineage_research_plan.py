@@ -322,6 +322,59 @@ def test_lineage_research_task_plan_uses_latest_refreshed_replacement_for_source
     assert "already exists" in next_task.worker_prompt
 
 
+def test_lineage_research_task_plan_routes_legacy_replacement_to_refresh_task(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    parent = _card("strategy-card:parent")
+    revision = _revision_card(
+        "strategy-card:revision",
+        parent_card_id=parent.card_id,
+        source_outcome_id="paper-shadow-outcome:parent-fail",
+        failure_attributions=["negative_excess_return"],
+    )
+    legacy = _replacement_card(
+        "strategy-card:legacy-replacement",
+        root_card_id=parent.card_id,
+        source_outcome_id="paper-shadow-outcome:revision-fail",
+    )
+    repository.save_strategy_card(parent)
+    repository.save_strategy_card(revision)
+    repository.save_strategy_card(legacy)
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:parent-fail",
+            card_id=parent.card_id,
+            created_at=now,
+            action="REVISE_STRATEGY",
+            excess=-0.03,
+            attributions=["negative_excess_return"],
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:revision-fail",
+            card_id=revision.card_id,
+            created_at=now + timedelta(hours=1),
+            action="QUARANTINE_STRATEGY",
+            excess=-0.08,
+            attributions=["drawdown_breach"],
+        )
+    )
+    create_lineage_research_agenda(repository=repository, created_at=now, symbol="BTC-USD")
+
+    plan = build_lineage_research_task_plan(repository=repository, storage_dir=tmp_path, symbol="BTC-USD")
+
+    assert plan.next_task_id == "refresh_replacement_strategy_hypothesis"
+    next_task = plan.task_by_id("refresh_replacement_strategy_hypothesis")
+    assert next_task.status == "ready"
+    assert next_task.required_artifact == "strategy_card"
+    assert next_task.artifact_id is None
+    assert next_task.command_args is not None
+    assert "refresh-replacement-strategy-card" in next_task.command_args
+    assert legacy.card_id in next_task.command_args
+    assert "failure-aware" in next_task.worker_prompt
+
+
 def test_lineage_research_task_plan_routes_raw_quarantine_to_replacement_even_if_improved(tmp_path):
     now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
     repository = JsonFileRepository(tmp_path)

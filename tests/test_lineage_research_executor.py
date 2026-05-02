@@ -75,6 +75,39 @@ def _revision_card(card_id: str, *, parent_card_id: str, source_outcome_id: str)
     )
 
 
+def _legacy_replacement_card(card_id: str, *, root_card_id: str, source_outcome_id: str) -> StrategyCard:
+    base = _card(card_id, status="DRAFT")
+    return StrategyCard(
+        card_id=base.card_id,
+        created_at=base.created_at + timedelta(hours=2),
+        strategy_name=f"Replacement for {root_card_id}",
+        strategy_family=base.strategy_family,
+        version="v1.replacement1",
+        status=base.status,
+        symbols=base.symbols,
+        hypothesis="Legacy replacement template before failure-aware rules existed.",
+        signal_description="Legacy replacement signal.",
+        entry_rules=["Research a replacement hypothesis."],
+        exit_rules=["Exit when invalidated."],
+        risk_rules=["Retest before promotion."],
+        parameters={
+            "replacement_source_lineage_root_card_id": root_card_id,
+            "replacement_source_outcome_id": source_outcome_id,
+            "replacement_failure_attributions": ["drawdown_breach"],
+            "replacement_required_research": ["locked_backtest", "walk_forward", "paper_shadow"],
+            "replacement_not_child_revision": True,
+        },
+        data_requirements=base.data_requirements,
+        feature_snapshot_ids=base.feature_snapshot_ids,
+        backtest_result_ids=base.backtest_result_ids,
+        walk_forward_validation_ids=base.walk_forward_validation_ids,
+        event_edge_evaluation_ids=base.event_edge_evaluation_ids,
+        parent_card_id=None,
+        author=base.author,
+        decision_basis="lineage_replacement_strategy_hypothesis",
+    )
+
+
 def _outcome(
     outcome_id: str,
     *,
@@ -242,6 +275,42 @@ def test_execute_lineage_research_next_task_handles_missing_adverse_excursion_me
     )
     assert replacement.parameters["max_position_multiplier"] == 0.5
     assert "max_adverse_excursion_limit" not in replacement.parameters
+
+
+def test_execute_lineage_research_next_task_refreshes_legacy_replacement_strategy_card(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_quarantined_lineage(repository, now)
+    legacy = _legacy_replacement_card(
+        "strategy-card:legacy-replacement",
+        root_card_id="strategy-card:parent",
+        source_outcome_id="paper-shadow-outcome:revision-fail",
+    )
+    repository.save_strategy_card(legacy)
+
+    result = execute_lineage_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(hours=4),
+    )
+
+    refreshed = next(card for card in repository.load_strategy_cards() if card.card_id == result.created_artifact_ids[0])
+    assert result.executed_task_id == "refresh_replacement_strategy_hypothesis"
+    assert result.before_plan.next_task_id == "refresh_replacement_strategy_hypothesis"
+    assert result.after_plan.next_task_id is None
+    assert result.after_plan.task_by_id("draft_replacement_strategy_hypothesis").artifact_id == refreshed.card_id
+    assert refreshed.card_id != legacy.card_id
+    assert refreshed.parameters["replacement_refresh_source_card_id"] == legacy.card_id
+    assert refreshed.parameters["replacement_strategy_archetype"] == "drawdown_controlled_edge_rebuild"
+    assert refreshed.backtest_result_ids == []
+    assert refreshed.walk_forward_validation_ids == []
+    assert any(
+        step["name"] == "refresh_replacement_strategy_hypothesis"
+        and step["status"] == "executed"
+        and step["artifact_id"] == refreshed.card_id
+        for step in result.automation_run.steps
+    )
 
 
 def test_execute_lineage_research_next_task_rejects_non_replacement_task(tmp_path):

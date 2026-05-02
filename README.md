@@ -1526,10 +1526,13 @@ Execute the next supported lineage research task:
 python run_forecast_loop.py execute-lineage-research-next-task --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD --now 2026-04-30T13:00:00+00:00
 ```
 
-This currently executes two lineage tasks. For quarantined lineages it executes
+This currently executes three lineage tasks. For quarantined lineages it executes
 `draft_replacement_strategy_hypothesis`, creating an idempotent DRAFT
 replacement `strategy_cards.jsonl` row linked to the quarantined lineage root
-and latest paper-shadow outcome. For improving lineages it executes
+and latest paper-shadow outcome. If a replacement already exists but predates
+failure-aware rules, it executes `refresh_replacement_strategy_hypothesis`,
+creating an append-only successor card before retest work continues. For
+improving lineages it executes
 `verify_cross_sample_persistence`, creating a
 `lineage_cross_sample_validation_agenda` in `research_agendas.jsonl` so the next
 research worker has an explicit fresh-sample validation handoff. It records an

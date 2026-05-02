@@ -1001,6 +1001,18 @@ V1 MVP should include:
   ready event-edge evaluation plan can become evidence plus an automation-run
   audit trail while unsupported backtest and walk-forward execution remain
   fail-closed instead of pretending progress happened
+- market-derived event generation, so same-symbol stored candle moves can seed
+  event-edge research while broader source ingestion is still maturing
+- deterministic `--as-of` replay for backtest and walk-forward research
+  commands, so decision-blocker evidence is evaluated from the plan-time candle
+  set instead of later-imported revisions
+- strategy research digest blocker-evidence metrics, so the latest same-symbol
+  event-edge, backtest, and walk-forward sample/return/edge/overfit metrics are
+  visible in the digest, dashboard, and operator console alongside their
+  artifact ids
+- point-in-time digest construction, so strategy chain, latest decision, and
+  metric evidence created after the digest timestamp are not leaked into
+  backdated research summaries
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,
@@ -1042,6 +1054,9 @@ V1 should be considered product-ready for internal iteration only when:
 - the system can execute a supported decision-blocker evidence task when the
   task plan is ready, and can refuse unsupported or under-specified research
   tasks without pretending progress happened
+- strategy research digests show the latest same-symbol event-edge, backtest,
+  and walk-forward evidence that helps inspect BUY/SELL blockers without
+  leaking future artifacts into backdated summaries
 - blocking storage, ingestion, or provider problems create repair requests
 - the system can fail safely and fall back to development mode
 - the UI can present strategy logic, prediction rationale, backtests, revisions,

@@ -466,6 +466,23 @@ factory:
 - PR140 adds a read-only `decision-blocker-research-plan` so those agendas turn
   into prioritized next research tasks and safe command arguments instead of
   remaining unstructured work items.
+- PR141 executes the first supported decision-blocker research task, building a
+  ready event-edge evaluation and recording an automation-run audit trail while
+  unsupported tasks remain fail-closed.
+- PR142 makes event-edge task planning wait for exact prerequisite coverage, so
+  missing source events, reactions, or forward candles become explicit blocked
+  task state instead of weak evidence.
+- PR143 adds market-derived events so same-symbol stored candle moves can seed
+  event-edge research when external event sources are not yet rich enough.
+- PR144 and PR145 make decision-blocker walk-forward/backtest planning emit
+  concrete commands only when stored candles cover the required evidence
+  window.
+- PR146 and PR147 add `--as-of` replay to backtest and walk-forward, so planned
+  research commands use the plan-time candle set and ignore later revisions.
+- PR148 enriches the strategy research digest with latest same-symbol
+  event-edge, backtest, and walk-forward metrics, and keeps the whole digest
+  point-in-time by filtering chain, decision, and evidence inputs to the digest
+  timestamp.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -1521,6 +1538,13 @@ next research rationale, and a compact `strategy_rule_summary` list for the
 current hypothesis / signal / entry / exit / risk logic. It is the
 machine-readable handoff for strategy learning loops; it does not execute the
 strategy, mutate cards, or place orders.
+
+The digest also appends the latest same-symbol event-edge, backtest, and
+walk-forward evidence available at digest time. These metrics include sample
+size, after-cost edge, strategy versus benchmark return, drawdown, win rate,
+walk-forward excess return, overfit flags, and the artifact ids used as
+evidence. The digest is point-in-time: strategy chain inputs, latest decision,
+and metric evidence created after the digest timestamp are ignored.
 
 `run-once --also-decide` also refreshes this digest when the storage already
 contains strategy research artifacts for the requested symbol. Fresh storage

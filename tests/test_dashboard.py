@@ -11,9 +11,11 @@ from forecast_loop.lineage_research_executor import execute_lineage_research_nex
 from forecast_loop.lineage_research_run_log import record_lineage_research_task_run
 from forecast_loop.models import (
     AutomationRun,
+    BacktestResult,
     BaselineEvaluation,
     BrokerOrder,
     BrokerReconciliation,
+    EventEdgeEvaluation,
     SplitManifest,
     ExecutionSafetyGate,
     ExperimentTrial,
@@ -35,6 +37,8 @@ from forecast_loop.models import (
     StrategyCard,
     StrategyDecision,
     StrategyResearchDigest,
+    WalkForwardValidation,
+    WalkForwardWindow,
 )
 from forecast_loop.revision_retest_executor import execute_revision_retest_next_task
 from forecast_loop.storage import JsonFileRepository
@@ -209,6 +213,104 @@ def _seed_dashboard_strategy_research(repository: JsonFileRepository, now: datet
 
 
 def _seed_dashboard_strategy_research_digest(repository: JsonFileRepository, now: datetime) -> None:
+    repository.save_event_edge_evaluation(
+        EventEdgeEvaluation(
+            evaluation_id="event-edge:dashboard-visible",
+            event_family="crypto_flow",
+            event_type="CRYPTO_FLOW",
+            symbol="BTC-USD",
+            created_at=now,
+            split="historical_event_sample",
+            horizon_hours=24,
+            sample_n=2,
+            average_forward_return=-0.02,
+            average_benchmark_return=-0.008,
+            average_excess_return_after_costs=-0.011366,
+            hit_rate=0.0,
+            max_adverse_excursion_p50=-0.03,
+            max_adverse_excursion_p90=-0.05,
+            max_drawdown_if_traded=-0.09,
+            turnover=2.0,
+            estimated_cost_bps=15.0,
+            dsr=None,
+            white_rc_p=None,
+            stability_score=None,
+            passed=False,
+            blocked_reason="non_positive_after_cost_edge",
+            flags=["insufficient_sample_size", "non_positive_after_cost_edge"],
+        )
+    )
+    repository.save_backtest_result(
+        BacktestResult(
+            result_id="backtest-result:dashboard-visible",
+            backtest_id="backtest-run:dashboard-visible",
+            created_at=now,
+            symbol="BTC-USD",
+            start=now - timedelta(days=30),
+            end=now,
+            initial_cash=10_000,
+            final_equity=9_128,
+            strategy_return=-0.0872,
+            benchmark_return=0.0102,
+            max_drawdown=0.0921,
+            sharpe=-3.108,
+            turnover=0.75,
+            win_rate=0.214,
+            trade_count=14,
+            equity_curve=[],
+            decision_basis="test",
+        )
+    )
+    repository.save_walk_forward_validation(
+        WalkForwardValidation(
+            validation_id="walk-forward:dashboard-visible",
+            created_at=now,
+            symbol="BTC-USD",
+            start=now - timedelta(days=20),
+            end=now,
+            strategy_name="moving_average_trend",
+            train_size=120,
+            validation_size=96,
+            test_size=216,
+            step_size=24,
+            initial_cash=10_000,
+            fee_bps=5,
+            slippage_bps=10,
+            moving_average_window=24,
+            window_count=176,
+            average_validation_return=-0.001,
+            average_test_return=-0.000834,
+            average_benchmark_return=0.000096,
+            average_excess_return=-0.000930657,
+            test_win_rate=0.0,
+            overfit_window_count=108,
+            overfit_risk_flags=["aggregate_underperforms_benchmark"],
+            backtest_result_ids=["backtest-result:dashboard-visible"],
+            windows=[
+                WalkForwardWindow(
+                    window_id="walk-forward:dashboard-visible:window",
+                    train_start=now - timedelta(days=20),
+                    train_end=now - timedelta(days=15),
+                    validation_start=now - timedelta(days=14),
+                    validation_end=now - timedelta(days=10),
+                    test_start=now - timedelta(days=9),
+                    test_end=now,
+                    train_candle_count=120,
+                    validation_candle_count=96,
+                    test_candle_count=216,
+                    validation_backtest_result_id="backtest-result:dashboard-visible",
+                    test_backtest_result_id="backtest-result:dashboard-visible",
+                    validation_return=-0.001,
+                    test_return=-0.000834,
+                    benchmark_return=0.000096,
+                    excess_return=-0.000930657,
+                    overfit_flags=["aggregate_underperforms_benchmark"],
+                    decision_basis="test",
+                )
+            ],
+            decision_basis="test",
+        )
+    )
     repository.save_strategy_research_digest(
         StrategyResearchDigest(
             digest_id="strategy-research-digest:dashboard-visible",
@@ -1220,6 +1322,16 @@ def test_dashboard_surfaces_strategy_research_digest_summary(tmp_path):
     assert "walk-forward overfit risk" in digest_section
     assert "<dt>下一步理由</dt>" in digest_section
     assert "<dt>策略規則摘要</dt>" in digest_section
+    assert "<dt>策略證據指標</dt>" in digest_section
+    assert "Event edge" in digest_section
+    assert "樣本 2" in digest_section
+    assert "after-cost edge -1.14%" in digest_section
+    assert "Backtest" in digest_section
+    assert "策略 -8.72%" in digest_section
+    assert "benchmark 1.02%" in digest_section
+    assert "Walk-forward" in digest_section
+    assert "excess -0.09%" in digest_section
+    assert "windows 176" in digest_section
     assert "Digest strategy rules" not in digest_section
     assert "Failure concentration" not in digest_section
     rules_start = html.index("策略規則摘要")

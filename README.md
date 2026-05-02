@@ -483,6 +483,9 @@ factory:
   event-edge, backtest, and walk-forward metrics, and keeps the whole digest
   point-in-time by filtering chain, decision, and evidence inputs to the digest
   timestamp.
+- PR150 renders those digest metrics as structured read-only evidence cards in
+  the dashboard and operator console, so event-edge, backtest, and
+  walk-forward results can be scanned without parsing a long summary sentence.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -1545,6 +1548,10 @@ size, after-cost edge, strategy versus benchmark return, drawdown, win rate,
 walk-forward excess return, overfit flags, and the artifact ids used as
 evidence. The digest is point-in-time: strategy chain inputs, latest decision,
 and metric evidence created after the digest timestamp are ignored.
+
+Dashboard and operator console render the same linked evidence as structured
+read-only cards. This is display-only; the cards do not change strategy gates,
+mutate artifacts, or promote a strategy.
 
 `run-once --also-decide` also refreshes this digest when the storage already
 contains strategy research artifacts for the requested symbol. Fresh storage

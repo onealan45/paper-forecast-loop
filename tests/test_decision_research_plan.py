@@ -129,6 +129,26 @@ def _save_single_candle(repository: JsonFileRepository, *, timestamp: datetime, 
     )
 
 
+def _save_walk_forward_candles(repository: JsonFileRepository, *, start: datetime, count: int) -> None:
+    for index in range(count):
+        close = 100.0 + index
+        repository.save_market_candle(
+            MarketCandleRecord.from_candle(
+                MarketCandle(
+                    timestamp=start + timedelta(hours=index),
+                    open=close,
+                    high=close + 1.0,
+                    low=close - 1.0,
+                    close=close,
+                    volume=1_000.0 + index,
+                ),
+                symbol="BTC-USD",
+                source="planner-walk-forward-fixture",
+                imported_at=datetime(2026, 5, 1, 12, 0, tzinfo=UTC),
+            )
+        )
+
+
 def _seed_event_edge_prerequisites(repository: JsonFileRepository) -> None:
     event = _event(1)
     repository.save_canonical_event(event)
@@ -280,7 +300,57 @@ def test_decision_blocker_research_plan_blocks_walk_forward_without_window(tmp_p
     assert task.status == "blocked"
     assert task.command_args is None
     assert task.blocked_reason == "missing_walk_forward_window"
-    assert task.missing_inputs == ["start", "end"]
+    assert task.missing_inputs == ["market_candles"]
+
+
+def test_decision_blocker_research_plan_emits_walk_forward_command_when_candles_cover_window(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
+    candle_start = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    agenda = _agenda(
+        agenda_id="research-agenda:walk-forward-ready",
+        created_at=now,
+        expected_artifacts=["strategy_decision", "research_dataset", "walk_forward_validation"],
+        hypothesis="Latest decision decision:blocked is HOLD because walk-forward overfit risk.",
+    )
+    repository.save_research_agenda(agenda)
+    _save_walk_forward_candles(repository, start=candle_start, count=12)
+
+    plan = build_decision_blocker_research_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=now,
+    )
+
+    assert plan.next_task_id == "run_walk_forward_validation"
+    task = plan.task_by_id("run_walk_forward_validation")
+    assert task.status == "ready"
+    assert task.blocked_reason is None
+    assert task.missing_inputs == []
+    assert task.command_args == [
+        "python",
+        "run_forecast_loop.py",
+        "walk-forward",
+        "--storage-dir",
+        str(tmp_path),
+        "--symbol",
+        "BTC-USD",
+        "--start",
+        "2026-05-01T00:00:00+00:00",
+        "--end",
+        "2026-05-01T11:00:00+00:00",
+        "--created-at",
+        "2026-05-02T09:00:00+00:00",
+        "--train-size",
+        "4",
+        "--validation-size",
+        "3",
+        "--test-size",
+        "3",
+        "--step-size",
+        "1",
+    ]
 
 
 def test_decision_blocker_research_plan_cli_outputs_json(tmp_path, capsys):

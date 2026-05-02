@@ -1567,9 +1567,11 @@ task. Event-edge blockers produce a directly runnable `build-event-edge` command
 only when the storage already has same-symbol canonical events, passed market
 reaction checks, and exact event/horizon market candles that can produce at
 least one event-edge sample. If those inputs are missing, the task is blocked
-with explicit missing inputs instead of pretending it can execute. Backtest and
-walk-forward blockers remain explicit blocked tasks until the operator or future
-executor supplies safe `start` / `end` windows.
+with explicit missing inputs instead of pretending it can execute. Backtest
+blockers remain explicit blocked tasks until a safe windowing policy exists.
+Walk-forward blockers emit a conservative `walk-forward` command when stored
+same-symbol candles cover at least the minimum rolling validation window;
+otherwise they stay blocked with `market_candles` as the missing input.
 
 Create market-derived event inputs from stored candles:
 
@@ -1595,8 +1597,8 @@ executes only a ready `build_event_edge_evaluation` task. It writes the
 event-edge evaluation artifact and records an `AutomationRun` with the before
 and after task plans. If the next task is blocked, unsupported, or produces no
 artifact, the command fails with an operator-readable error instead of treating
-the research loop as complete. It does not run backtests, choose walk-forward
-windows, mutate strategies, place orders, or call broker/exchange adapters.
+the research loop as complete. It does not run backtests, trigger walk-forward
+execution, mutate strategies, place orders, or call broker/exchange adapters.
 
 Turn that lineage agenda into a machine-readable next research task:
 

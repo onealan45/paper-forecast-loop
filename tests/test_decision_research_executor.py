@@ -114,6 +114,27 @@ def _save_event_candles(repository: JsonFileRepository, event: CanonicalEvent, *
         )
 
 
+def _save_walk_forward_candles(repository: JsonFileRepository, *, start: datetime, count: int) -> None:
+    imported_at = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
+    for index in range(count):
+        close = 100.0 + index
+        repository.save_market_candle(
+            MarketCandleRecord.from_candle(
+                MarketCandle(
+                    timestamp=start + timedelta(hours=index),
+                    open=close,
+                    high=close + 1.0,
+                    low=close - 1.0,
+                    close=close,
+                    volume=1_000.0 + index,
+                ),
+                symbol="BTC-USD",
+                source="executor-walk-forward-fixture",
+                imported_at=imported_at,
+            )
+        )
+
+
 def _seed_event_edge_inputs(repository: JsonFileRepository) -> None:
     for index, forward_return in enumerate([0.04, 0.03, 0.02], start=1):
         event = _event(index)
@@ -171,6 +192,29 @@ def test_execute_decision_blocker_research_next_task_rejects_blocked_walk_forwar
             symbol="BTC-USD",
             created_at=created_at,
         )
+
+
+def test_execute_decision_blocker_research_next_task_rejects_ready_but_unsupported_walk_forward(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    created_at = datetime(2026, 5, 2, 10, 0, tzinfo=UTC)
+    repository.save_research_agenda(
+        _agenda(
+            created_at=created_at,
+            expected_artifacts=["strategy_decision", "walk_forward_validation"],
+            hypothesis="Latest decision decision:blocker is HOLD because walk-forward overfit risk.",
+        )
+    )
+    _save_walk_forward_candles(repository, start=datetime(2026, 5, 1, 0, 0, tzinfo=UTC), count=12)
+
+    with pytest.raises(ValueError, match="unsupported_decision_blocker_research_task_execution:run_walk_forward_validation"):
+        execute_decision_blocker_research_next_task(
+            repository=repository,
+            storage_dir=tmp_path,
+            symbol="BTC-USD",
+            created_at=created_at,
+        )
+
+    assert repository.load_automation_runs() == []
 
 
 def test_execute_decision_blocker_research_next_task_rejects_execution_before_agenda(tmp_path):

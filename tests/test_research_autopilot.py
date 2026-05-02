@@ -4595,6 +4595,240 @@ def test_health_check_flags_research_autopilot_link_errors(tmp_path):
     assert "research_autopilot_run_missing_paper_shadow_outcome" in codes
 
 
+def test_health_check_flags_retest_passed_trial_with_cross_card_evidence_context(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    scaffold = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now() + timedelta(hours=1),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 1, 4, tzinfo=UTC),
+        validation_start=datetime(2026, 1, 5, tzinfo=UTC),
+        validation_end=datetime(2026, 1, 7, tzinfo=UTC),
+        holdout_start=datetime(2026, 1, 8, tzinfo=UTC),
+        holdout_end=datetime(2026, 1, 10, tzinfo=UTC),
+    )
+    _seed_retest_full_window_candles(repository)
+    alien_context = "revision_retest:other-card:other-trial:other-source-outcome"
+    alien_backtest = run_backtest(
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        start=datetime(2026, 1, 8, tzinfo=UTC),
+        end=datetime(2026, 1, 10, tzinfo=UTC),
+        created_at=_now() + timedelta(hours=2),
+        id_context=alien_context,
+    ).result
+    alien_walk_forward = run_walk_forward_validation(
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        start=datetime(2026, 1, 1, tzinfo=UTC),
+        end=datetime(2026, 1, 10, tzinfo=UTC),
+        created_at=_now() + timedelta(hours=2, minutes=15),
+        id_context=alien_context,
+    ).validation
+    linked_alien_walk_forward = replace(
+        alien_walk_forward,
+        validation_id="walk-forward:health-alien-linked-to-holdout",
+        created_at=_now() + timedelta(hours=2, minutes=30),
+        backtest_result_ids=[*alien_walk_forward.backtest_result_ids, alien_backtest.result_id],
+    )
+    repository.save_walk_forward_validation(linked_alien_walk_forward)
+    record_experiment_trial(
+        repository=repository,
+        created_at=_now() + timedelta(hours=3),
+        strategy_card_id=revision.card_id,
+        trial_index=scaffold.experiment_trial.trial_index + 1,
+        status="PASSED",
+        symbol="BTC-USD",
+        max_trials=20,
+        seed=8,
+        dataset_id=scaffold.experiment_trial.dataset_id,
+        backtest_result_id=alien_backtest.result_id,
+        walk_forward_validation_id=linked_alien_walk_forward.validation_id,
+        parameters={
+            "revision_retest_protocol": RETEST_PROTOCOL_VERSION,
+            "revision_retest_source_card_id": revision.card_id,
+            "revision_source_outcome_id": outcome.outcome_id,
+        },
+        started_at=_now() + timedelta(hours=1),
+        completed_at=_now() + timedelta(hours=3),
+    )
+
+    health = run_health_check(storage_dir=tmp_path, symbol="BTC-USD", now=_now(), create_repair_request=False)
+    codes = {finding.code for finding in health.findings}
+
+    assert "revision_retest_passed_trial_backtest_context_mismatch" in codes
+    assert "revision_retest_passed_trial_walk_forward_context_mismatch" in codes
+
+
+def test_health_check_flags_retest_passed_trial_with_missing_source_context(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    scaffold = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now() + timedelta(hours=1),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 1, 4, tzinfo=UTC),
+        validation_start=datetime(2026, 1, 5, tzinfo=UTC),
+        validation_end=datetime(2026, 1, 7, tzinfo=UTC),
+        holdout_start=datetime(2026, 1, 8, tzinfo=UTC),
+        holdout_end=datetime(2026, 1, 10, tzinfo=UTC),
+    )
+    _seed_retest_full_window_candles(repository)
+    backtest = run_backtest(
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        start=datetime(2026, 1, 8, tzinfo=UTC),
+        end=datetime(2026, 1, 10, tzinfo=UTC),
+        created_at=_now() + timedelta(hours=2),
+        id_context="revision_retest:missing-source:trial:source",
+    ).result
+    walk_forward = run_walk_forward_validation(
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        start=datetime(2026, 1, 1, tzinfo=UTC),
+        end=datetime(2026, 1, 10, tzinfo=UTC),
+        created_at=_now() + timedelta(hours=2, minutes=15),
+        id_context="revision_retest:missing-source:trial:source",
+    ).validation
+    linked_walk_forward = replace(
+        walk_forward,
+        validation_id="walk-forward:missing-source-linked-to-holdout",
+        created_at=_now() + timedelta(hours=2, minutes=30),
+        backtest_result_ids=[*walk_forward.backtest_result_ids, backtest.result_id],
+    )
+    repository.save_walk_forward_validation(linked_walk_forward)
+    record_experiment_trial(
+        repository=repository,
+        created_at=_now() + timedelta(hours=3),
+        strategy_card_id=revision.card_id,
+        trial_index=scaffold.experiment_trial.trial_index + 1,
+        status="PASSED",
+        symbol="BTC-USD",
+        max_trials=20,
+        seed=8,
+        dataset_id=scaffold.experiment_trial.dataset_id,
+        backtest_result_id=backtest.result_id,
+        walk_forward_validation_id=linked_walk_forward.validation_id,
+        parameters={
+            "revision_retest_protocol": RETEST_PROTOCOL_VERSION,
+            "revision_retest_source_card_id": revision.card_id,
+        },
+        started_at=_now() + timedelta(hours=1),
+        completed_at=_now() + timedelta(hours=3),
+    )
+
+    health = run_health_check(storage_dir=tmp_path, symbol="BTC-USD", now=_now(), create_repair_request=False)
+    codes = {finding.code for finding in health.findings}
+
+    assert "revision_retest_passed_trial_context_unverifiable" in codes
+
+
+def test_health_check_requires_exact_retest_id_context_match(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    scaffold = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now() + timedelta(hours=1),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 1, 4, tzinfo=UTC),
+        validation_start=datetime(2026, 1, 5, tzinfo=UTC),
+        validation_end=datetime(2026, 1, 7, tzinfo=UTC),
+        holdout_start=datetime(2026, 1, 8, tzinfo=UTC),
+        holdout_end=datetime(2026, 1, 10, tzinfo=UTC),
+    )
+    _seed_retest_full_window_candles(repository)
+    source_context = (
+        f"revision_retest:{scaffold.experiment_trial.strategy_card_id}:"
+        f"{scaffold.experiment_trial.trial_id}:{outcome.outcome_id}"
+    )
+    backtest = run_backtest(
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        start=datetime(2026, 1, 8, tzinfo=UTC),
+        end=datetime(2026, 1, 10, tzinfo=UTC),
+        created_at=_now() + timedelta(hours=2),
+        id_context=f"{source_context}-extra",
+    ).result
+    walk_forward = run_walk_forward_validation(
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        start=datetime(2026, 1, 1, tzinfo=UTC),
+        end=datetime(2026, 1, 10, tzinfo=UTC),
+        created_at=_now() + timedelta(hours=2, minutes=15),
+        id_context=f"{source_context}-extra",
+    ).validation
+    linked_walk_forward = replace(
+        walk_forward,
+        validation_id="walk-forward:context-prefix-linked-to-holdout",
+        created_at=_now() + timedelta(hours=2, minutes=30),
+        backtest_result_ids=[*walk_forward.backtest_result_ids, backtest.result_id],
+    )
+    repository.save_walk_forward_validation(linked_walk_forward)
+    record_experiment_trial(
+        repository=repository,
+        created_at=_now() + timedelta(hours=3),
+        strategy_card_id=revision.card_id,
+        trial_index=scaffold.experiment_trial.trial_index,
+        status="PASSED",
+        symbol="BTC-USD",
+        max_trials=20,
+        seed=8,
+        dataset_id=scaffold.experiment_trial.dataset_id,
+        backtest_result_id=backtest.result_id,
+        walk_forward_validation_id=linked_walk_forward.validation_id,
+        parameters={
+            "revision_retest_protocol": RETEST_PROTOCOL_VERSION,
+            "revision_retest_source_card_id": revision.card_id,
+            "revision_source_outcome_id": outcome.outcome_id,
+        },
+        started_at=_now() + timedelta(hours=1),
+        completed_at=_now() + timedelta(hours=3),
+    )
+
+    health = run_health_check(storage_dir=tmp_path, symbol="BTC-USD", now=_now(), create_repair_request=False)
+    codes = {finding.code for finding in health.findings}
+
+    assert "revision_retest_passed_trial_backtest_context_mismatch" in codes
+    assert "revision_retest_passed_trial_walk_forward_context_mismatch" in codes
+
+
 def test_health_check_flags_research_autopilot_mismatched_chain(tmp_path):
     repository, card, trial, evaluation, entry, decision, outcome = _seed_repository(tmp_path)
     other_card = _strategy_card(_now())

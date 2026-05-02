@@ -415,6 +415,7 @@ def main(argv: list[str] | None = None) -> int:
     walk_forward_cmd.add_argument("--start", required=True)
     walk_forward_cmd.add_argument("--end", required=True)
     walk_forward_cmd.add_argument("--created-at")
+    walk_forward_cmd.add_argument("--as-of")
     walk_forward_cmd.add_argument("--train-size", type=int, default=4)
     walk_forward_cmd.add_argument("--validation-size", type=int, default=3)
     walk_forward_cmd.add_argument("--test-size", type=int, default=3)
@@ -1984,6 +1985,7 @@ def _backtest(args) -> int:
 
 def _walk_forward(args) -> int:
     created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
+    as_of = _parse_datetime(args.as_of) if args.as_of else None
     result = run_walk_forward_validation(
         storage_dir=args.storage_dir,
         symbol=args.symbol,
@@ -1998,6 +2000,7 @@ def _walk_forward(args) -> int:
         fee_bps=args.fee_bps,
         slippage_bps=args.slippage_bps,
         moving_average_window=args.moving_average_window,
+        as_of=as_of,
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0

@@ -30,6 +30,128 @@ def _seed_candles(repository: JsonFileRepository, closes: list[float]) -> None:
         repository.save_market_candle(_candle(index, close))
 
 
+def test_cli_walk_forward_asof_uses_plan_time_candles_and_ignores_later_revisions(tmp_path, capsys):
+    repository = JsonFileRepository(tmp_path)
+    plan_time = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    _seed_candles(repository, [100, 102, 104, 101, 103, 106, 105, 107, 109])
+    later_revision = _candle(8, 999)
+    later_revision.candle_id = "market-candle:wf:late-revision"
+    later_revision.imported_at = plan_time + timedelta(hours=1)
+    repository.save_market_candle(later_revision)
+
+    exit_code = main(
+        [
+            "walk-forward",
+            "--storage-dir",
+            str(tmp_path),
+            "--symbol",
+            "BTC-USD",
+            "--start",
+            "2026-04-01T00:00:00+00:00",
+            "--end",
+            "2026-04-09T00:00:00+00:00",
+            "--created-at",
+            "2026-04-24T12:30:00+00:00",
+            "--as-of",
+            "2026-04-24T12:00:00+00:00",
+            "--train-size",
+            "3",
+            "--validation-size",
+            "3",
+            "--test-size",
+            "3",
+            "--step-size",
+            "3",
+            "--moving-average-window",
+            "2",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["validation"]["window_count"] == 1
+    assert payload["validation"]["decision_basis"].endswith("; as_of=2026-04-24T12:00:00+00:00")
+    for run in repository.load_backtest_runs():
+        assert "market-candle:wf:late-revision" not in run.candle_ids
+        assert "as_of=2026-04-24T12:00:00+00:00" in run.decision_basis
+
+
+def test_cli_walk_forward_asof_uses_latest_revision_imported_before_asof(tmp_path, capsys):
+    repository = JsonFileRepository(tmp_path)
+    plan_time = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    _seed_candles(repository, [100, 102, 104, 101, 103, 106, 105, 107, 109])
+    before_asof_revision = _candle(8, 111)
+    before_asof_revision.candle_id = "market-candle:wf:before-asof-revision"
+    before_asof_revision.imported_at = plan_time - timedelta(minutes=5)
+    repository.save_market_candle(before_asof_revision)
+
+    exit_code = main(
+        [
+            "walk-forward",
+            "--storage-dir",
+            str(tmp_path),
+            "--symbol",
+            "BTC-USD",
+            "--start",
+            "2026-04-01T00:00:00+00:00",
+            "--end",
+            "2026-04-09T00:00:00+00:00",
+            "--created-at",
+            "2026-04-24T12:30:00+00:00",
+            "--as-of",
+            "2026-04-24T12:00:00+00:00",
+            "--train-size",
+            "3",
+            "--validation-size",
+            "3",
+            "--test-size",
+            "3",
+            "--step-size",
+            "3",
+            "--moving-average-window",
+            "2",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    backtest_runs = repository.load_backtest_runs()
+
+    assert exit_code == 0
+    assert payload["validation"]["window_count"] == 1
+    assert any("market-candle:wf:before-asof-revision" in run.candle_ids for run in backtest_runs)
+    assert not any("market-candle:wf:8" in run.candle_ids for run in backtest_runs)
+
+
+def test_cli_walk_forward_asof_rejects_window_after_asof(tmp_path, capsys):
+    repository = JsonFileRepository(tmp_path)
+    _seed_candles(repository, [100, 102, 104, 101, 103, 106])
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "walk-forward",
+                "--storage-dir",
+                str(tmp_path),
+                "--start",
+                "2026-04-01T00:00:00+00:00",
+                "--end",
+                "2026-04-06T00:00:00+00:00",
+                "--as-of",
+                "2026-04-05T00:00:00+00:00",
+                "--train-size",
+                "2",
+                "--validation-size",
+                "2",
+                "--test-size",
+                "2",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 2
+    assert "walk-forward end must be <= as_of" in captured.err
+    assert "Traceback" not in captured.err
+
+
 def test_cli_walk_forward_writes_windows_metrics_and_artifacts(tmp_path, capsys):
     repository = JsonFileRepository(tmp_path)
     _seed_candles(repository, [100, 102, 104, 101, 103, 106, 105, 107, 109, 108, 110, 111])

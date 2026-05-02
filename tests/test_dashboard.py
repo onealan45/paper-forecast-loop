@@ -1332,6 +1332,11 @@ def test_dashboard_surfaces_strategy_research_digest_summary(tmp_path):
     assert "Walk-forward" in digest_section
     assert "excess -0.09%" in digest_section
     assert "windows 176" in digest_section
+    metric_section = html[html.index("<dt>策略證據指標</dt>", digest_start) : html.index("<dt>證據</dt>", digest_start)]
+    assert "&lt;code&gt;" not in metric_section
+    assert "<code>event-edge:dashboard-visible</code>" in metric_section
+    assert "<code>backtest-result:dashboard-visible</code>" in metric_section
+    assert "<code>walk-forward:dashboard-visible</code>" in metric_section
     assert "Digest strategy rules" not in digest_section
     assert "Failure concentration" not in digest_section
     rules_start = html.index("策略規則摘要")

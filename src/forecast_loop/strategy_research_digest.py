@@ -13,6 +13,9 @@ from forecast_loop.strategy_research_display import (
 )
 
 
+_MAX_RULE_SUMMARY_CHARS = 180
+
+
 def record_strategy_research_digest(
     *,
     repository: ArtifactRepository,
@@ -235,4 +238,27 @@ def _strategy_rule_summary(card: StrategyCard | None) -> list[str]:
 
 def _append_summary(summary: list[str], label: str, value: str | None) -> None:
     if value:
-        summary.append(f"{label}: {value}")
+        prefix = f"{label}: "
+        summary.append(f"{prefix}{_compact_rule_summary_text(value, max_chars=_MAX_RULE_SUMMARY_CHARS - len(prefix))}")
+
+
+def _compact_rule_summary_text(value: str, *, max_chars: int = _MAX_RULE_SUMMARY_CHARS) -> str:
+    text = " ".join(value.split())
+    if len(text) <= max_chars:
+        return text
+
+    for marker in (". ", "。", "；", "; "):
+        marker_index = text.find(marker)
+        if marker_index <= 0:
+            continue
+        end_index = marker_index + len(marker.rstrip())
+        first_sentence = text[:end_index].strip()
+        if first_sentence and len(first_sentence) <= max_chars:
+            return first_sentence
+
+    ellipsis = "..."
+    cutoff = max_chars - len(ellipsis)
+    word_cutoff = text.rfind(" ", 0, cutoff)
+    if word_cutoff >= 80:
+        cutoff = word_cutoff
+    return text[:cutoff].rstrip(" ,;:") + ellipsis

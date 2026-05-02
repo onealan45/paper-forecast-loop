@@ -952,6 +952,9 @@ V1 MVP should include:
   even when the hypothesis is long or failure-control lists contain many keys
 - Traditional Chinese digest-panel labels in dashboard and operator console,
   so the strategy handoff does not expose English metadata labels to the user
+- compact digest rule-summary text, so a long strategy-card hypothesis can feed
+  automation and UX without flooding the first strategy handoff line with every
+  failure key
 - append-only replacement-card refresh, so a legacy DRAFT replacement strategy
   can be superseded by a failure-aware successor card without rewriting old
   artifacts or pretending older retest evidence was produced under the newer

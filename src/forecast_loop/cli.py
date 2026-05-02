@@ -1244,6 +1244,9 @@ def _repair_storage(args) -> int:
                 "active_forecast_count": result.active_forecast_count,
                 "latest_forecast_id": result.latest_forecast_id,
                 "quarantined_retest_trial_count": result.quarantined_retest_trial_count,
+                "quarantined_retest_dependent_artifact_count": (
+                    result.quarantined_retest_dependent_artifact_count
+                ),
                 "active_experiment_trial_count": result.active_experiment_trial_count,
                 "latest_experiment_trial_id": result.latest_experiment_trial_id,
                 "status": result.status,

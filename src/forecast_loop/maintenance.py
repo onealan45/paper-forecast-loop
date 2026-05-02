@@ -6,7 +6,17 @@ from pathlib import Path
 import json
 import re
 
-from forecast_loop.models import BacktestResult, BacktestRun, ExperimentTrial, Forecast, WalkForwardValidation
+from forecast_loop.models import (
+    BacktestResult,
+    BacktestRun,
+    ExperimentTrial,
+    Forecast,
+    LeaderboardEntry,
+    LockedEvaluationResult,
+    PaperShadowOutcome,
+    ResearchAutopilotRun,
+    WalkForwardValidation,
+)
 from forecast_loop.revision_retest import RETEST_PROTOCOL_VERSION
 from forecast_loop.storage import JsonFileRepository
 
@@ -21,6 +31,7 @@ class StorageRepairResult:
     active_forecast_count: int
     latest_forecast_id: str | None
     quarantined_retest_trial_count: int
+    quarantined_retest_dependent_artifact_count: int
     active_experiment_trial_count: int
     latest_experiment_trial_id: str | None
     quarantine_path: Path
@@ -37,27 +48,78 @@ def repair_storage(storage_dir: Path | str) -> StorageRepairResult:
     legacy_forecasts = [forecast for forecast in forecasts if _is_legacy_forecast(forecast)]
     current_forecasts = [forecast for forecast in forecasts if not _is_legacy_forecast(forecast)]
     latest_forecast_id = current_forecasts[-1].forecast_id if current_forecasts else None
+    quarantine_dir = storage_dir / "quarantine"
+    quarantine_dir.mkdir(parents=True, exist_ok=True)
+    quarantine_path = quarantine_dir / "legacy_forecasts.jsonl"
+    retest_trial_quarantine_path = quarantine_dir / "retest_context_experiment_trials.jsonl"
+    locked_evaluation_quarantine_path = quarantine_dir / "retest_context_locked_evaluation_results.jsonl"
+    leaderboard_quarantine_path = quarantine_dir / "retest_context_leaderboard_entries.jsonl"
+    paper_shadow_quarantine_path = quarantine_dir / "retest_context_paper_shadow_outcomes.jsonl"
+    autopilot_quarantine_path = quarantine_dir / "retest_context_research_autopilot_runs.jsonl"
+    report_path = storage_dir / "storage_repair_report.json"
+
     experiment_trials = repository.load_experiment_trials()
     backtest_runs = repository.load_backtest_runs()
     backtest_results = repository.load_backtest_results()
     walk_forward_validations = repository.load_walk_forward_validations()
+    locked_evaluation_results = repository.load_locked_evaluation_results()
+    leaderboard_entries = repository.load_leaderboard_entries()
+    paper_shadow_outcomes = repository.load_paper_shadow_outcomes()
+    research_autopilot_runs = repository.load_research_autopilot_runs()
     bad_retest_trials = _bad_retest_context_trials(
         experiment_trials=experiment_trials,
         backtest_runs=backtest_runs,
         backtest_results=backtest_results,
         walk_forward_validations=walk_forward_validations,
     )
-    bad_retest_trial_ids = {trial.trial_id for trial in bad_retest_trials}
+    bad_retest_trial_ids = {
+        *{trial.trial_id for trial in bad_retest_trials},
+        *_existing_jsonl_ids(retest_trial_quarantine_path, identity_key="trial_id"),
+    }
     active_experiment_trials = [
         trial for trial in experiment_trials if trial.trial_id not in bad_retest_trial_ids
     ]
     latest_experiment_trial_id = active_experiment_trials[-1].trial_id if active_experiment_trials else None
-
-    quarantine_dir = storage_dir / "quarantine"
-    quarantine_dir.mkdir(parents=True, exist_ok=True)
-    quarantine_path = quarantine_dir / "legacy_forecasts.jsonl"
-    retest_trial_quarantine_path = quarantine_dir / "retest_context_experiment_trials.jsonl"
-    report_path = storage_dir / "storage_repair_report.json"
+    bad_locked_evaluations, active_locked_evaluations = _split_locked_evaluations(
+        locked_evaluation_results,
+        bad_retest_trial_ids=bad_retest_trial_ids,
+    )
+    bad_locked_evaluation_ids = {
+        *{result.evaluation_id for result in bad_locked_evaluations},
+        *_existing_jsonl_ids(locked_evaluation_quarantine_path, identity_key="evaluation_id"),
+    }
+    bad_leaderboard_entries, active_leaderboard_entries = _split_leaderboard_entries(
+        leaderboard_entries,
+        bad_retest_trial_ids=bad_retest_trial_ids,
+        bad_locked_evaluation_ids=bad_locked_evaluation_ids,
+    )
+    bad_leaderboard_entry_ids = {
+        *{entry.entry_id for entry in bad_leaderboard_entries},
+        *_existing_jsonl_ids(leaderboard_quarantine_path, identity_key="entry_id"),
+    }
+    bad_paper_shadow_outcomes, active_paper_shadow_outcomes = _split_paper_shadow_outcomes(
+        paper_shadow_outcomes,
+        bad_retest_trial_ids=bad_retest_trial_ids,
+        bad_locked_evaluation_ids=bad_locked_evaluation_ids,
+        bad_leaderboard_entry_ids=bad_leaderboard_entry_ids,
+    )
+    bad_paper_shadow_outcome_ids = {
+        *{outcome.outcome_id for outcome in bad_paper_shadow_outcomes},
+        *_existing_jsonl_ids(paper_shadow_quarantine_path, identity_key="outcome_id"),
+    }
+    bad_autopilot_runs, active_autopilot_runs = _split_research_autopilot_runs(
+        research_autopilot_runs,
+        bad_retest_trial_ids=bad_retest_trial_ids,
+        bad_locked_evaluation_ids=bad_locked_evaluation_ids,
+        bad_leaderboard_entry_ids=bad_leaderboard_entry_ids,
+        bad_paper_shadow_outcome_ids=bad_paper_shadow_outcome_ids,
+    )
+    quarantined_dependent_count = (
+        len(bad_locked_evaluations)
+        + len(bad_leaderboard_entries)
+        + len(bad_paper_shadow_outcomes)
+        + len(bad_autopilot_runs)
+    )
 
     if legacy_forecasts:
         _append_unique_jsonl(quarantine_path, legacy_forecasts, identity_key="forecast_id")
@@ -70,10 +132,39 @@ def repair_storage(storage_dir: Path | str) -> StorageRepairResult:
             identity_key="trial_id",
         )
         repository.replace_experiment_trials(active_experiment_trials)
+    if bad_locked_evaluations:
+        _append_unique_jsonl(
+            locked_evaluation_quarantine_path,
+            bad_locked_evaluations,
+            identity_key="evaluation_id",
+        )
+        repository.replace_locked_evaluation_results(active_locked_evaluations)
+    if bad_leaderboard_entries:
+        _append_unique_jsonl(
+            leaderboard_quarantine_path,
+            bad_leaderboard_entries,
+            identity_key="entry_id",
+        )
+        repository.replace_leaderboard_entries(active_leaderboard_entries)
+    if bad_paper_shadow_outcomes:
+        _append_unique_jsonl(
+            paper_shadow_quarantine_path,
+            bad_paper_shadow_outcomes,
+            identity_key="outcome_id",
+        )
+        repository.replace_paper_shadow_outcomes(active_paper_shadow_outcomes)
+    if bad_autopilot_runs:
+        _append_unique_jsonl(
+            autopilot_quarantine_path,
+            bad_autopilot_runs,
+            identity_key="run_id",
+        )
+        repository.replace_research_autopilot_runs(active_autopilot_runs)
 
     status = _repair_status(
         quarantined_forecast_count=len(legacy_forecasts),
         quarantined_retest_trial_count=len(bad_retest_trials),
+        quarantined_retest_dependent_artifact_count=quarantined_dependent_count,
     )
 
     result = StorageRepairResult(
@@ -85,6 +176,7 @@ def repair_storage(storage_dir: Path | str) -> StorageRepairResult:
         active_forecast_count=len(current_forecasts),
         latest_forecast_id=latest_forecast_id,
         quarantined_retest_trial_count=len(bad_retest_trials),
+        quarantined_retest_dependent_artifact_count=quarantined_dependent_count,
         active_experiment_trial_count=len(active_experiment_trials),
         latest_experiment_trial_id=latest_experiment_trial_id,
         quarantine_path=quarantine_path,
@@ -103,10 +195,19 @@ def repair_storage(storage_dir: Path | str) -> StorageRepairResult:
                 "active_forecast_count": result.active_forecast_count,
                 "latest_forecast_id": result.latest_forecast_id,
                 "quarantined_retest_trial_count": result.quarantined_retest_trial_count,
+                "quarantined_retest_dependent_artifact_count": (
+                    result.quarantined_retest_dependent_artifact_count
+                ),
                 "active_experiment_trial_count": result.active_experiment_trial_count,
                 "latest_experiment_trial_id": result.latest_experiment_trial_id,
                 "quarantine_path": str(quarantine_path.resolve()),
                 "retest_trial_quarantine_path": str(retest_trial_quarantine_path.resolve()),
+                "retest_dependent_quarantine_paths": {
+                    "locked_evaluation_results": str(locked_evaluation_quarantine_path.resolve()),
+                    "leaderboard_entries": str(leaderboard_quarantine_path.resolve()),
+                    "paper_shadow_outcomes": str(paper_shadow_quarantine_path.resolve()),
+                    "research_autopilot_runs": str(autopilot_quarantine_path.resolve()),
+                },
                 "status": result.status,
             },
             ensure_ascii=False,
@@ -251,6 +352,73 @@ def _id_context_tokens(decision_basis: str) -> list[str]:
     return re.findall(r"(?:^|[;,\s])id_context=([^;,\s]+)", decision_basis)
 
 
+def _split_locked_evaluations(
+    results: list[LockedEvaluationResult],
+    *,
+    bad_retest_trial_ids: set[str],
+) -> tuple[list[LockedEvaluationResult], list[LockedEvaluationResult]]:
+    bad = [result for result in results if result.trial_id in bad_retest_trial_ids]
+    bad_ids = {result.evaluation_id for result in bad}
+    active = [result for result in results if result.evaluation_id not in bad_ids]
+    return bad, active
+
+
+def _split_leaderboard_entries(
+    entries: list[LeaderboardEntry],
+    *,
+    bad_retest_trial_ids: set[str],
+    bad_locked_evaluation_ids: set[str],
+) -> tuple[list[LeaderboardEntry], list[LeaderboardEntry]]:
+    bad = [
+        entry
+        for entry in entries
+        if entry.trial_id in bad_retest_trial_ids or entry.evaluation_id in bad_locked_evaluation_ids
+    ]
+    bad_ids = {entry.entry_id for entry in bad}
+    active = [entry for entry in entries if entry.entry_id not in bad_ids]
+    return bad, active
+
+
+def _split_paper_shadow_outcomes(
+    outcomes: list[PaperShadowOutcome],
+    *,
+    bad_retest_trial_ids: set[str],
+    bad_locked_evaluation_ids: set[str],
+    bad_leaderboard_entry_ids: set[str],
+) -> tuple[list[PaperShadowOutcome], list[PaperShadowOutcome]]:
+    bad = [
+        outcome
+        for outcome in outcomes
+        if outcome.trial_id in bad_retest_trial_ids
+        or outcome.evaluation_id in bad_locked_evaluation_ids
+        or outcome.leaderboard_entry_id in bad_leaderboard_entry_ids
+    ]
+    bad_ids = {outcome.outcome_id for outcome in bad}
+    active = [outcome for outcome in outcomes if outcome.outcome_id not in bad_ids]
+    return bad, active
+
+
+def _split_research_autopilot_runs(
+    runs: list[ResearchAutopilotRun],
+    *,
+    bad_retest_trial_ids: set[str],
+    bad_locked_evaluation_ids: set[str],
+    bad_leaderboard_entry_ids: set[str],
+    bad_paper_shadow_outcome_ids: set[str],
+) -> tuple[list[ResearchAutopilotRun], list[ResearchAutopilotRun]]:
+    bad = [
+        run
+        for run in runs
+        if run.experiment_trial_id in bad_retest_trial_ids
+        or run.locked_evaluation_id in bad_locked_evaluation_ids
+        or run.leaderboard_entry_id in bad_leaderboard_entry_ids
+        or run.paper_shadow_outcome_id in bad_paper_shadow_outcome_ids
+    ]
+    bad_ids = {run.run_id for run in bad}
+    active = [run for run in runs if run.run_id not in bad_ids]
+    return bad, active
+
+
 def _append_unique_jsonl(path: Path, items: list, *, identity_key: str) -> None:
     existing_ids = set()
     if path.exists():
@@ -267,11 +435,35 @@ def _append_unique_jsonl(path: Path, items: list, *, identity_key: str) -> None:
             handle.write(json.dumps(payload) + "\n")
 
 
-def _repair_status(*, quarantined_forecast_count: int, quarantined_retest_trial_count: int) -> str:
-    if quarantined_forecast_count and quarantined_retest_trial_count:
+def _existing_jsonl_ids(path: Path, *, identity_key: str) -> set[str]:
+    if not path.exists():
+        return set()
+    ids = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        payload = json.loads(line)
+        identity = payload.get(identity_key)
+        if isinstance(identity, str):
+            ids.add(identity)
+    return ids
+
+
+def _repair_status(
+    *,
+    quarantined_forecast_count: int,
+    quarantined_retest_trial_count: int,
+    quarantined_retest_dependent_artifact_count: int,
+) -> str:
+    if (
+        quarantined_forecast_count
+        and (quarantined_retest_trial_count or quarantined_retest_dependent_artifact_count)
+    ):
         return "storage_artifacts_quarantined"
     if quarantined_forecast_count:
         return "legacy_forecasts_quarantined"
     if quarantined_retest_trial_count:
         return "retest_context_trials_quarantined"
+    if quarantined_retest_dependent_artifact_count:
+        return "retest_context_dependent_artifacts_quarantined"
     return "no_legacy_forecasts_found"

@@ -224,13 +224,19 @@ class ArtifactRepository(Protocol):
 
     def load_locked_evaluation_results(self) -> list[LockedEvaluationResult]: ...
 
+    def replace_locked_evaluation_results(self, results: list[LockedEvaluationResult]) -> None: ...
+
     def save_leaderboard_entry(self, entry: LeaderboardEntry) -> None: ...
 
     def load_leaderboard_entries(self) -> list[LeaderboardEntry]: ...
 
+    def replace_leaderboard_entries(self, entries: list[LeaderboardEntry]) -> None: ...
+
     def save_paper_shadow_outcome(self, outcome: PaperShadowOutcome) -> None: ...
 
     def load_paper_shadow_outcomes(self) -> list[PaperShadowOutcome]: ...
+
+    def replace_paper_shadow_outcomes(self, outcomes: list[PaperShadowOutcome]) -> None: ...
 
     def save_research_agenda(self, agenda: ResearchAgenda) -> None: ...
 
@@ -239,6 +245,8 @@ class ArtifactRepository(Protocol):
     def save_research_autopilot_run(self, run: ResearchAutopilotRun) -> None: ...
 
     def load_research_autopilot_runs(self) -> list[ResearchAutopilotRun]: ...
+
+    def replace_research_autopilot_runs(self, runs: list[ResearchAutopilotRun]) -> None: ...
 
     def save_strategy_research_digest(self, digest: StrategyResearchDigest) -> None: ...
 
@@ -721,6 +729,11 @@ class JsonFileRepository:
     def load_locked_evaluation_results(self) -> list[LockedEvaluationResult]:
         return self._load_lines(self.locked_evaluation_results_path, LockedEvaluationResult.from_dict)
 
+    def replace_locked_evaluation_results(self, results: list[LockedEvaluationResult]) -> None:
+        with self.locked_evaluation_results_path.open("w", encoding="utf-8") as handle:
+            for result in results:
+                handle.write(json.dumps(result.to_dict()) + "\n")
+
     def save_leaderboard_entry(self, entry: LeaderboardEntry) -> None:
         self._append_unique(
             self.leaderboard_entries_path,
@@ -731,6 +744,11 @@ class JsonFileRepository:
     def load_leaderboard_entries(self) -> list[LeaderboardEntry]:
         return self._load_lines(self.leaderboard_entries_path, LeaderboardEntry.from_dict)
 
+    def replace_leaderboard_entries(self, entries: list[LeaderboardEntry]) -> None:
+        with self.leaderboard_entries_path.open("w", encoding="utf-8") as handle:
+            for entry in entries:
+                handle.write(json.dumps(entry.to_dict()) + "\n")
+
     def save_paper_shadow_outcome(self, outcome: PaperShadowOutcome) -> None:
         self._append_unique(
             self.paper_shadow_outcomes_path,
@@ -740,6 +758,11 @@ class JsonFileRepository:
 
     def load_paper_shadow_outcomes(self) -> list[PaperShadowOutcome]:
         return self._load_lines(self.paper_shadow_outcomes_path, PaperShadowOutcome.from_dict)
+
+    def replace_paper_shadow_outcomes(self, outcomes: list[PaperShadowOutcome]) -> None:
+        with self.paper_shadow_outcomes_path.open("w", encoding="utf-8") as handle:
+            for outcome in outcomes:
+                handle.write(json.dumps(outcome.to_dict()) + "\n")
 
     def save_research_agenda(self, agenda: ResearchAgenda) -> None:
         self._append_unique(
@@ -760,6 +783,11 @@ class JsonFileRepository:
 
     def load_research_autopilot_runs(self) -> list[ResearchAutopilotRun]:
         return self._load_lines(self.research_autopilot_runs_path, ResearchAutopilotRun.from_dict)
+
+    def replace_research_autopilot_runs(self, runs: list[ResearchAutopilotRun]) -> None:
+        with self.research_autopilot_runs_path.open("w", encoding="utf-8") as handle:
+            for run in runs:
+                handle.write(json.dumps(run.to_dict()) + "\n")
 
     def save_strategy_research_digest(self, digest: StrategyResearchDigest) -> None:
         self._append_unique(

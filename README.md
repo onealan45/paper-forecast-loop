@@ -447,6 +447,9 @@ factory:
 - PR135 extends `repair-storage` so those context-polluted PASSED retest trials
   can be quarantined from active `experiment_trials.jsonl` while preserving an
   auditable `quarantine/retest_context_experiment_trials.jsonl` copy.
+- PR136 extends that repair path to cascade-quarantine active locked evaluation,
+  leaderboard, paper-shadow, and research-autopilot artifacts that still point
+  at quarantined retest trials.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -1943,8 +1946,10 @@ The repair command writes `storage_repair_report.json` with a fresh
 trial count, latest experiment trial id, and quarantine status. It can
 quarantine legacy off-boundary forecasts and PASSED retest trials whose linked
 backtest or walk-forward evidence does not carry the matching retest
-`id_context`. Treat that report as a point-in-time audit record, not a live
-monitor.
+`id_context`. It also cascades retest-context quarantine to dependent locked
+evaluation, leaderboard, paper-shadow, and research-autopilot rows that still
+point at quarantined retest trials. Treat that report as a point-in-time audit
+record, not a live monitor.
 
 Initialize the M2 SQLite repository:
 

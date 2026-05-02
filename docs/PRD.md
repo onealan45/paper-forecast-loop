@@ -973,6 +973,10 @@ V1 MVP should include:
 - retest evidence-context repair in `repair-storage`, so those polluted PASSED
   retest trials can be quarantined from active experiment-trial state while
   retaining an auditable quarantine copy and point-in-time repair report
+- retest evidence-context dependent-artifact repair, so locked evaluation,
+  leaderboard, paper-shadow, and research-autopilot rows that reference
+  quarantined retest trials are quarantined with the evidence claim instead of
+  remaining as dangling active artifacts
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

@@ -8,6 +8,10 @@ from forecast_loop.models import (
     BacktestRun,
     ExperimentTrial,
     Forecast,
+    LeaderboardEntry,
+    LockedEvaluationResult,
+    PaperShadowOutcome,
+    ResearchAutopilotRun,
     WalkForwardValidation,
 )
 from forecast_loop.revision_retest import RETEST_PROTOCOL_VERSION
@@ -147,6 +151,103 @@ def _retest_trial(
         failure_reason=None,
         started_at=datetime(2026, 5, 1, 9, tzinfo=UTC),
         completed_at=datetime(2026, 5, 1, 12, tzinfo=UTC),
+        decision_basis="test",
+    )
+
+
+def _locked_evaluation(*, evaluation_id: str, trial_id: str) -> LockedEvaluationResult:
+    return LockedEvaluationResult(
+        evaluation_id=evaluation_id,
+        created_at=datetime(2026, 5, 1, 12, 30, tzinfo=UTC),
+        strategy_card_id="strategy-card:bad",
+        trial_id=trial_id,
+        split_manifest_id="split-manifest:bad",
+        cost_model_id="cost-model:bad",
+        baseline_id="baseline:bad",
+        backtest_result_id="backtest-result:bad",
+        walk_forward_validation_id="walk-forward:bad",
+        event_edge_evaluation_id=None,
+        passed=True,
+        rankable=True,
+        alpha_score=0.1,
+        blocked_reasons=[],
+        gate_metrics={},
+        decision_basis="test",
+    )
+
+
+def _leaderboard_entry(*, entry_id: str, evaluation_id: str, trial_id: str) -> LeaderboardEntry:
+    return LeaderboardEntry(
+        entry_id=entry_id,
+        created_at=datetime(2026, 5, 1, 12, 40, tzinfo=UTC),
+        strategy_card_id="strategy-card:bad",
+        evaluation_id=evaluation_id,
+        trial_id=trial_id,
+        symbol="BTC-USD",
+        rankable=True,
+        alpha_score=0.1,
+        promotion_stage="PAPER_SHADOW",
+        blocked_reasons=[],
+        leaderboard_rules_version="test-v1",
+        decision_basis="test",
+    )
+
+
+def _paper_shadow_outcome(
+    *,
+    outcome_id: str,
+    entry_id: str,
+    evaluation_id: str,
+    trial_id: str,
+) -> PaperShadowOutcome:
+    return PaperShadowOutcome(
+        outcome_id=outcome_id,
+        created_at=datetime(2026, 5, 1, 12, 50, tzinfo=UTC),
+        leaderboard_entry_id=entry_id,
+        evaluation_id=evaluation_id,
+        strategy_card_id="strategy-card:bad",
+        trial_id=trial_id,
+        symbol="BTC-USD",
+        window_start=datetime(2026, 5, 1, 13, tzinfo=UTC),
+        window_end=datetime(2026, 5, 2, 13, tzinfo=UTC),
+        observed_return=0.02,
+        benchmark_return=0.01,
+        excess_return_after_costs=0.005,
+        max_adverse_excursion=0.01,
+        turnover=1.0,
+        outcome_grade="PASS",
+        failure_attributions=[],
+        recommended_promotion_stage="PROMOTE",
+        recommended_strategy_action="PROMOTE",
+        blocked_reasons=[],
+        notes=[],
+        decision_basis="test",
+    )
+
+
+def _research_autopilot_run(
+    *,
+    run_id: str,
+    evaluation_id: str,
+    entry_id: str,
+    trial_id: str,
+    outcome_id: str,
+) -> ResearchAutopilotRun:
+    return ResearchAutopilotRun(
+        run_id=run_id,
+        created_at=datetime(2026, 5, 1, 13, tzinfo=UTC),
+        symbol="BTC-USD",
+        agenda_id="research-agenda:bad",
+        strategy_card_id="strategy-card:bad",
+        experiment_trial_id=trial_id,
+        locked_evaluation_id=evaluation_id,
+        leaderboard_entry_id=entry_id,
+        strategy_decision_id=None,
+        paper_shadow_outcome_id=outcome_id,
+        steps=[],
+        loop_status="COMPLETED",
+        next_research_action="CONTINUE",
+        blocked_reasons=[],
         decision_basis="test",
     )
 
@@ -329,3 +430,164 @@ def test_repair_storage_retest_context_quarantine_is_idempotent(tmp_path):
     assert report["quarantined_retest_trial_count"] == 0
     assert report["active_experiment_trial_count"] == 0
     assert report["latest_experiment_trial_id"] is None
+
+
+def test_repair_storage_quarantines_retest_dependent_artifacts(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    repository.save_backtest_run(_backtest_run(backtest_id="backtest-run:bad", context="revision_retest:other"))
+    repository.save_backtest_result(_backtest_result(result_id="backtest-result:bad", backtest_id="backtest-run:bad"))
+    repository.save_walk_forward_validation(
+        _walk_forward(
+            validation_id="walk-forward:bad",
+            backtest_result_id="backtest-result:bad",
+            context="revision_retest:other",
+        )
+    )
+    bad_trial_id = "experiment-trial:bad"
+    evaluation_id = "locked-evaluation:bad"
+    entry_id = "leaderboard-entry:bad"
+    outcome_id = "paper-shadow-outcome:bad"
+    repository.save_experiment_trial(
+        _retest_trial(
+            trial_id=bad_trial_id,
+            strategy_card_id="strategy-card:bad",
+            source_outcome_id="paper-shadow-outcome:source",
+            backtest_result_id="backtest-result:bad",
+            walk_forward_validation_id="walk-forward:bad",
+        )
+    )
+    repository.save_locked_evaluation_result(_locked_evaluation(evaluation_id=evaluation_id, trial_id=bad_trial_id))
+    repository.save_leaderboard_entry(
+        _leaderboard_entry(
+            entry_id=entry_id,
+            evaluation_id=evaluation_id,
+            trial_id=bad_trial_id,
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _paper_shadow_outcome(
+            outcome_id=outcome_id,
+            entry_id=entry_id,
+            evaluation_id=evaluation_id,
+            trial_id=bad_trial_id,
+        )
+    )
+    repository.save_research_autopilot_run(
+        _research_autopilot_run(
+            run_id="research-autopilot-run:bad",
+            evaluation_id=evaluation_id,
+            entry_id=entry_id,
+            trial_id=bad_trial_id,
+            outcome_id=outcome_id,
+        )
+    )
+
+    exit_code = main(["repair-storage", "--storage-dir", str(tmp_path)])
+
+    repaired = JsonFileRepository(tmp_path)
+    report = json.loads((tmp_path / "storage_repair_report.json").read_text(encoding="utf-8"))
+    health = run_health_check(
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=datetime(2026, 5, 1, 14, tzinfo=UTC),
+        create_repair_request=False,
+    )
+    codes = {finding.code for finding in health.findings}
+
+    assert exit_code == 0
+    assert repaired.load_experiment_trials() == []
+    assert repaired.load_locked_evaluation_results() == []
+    assert repaired.load_leaderboard_entries() == []
+    assert repaired.load_paper_shadow_outcomes() == []
+    assert repaired.load_research_autopilot_runs() == []
+    assert [item["evaluation_id"] for item in _jsonl_payloads(
+        tmp_path / "quarantine" / "retest_context_locked_evaluation_results.jsonl"
+    )] == [evaluation_id]
+    assert [item["entry_id"] for item in _jsonl_payloads(
+        tmp_path / "quarantine" / "retest_context_leaderboard_entries.jsonl"
+    )] == [entry_id]
+    assert [item["outcome_id"] for item in _jsonl_payloads(
+        tmp_path / "quarantine" / "retest_context_paper_shadow_outcomes.jsonl"
+    )] == [outcome_id]
+    assert [item["run_id"] for item in _jsonl_payloads(
+        tmp_path / "quarantine" / "retest_context_research_autopilot_runs.jsonl"
+    )] == ["research-autopilot-run:bad"]
+    assert report["quarantined_retest_dependent_artifact_count"] == 4
+    assert "locked_evaluation_missing_trial" not in codes
+    assert "leaderboard_entry_missing_trial" not in codes
+    assert "paper_shadow_outcome_missing_experiment_trial" not in codes
+    assert "research_autopilot_run_missing_experiment_trial" not in codes
+
+
+def test_repair_storage_uses_existing_retest_quarantine_for_dangling_dependents(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    bad_trial = _retest_trial(
+        trial_id="experiment-trial:already-quarantined",
+        strategy_card_id="strategy-card:bad",
+        source_outcome_id="paper-shadow-outcome:source",
+        backtest_result_id="backtest-result:bad",
+        walk_forward_validation_id="walk-forward:bad",
+    )
+    quarantine_path = tmp_path / "quarantine" / "retest_context_experiment_trials.jsonl"
+    quarantine_path.parent.mkdir(parents=True, exist_ok=True)
+    quarantine_path.write_text(json.dumps(bad_trial.to_dict()) + "\n", encoding="utf-8")
+    repository.save_locked_evaluation_result(
+        _locked_evaluation(
+            evaluation_id="locked-evaluation:dangling",
+            trial_id=bad_trial.trial_id,
+        )
+    )
+
+    exit_code = main(["repair-storage", "--storage-dir", str(tmp_path)])
+
+    report = json.loads((tmp_path / "storage_repair_report.json").read_text(encoding="utf-8"))
+    repaired = JsonFileRepository(tmp_path)
+
+    assert exit_code == 0
+    assert repaired.load_locked_evaluation_results() == []
+    assert [item["evaluation_id"] for item in _jsonl_payloads(
+        tmp_path / "quarantine" / "retest_context_locked_evaluation_results.jsonl"
+    )] == ["locked-evaluation:dangling"]
+    assert report["quarantined_retest_trial_count"] == 0
+    assert report["quarantined_retest_dependent_artifact_count"] == 1
+    assert report["status"] == "retest_context_dependent_artifacts_quarantined"
+
+
+def test_repair_storage_uses_existing_dependent_quarantine_for_partial_cascade(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    bad_trial_id = "experiment-trial:already-quarantined"
+    evaluation_id = "locked-evaluation:already-quarantined"
+    entry_id = "leaderboard-entry:dangling"
+    evaluation_quarantine_path = tmp_path / "quarantine" / "retest_context_locked_evaluation_results.jsonl"
+    evaluation_quarantine_path.parent.mkdir(parents=True, exist_ok=True)
+    evaluation_quarantine_path.write_text(
+        json.dumps(_locked_evaluation(evaluation_id=evaluation_id, trial_id=bad_trial_id).to_dict()) + "\n",
+        encoding="utf-8",
+    )
+    repository.save_leaderboard_entry(
+        _leaderboard_entry(
+            entry_id=entry_id,
+            evaluation_id=evaluation_id,
+            trial_id=bad_trial_id,
+        )
+    )
+
+    exit_code = main(["repair-storage", "--storage-dir", str(tmp_path)])
+
+    repaired = JsonFileRepository(tmp_path)
+    report = json.loads((tmp_path / "storage_repair_report.json").read_text(encoding="utf-8"))
+    health = run_health_check(
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=datetime(2026, 5, 1, 14, tzinfo=UTC),
+        create_repair_request=False,
+    )
+    codes = {finding.code for finding in health.findings}
+
+    assert exit_code == 0
+    assert repaired.load_leaderboard_entries() == []
+    assert [item["entry_id"] for item in _jsonl_payloads(
+        tmp_path / "quarantine" / "retest_context_leaderboard_entries.jsonl"
+    )] == [entry_id]
+    assert report["quarantined_retest_dependent_artifact_count"] == 1
+    assert "leaderboard_entry_missing_locked_evaluation" not in codes

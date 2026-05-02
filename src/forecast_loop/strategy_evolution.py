@@ -216,6 +216,109 @@ def draft_replacement_strategy_hypothesis(
     return StrategyReplacementResult(strategy_card=replacement)
 
 
+def refresh_replacement_strategy_hypothesis(
+    *,
+    repository: ArtifactRepository,
+    created_at: datetime,
+    replacement_card_id: str,
+    author: str = REPLACEMENT_AUTHOR,
+) -> StrategyReplacementResult:
+    if created_at.tzinfo is None or created_at.utcoffset() is None:
+        raise ValueError("created_at must be timezone-aware")
+    cards = repository.load_strategy_cards()
+    replacement = _find_required(
+        cards,
+        attr="card_id",
+        value=replacement_card_id,
+        artifact_name="strategy card",
+    )
+    assert isinstance(replacement, StrategyCard)
+    if replacement.status != "DRAFT":
+        raise ValueError(f"replacement strategy card must be DRAFT: {replacement_card_id}")
+    if replacement.decision_basis != REPLACEMENT_DECISION_BASIS:
+        raise ValueError(f"strategy card is not a lineage replacement: {replacement_card_id}")
+    if replacement.parameters.get("replacement_strategy_archetype"):
+        return StrategyReplacementResult(strategy_card=replacement)
+
+    existing_refresh = _existing_refresh_for_replacement(cards, replacement.card_id)
+    if existing_refresh is not None:
+        return StrategyReplacementResult(strategy_card=existing_refresh)
+
+    root_card_id = _string_parameter(replacement, "replacement_source_lineage_root_card_id")
+    outcome_id = _string_parameter(replacement, "replacement_source_outcome_id")
+    if root_card_id is None:
+        raise ValueError(f"replacement strategy card missing source root: {replacement_card_id}")
+    if outcome_id is None:
+        raise ValueError(f"replacement strategy card missing source outcome: {replacement_card_id}")
+    root = _find_required(
+        cards,
+        attr="card_id",
+        value=root_card_id,
+        artifact_name="strategy card",
+    )
+    assert isinstance(root, StrategyCard)
+    outcome = _find_required(
+        repository.load_paper_shadow_outcomes(),
+        attr="outcome_id",
+        value=outcome_id,
+        artifact_name="paper shadow outcome",
+    )
+    assert isinstance(outcome, PaperShadowOutcome)
+
+    attributions = _failure_attributions(outcome)
+    design = _replacement_strategy_design(root=root, outcome=outcome, attributions=attributions)
+    parameters: dict[str, object] = {
+        "replacement_source_lineage_root_card_id": root.card_id,
+        "replacement_source_outcome_id": outcome.outcome_id,
+        "replacement_failure_attributions": attributions,
+        "replacement_required_research": ["locked_backtest", "walk_forward", "paper_shadow"],
+        "replacement_not_child_revision": True,
+        "replacement_strategy_archetype": design.archetype,
+        "replacement_refresh_source_card_id": replacement.card_id,
+        "replacement_refresh_reason": "failure_aware_rule_upgrade",
+        "minimum_after_cost_edge": max(float(root.parameters.get("minimum_after_cost_edge", 0.0)), 0.015),
+    }
+    parameters.update(design.parameters)
+    card_id = StrategyCard.build_id(
+        strategy_name=replacement.strategy_name,
+        strategy_family=root.strategy_family,
+        version=f"{replacement.version}.refresh1",
+        symbols=list(root.symbols),
+        hypothesis=design.hypothesis,
+        parameters=parameters,
+    )
+    existing_by_id = _find_optional(cards, "card_id", card_id)
+    if existing_by_id is not None:
+        assert isinstance(existing_by_id, StrategyCard)
+        return StrategyReplacementResult(strategy_card=existing_by_id)
+
+    refreshed = StrategyCard(
+        card_id=card_id,
+        created_at=created_at,
+        strategy_name=replacement.strategy_name,
+        strategy_family=root.strategy_family,
+        version=f"{replacement.version}.refresh1",
+        status="DRAFT",
+        symbols=list(root.symbols),
+        hypothesis=design.hypothesis,
+        signal_description=design.signal_description,
+        entry_rules=design.entry_rules,
+        exit_rules=design.exit_rules,
+        risk_rules=design.risk_rules,
+        parameters=parameters,
+        data_requirements=list(dict.fromkeys([*root.data_requirements, *replacement.data_requirements])),
+        feature_snapshot_ids=[],
+        backtest_result_ids=[],
+        walk_forward_validation_ids=[],
+        event_edge_evaluation_ids=[],
+        parent_card_id=None,
+        author=author,
+        decision_basis=REPLACEMENT_DECISION_BASIS,
+    )
+    repository.save_strategy_card(refreshed)
+    return StrategyReplacementResult(strategy_card=refreshed)
+
+
 def _replacement_strategy_design(
     *,
     root: StrategyCard,
@@ -437,15 +540,23 @@ def _existing_agenda_for_revision(agendas: list[ResearchAgenda], revision: Strat
 
 
 def _existing_replacement_for_outcome(cards: list[StrategyCard], outcome_id: str) -> StrategyCard | None:
-    return next(
-        (
-            card
-            for card in cards
-            if card.decision_basis == REPLACEMENT_DECISION_BASIS
-            and card.parameters.get("replacement_source_outcome_id") == outcome_id
-        ),
-        None,
-    )
+    matches = [
+        card
+        for card in cards
+        if card.decision_basis == REPLACEMENT_DECISION_BASIS
+        and card.parameters.get("replacement_source_outcome_id") == outcome_id
+    ]
+    return max(matches, key=lambda card: (card.created_at, card.card_id)) if matches else None
+
+
+def _existing_refresh_for_replacement(cards: list[StrategyCard], replacement_card_id: str) -> StrategyCard | None:
+    matches = [
+        card
+        for card in cards
+        if card.decision_basis == REPLACEMENT_DECISION_BASIS
+        and card.parameters.get("replacement_refresh_source_card_id") == replacement_card_id
+    ]
+    return max(matches, key=lambda card: (card.created_at, card.card_id)) if matches else None
 
 
 def _failure_attributions(outcome: PaperShadowOutcome) -> list[str]:
@@ -462,6 +573,13 @@ def _find_required(items: list[object], *, attr: str, value: str, artifact_name:
 
 def _find_optional(items: list[object], attr: str, value: str) -> object | None:
     return next((item for item in items if getattr(item, attr) == value), None)
+
+
+def _string_parameter(card: StrategyCard, key: str) -> str | None:
+    value = card.parameters.get(key)
+    if isinstance(value, str) and value:
+        return value
+    return None
 
 
 def _unique(items: list[str]) -> list[str]:

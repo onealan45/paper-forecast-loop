@@ -549,6 +549,7 @@ This version intentionally includes:
   - `create-research-agenda`
   - `record-research-autopilot-run`
   - `propose-strategy-revision`
+  - `refresh-replacement-strategy-card`
   - `create-revision-retest-scaffold`
   - `revision-retest-plan`
   - `record-revision-retest-task-run`
@@ -1534,6 +1535,20 @@ and latest paper-shadow outcome. For improving lineages it executes
 research worker has an explicit fresh-sample validation handoff. It records an
 `AutomationRun`; it does not run the replacement strategy, place an order,
 promote a card, or call any broker/exchange adapter.
+
+Refresh a legacy replacement card into the latest failure-aware rule template:
+
+```powershell
+python run_forecast_loop.py refresh-replacement-strategy-card --storage-dir .\paper_storage\manual-coingecko --replacement-card-id strategy-card:replacement-example --created-at 2026-05-02T03:00:00+00:00
+```
+
+`refresh-replacement-strategy-card` is append-only. It does not overwrite the
+legacy card or reuse its retest evidence as if the rules had always existed.
+Instead it writes a new DRAFT `lineage_replacement_strategy_hypothesis` card
+with `replacement_refresh_source_card_id`, concrete failure-aware entry/exit/
+risk rules, and the same source root/outcome links. Subsequent lineage task
+plans choose the newest replacement card for the source outcome, so the refreshed
+successor becomes the next research target while old evidence remains auditable.
 
 Start a locked retest scaffold for that replacement card:
 

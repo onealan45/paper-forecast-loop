@@ -945,6 +945,10 @@ V1 MVP should include:
   automation cycles keep the visible strategy summary current when research
   artifacts exist, while fresh storage does not get placeholder
   `no_strategy_card` digest rows
+- append-only replacement-card refresh, so a legacy DRAFT replacement strategy
+  can be superseded by a failure-aware successor card without rewriting old
+  artifacts or pretending older retest evidence was produced under the newer
+  rules
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

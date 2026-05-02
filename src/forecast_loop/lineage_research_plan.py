@@ -698,15 +698,13 @@ def _revision_for_source_outcome(cards: list[StrategyCard], outcome_id: str) -> 
 
 
 def _replacement_for_source_outcome(cards: list[StrategyCard], outcome_id: str) -> StrategyCard | None:
-    return next(
-        (
-            card
-            for card in cards
-            if card.decision_basis == REPLACEMENT_DECISION_BASIS
-            and card.parameters.get("replacement_source_outcome_id") == outcome_id
-        ),
-        None,
-    )
+    matches = [
+        card
+        for card in cards
+        if card.decision_basis == REPLACEMENT_DECISION_BASIS
+        and card.parameters.get("replacement_source_outcome_id") == outcome_id
+    ]
+    return max(matches, key=lambda card: (card.created_at, card.card_id)) if matches else None
 
 
 def _base_command() -> list[str]:

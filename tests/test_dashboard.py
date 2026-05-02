@@ -247,6 +247,14 @@ def _seed_dashboard_strategy_research_digest(repository: JsonFileRepository, now
                 "進場: Digest-only dashboard entry rule.",
                 "風控: Digest-only dashboard risk control.",
             ],
+            decision_id="decision:dashboard-visible",
+            decision_action="HOLD",
+            decision_blocked_reason="model_not_beating_baseline",
+            decision_research_blockers=["event edge 缺失", "walk-forward overfit risk"],
+            decision_reason_summary=(
+                "模型證據沒有打贏 naive persistence baseline，因此買進/賣出被擋住。 "
+                "主要研究阻擋：event edge 缺失、walk-forward overfit risk。"
+            ),
         )
     )
 
@@ -1194,6 +1202,11 @@ def test_dashboard_surfaces_strategy_research_digest_summary(tmp_path):
     assert "<dt>Paper-shadow 結果</dt>" in digest_section
     assert "<dt>建議動作</dt>" in digest_section
     assert "<dt>失敗集中</dt>" in digest_section
+    assert "<dt>目前決策阻擋</dt>" in digest_section
+    assert "持有（HOLD）" in digest_section
+    assert "model_not_beating_baseline" in digest_section
+    assert "event edge 缺失" in digest_section
+    assert "walk-forward overfit risk" in digest_section
     assert "<dt>下一步理由</dt>" in digest_section
     assert "<dt>策略規則摘要</dt>" in digest_section
     assert "Digest strategy rules" not in digest_section

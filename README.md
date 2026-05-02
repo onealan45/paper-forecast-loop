@@ -453,6 +453,9 @@ factory:
 - PR137 makes simulated decision summaries name the main research blockers
   behind HOLD/REDUCE_RISK decisions, so the UX shows concrete strategy-quality
   failures instead of only a generic baseline warning.
+- PR138 carries that latest decision blocker context into the strategy research
+  digest and read-only UX, linking the decision id as evidence so the next
+  research handoff sees both lineage history and the active BUY/SELL blocker.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

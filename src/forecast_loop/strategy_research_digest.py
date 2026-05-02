@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from forecast_loop.models import StrategyCard, StrategyResearchDigest
+from forecast_loop.models import StrategyCard, StrategyDecision, StrategyResearchDigest
 from forecast_loop.storage import ArtifactRepository
 from forecast_loop.strategy_lineage import build_strategy_lineage_summary
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
@@ -66,6 +66,10 @@ def build_strategy_research_digest(
     )
     next_research_action = _next_research_action(chain, lineage)
     evidence_artifact_ids = _evidence_artifact_ids(chain, lineage)
+    latest_decision = _latest_strategy_decision(repository.load_strategy_decisions(), symbol)
+    decision_research_blockers = _decision_research_blockers(latest_decision)
+    if latest_decision is not None:
+        _append_id(evidence_artifact_ids, latest_decision.decision_id)
     lineage_latest_outcome_id = lineage.latest_outcome_id if lineage else None
 
     return StrategyResearchDigest(
@@ -119,6 +123,11 @@ def build_strategy_research_digest(
         ),
         decision_basis="strategy_research_digest_v1",
         strategy_rule_summary=_strategy_rule_summary(chain.strategy_card),
+        decision_id=latest_decision.decision_id if latest_decision else None,
+        decision_action=latest_decision.action if latest_decision else None,
+        decision_blocked_reason=latest_decision.blocked_reason if latest_decision else None,
+        decision_research_blockers=decision_research_blockers,
+        decision_reason_summary=latest_decision.reason_summary if latest_decision else None,
     )
 
 
@@ -192,6 +201,26 @@ def _append_artifact_id(ids: list[str], item) -> None:
 def _append_id(ids: list[str], artifact_id: str | None) -> None:
     if artifact_id and artifact_id not in ids:
         ids.append(artifact_id)
+
+
+def _latest_strategy_decision(
+    decisions: list[StrategyDecision],
+    symbol: str,
+) -> StrategyDecision | None:
+    for decision in reversed(decisions):
+        if decision.symbol == symbol:
+            return decision
+    return None
+
+
+def _decision_research_blockers(decision: StrategyDecision | None) -> list[str]:
+    if decision is None:
+        return []
+    marker = "主要研究阻擋："
+    if marker not in decision.reason_summary:
+        return []
+    blocker_text = decision.reason_summary.split(marker, 1)[1].split("。", 1)[0]
+    return [item.strip() for item in blocker_text.split("、") if item.strip()]
 
 
 def _next_step_rationale(

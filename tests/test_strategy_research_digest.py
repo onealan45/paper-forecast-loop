@@ -9,6 +9,7 @@ from forecast_loop.models import (
     PaperShadowOutcome,
     ResearchAgenda,
     ResearchAutopilotRun,
+    StrategyDecision,
     StrategyCard,
     StrategyResearchDigest,
 )
@@ -221,6 +222,32 @@ def test_record_strategy_research_digest_persists_current_strategy_and_lineage_c
     repository = JsonFileRepository(tmp_path)
     now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
     artifacts = _seed_strategy_research_chain(repository, now)
+    decision = StrategyDecision(
+        decision_id="decision:digest-blocker",
+        created_at=now + timedelta(minutes=20),
+        symbol="BTC-USD",
+        horizon_hours=24,
+        action="HOLD",
+        confidence=0.51,
+        evidence_grade="D",
+        risk_level="MEDIUM",
+        tradeable=False,
+        blocked_reason="model_not_beating_baseline",
+        recommended_position_pct=0.0,
+        current_position_pct=0.0,
+        max_position_pct=0.15,
+        invalidation_conditions=["補齊 event edge 與 walk-forward 證據。"],
+        reason_summary=(
+            "模型證據沒有打贏 naive persistence baseline，因此買進/賣出被擋住。 "
+            "主要研究阻擋：event edge 缺失、walk-forward overfit risk。"
+        ),
+        forecast_ids=["forecast:digest"],
+        score_ids=["score:digest"],
+        review_ids=["review:digest"],
+        baseline_ids=["baseline:digest"],
+        decision_basis="test",
+    )
+    repository.save_strategy_decision(decision)
 
     digest = record_strategy_research_digest(
         repository=repository,
@@ -246,6 +273,15 @@ def test_record_strategy_research_digest_persists_current_strategy_and_lineage_c
     assert "BTC breakout research" in digest.research_summary
     assert "paper-shadow" in digest.research_summary
     assert "回撤超標" in digest.next_step_rationale
+    assert digest.decision_id == decision.decision_id
+    assert digest.decision_action == "HOLD"
+    assert digest.decision_blocked_reason == "model_not_beating_baseline"
+    assert digest.decision_research_blockers == [
+        "event edge 缺失",
+        "walk-forward overfit risk",
+    ]
+    assert digest.decision_reason_summary == decision.reason_summary
+    assert decision.decision_id in digest.evidence_artifact_ids
     assert digest.strategy_rule_summary == [
         "假說: Tighten risk controls after drawdown-heavy failed samples.",
         "訊號: Breakout with risk filter.",

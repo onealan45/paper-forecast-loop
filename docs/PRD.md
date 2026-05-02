@@ -981,6 +981,9 @@ V1 MVP should include:
   research-quality failures such as missing event edge, missing backtest,
   weak walk-forward evidence, or overfit risk in the user-facing
   `reason_summary`
+- strategy research digest decision context, so the latest same-symbol decision
+  id, action, blocked reason, and readable research blockers are carried into
+  the digest and surfaced in dashboard/operator-console strategy panels
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

@@ -977,6 +977,10 @@ V1 MVP should include:
   leaderboard, paper-shadow, and research-autopilot rows that reference
   quarantined retest trials are quarantined with the evidence claim instead of
   remaining as dangling active artifacts
+- decision blocker synthesis, so HOLD/REDUCE_RISK decisions name the main
+  research-quality failures such as missing event edge, missing backtest,
+  weak walk-forward evidence, or overfit risk in the user-facing
+  `reason_summary`
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

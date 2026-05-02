@@ -450,6 +450,9 @@ factory:
 - PR136 extends that repair path to cascade-quarantine active locked evaluation,
   leaderboard, paper-shadow, and research-autopilot artifacts that still point
   at quarantined retest trials.
+- PR137 makes simulated decision summaries name the main research blockers
+  behind HOLD/REDUCE_RISK decisions, so the UX shows concrete strategy-quality
+  failures instead of only a generic baseline warning.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

@@ -132,20 +132,29 @@ def generate_strategy_decision(
         action = "HOLD"
         tradeable = False
         blocked_reason = "model_not_beating_baseline"
-        reason_summary = "模型證據沒有打贏 naive persistence baseline，因此買進/賣出被擋住。"
+        reason_summary = _with_research_blockers(
+            "模型證據沒有打贏 naive persistence baseline，因此買進/賣出被擋住。",
+            research_gate,
+        )
         risk_level = "MEDIUM"
     elif research_gate.recommended_action == "REDUCE_RISK":
         action = "REDUCE_RISK"
         tradeable = current_position_pct > 0
         blocked_reason = None if tradeable else "research_reduce_required_but_no_position"
-        reason_summary = "研究品質 gate 偵測近期退化、回測風險或 walk-forward 風險，建議降低 paper 風險。"
+        reason_summary = _with_research_blockers(
+            "研究品質 gate 偵測近期退化、回測風險或 walk-forward 風險，建議降低 paper 風險。",
+            research_gate,
+        )
         risk_level = research_gate.risk_level
         recommended_position_pct = max(0.0, min(current_position_pct, max_position_pct) * 0.5)
     elif not research_gate.directional_allowed:
         action = "HOLD"
         tradeable = False
         blocked_reason = research_gate.blocked_reason
-        reason_summary = "研究品質 gate 未通過；BUY/SELL 在樣本、baseline、backtest、walk-forward 或 drawdown 證據不足時被擋住。"
+        reason_summary = _with_research_blockers(
+            "研究品質 gate 未通過；BUY/SELL 在樣本、baseline、backtest、walk-forward 或 drawdown 證據不足時被擋住。",
+            research_gate,
+        )
         risk_level = research_gate.risk_level
     elif baseline.evidence_grade not in {"A", "B"}:
         action = "HOLD"
@@ -265,6 +274,50 @@ def _risk_blocked_reason(
     if now - risk_snapshot.created_at > timedelta(hours=risk_stale_after_hours):
         return "risk_snapshot_stale"
     return None
+
+
+def _with_research_blockers(summary: str, research_gate: ResearchGateResult) -> str:
+    blocker_summary = _research_blocker_summary(research_gate.flags)
+    if not blocker_summary:
+        return summary
+    return f"{summary} 主要研究阻擋：{blocker_summary}。"
+
+
+def _research_blocker_summary(flags: list[str], *, limit: int = 4) -> str:
+    labels = {
+        "research_sample_size_too_low": "樣本數不足",
+        "research_model_edge_not_positive": "model edge 不為正",
+        "research_backtest_missing": "backtest 缺失",
+        "research_backtest_not_beating_benchmark": "backtest 未打贏 benchmark",
+        "research_backtest_drawdown_too_high": "backtest 回撤過高",
+        "research_walk_forward_missing": "walk-forward 缺失",
+        "research_walk_forward_excess_return_not_positive": "walk-forward 超額報酬不為正",
+        "research_walk_forward_not_beating_benchmark": "walk-forward 未打贏 benchmark",
+        "research_walk_forward_overfit_risk": "walk-forward overfit risk",
+        "research_event_edge_missing": "event edge 缺失",
+        "research_event_edge_not_passed": "event edge 未通過",
+        "research_event_edge_not_positive": "event edge after-cost edge 不為正",
+        "research_recent_degradation": "近期分數退化",
+    }
+    priority = [
+        "research_event_edge_missing",
+        "research_event_edge_not_passed",
+        "research_event_edge_not_positive",
+        "research_backtest_missing",
+        "research_backtest_not_beating_benchmark",
+        "research_backtest_drawdown_too_high",
+        "research_walk_forward_missing",
+        "research_walk_forward_excess_return_not_positive",
+        "research_walk_forward_not_beating_benchmark",
+        "research_walk_forward_overfit_risk",
+        "research_model_edge_not_positive",
+        "research_sample_size_too_low",
+        "research_recent_degradation",
+    ]
+    flag_set = set(flags)
+    ordered_flags = [flag for flag in priority if flag in flag_set]
+    ordered_flags.extend(sorted(flag_set - set(ordered_flags)))
+    return "、".join(labels.get(flag, flag) for flag in ordered_flags[:limit])
 
 
 def _review_ids_for_baseline(reviews: list[Review], baseline: BaselineEvaluation) -> list[str]:

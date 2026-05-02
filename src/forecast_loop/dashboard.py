@@ -2278,6 +2278,8 @@ def _display_strategy_reason(decision: StrategyDecision) -> str:
     if decision.blocked_reason == "insufficient_evidence":
         return "已評分 forecast 樣本不足，不足以支持買進或賣出。"
     if decision.blocked_reason == "model_not_beating_baseline":
+        if "主要研究阻擋" in decision.reason_summary:
+            return decision.reason_summary
         return "模型證據沒有打贏 naive persistence baseline，因此買進/賣出被擋住。"
     if decision.blocked_reason == "evidence_grade_too_weak_for_directional_action":
         return "證據方向偏正面，但強度不足以支持買進或賣出。"

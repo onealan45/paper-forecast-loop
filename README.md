@@ -460,6 +460,9 @@ factory:
   through `create-decision-blocker-research-agenda` and the `run-once
   --also-decide` loop, so the next research worker gets concrete artifacts to
   produce instead of only reading blocker copy.
+- PR140 adds a read-only `decision-blocker-research-plan` so those agendas turn
+  into prioritized next research tasks and safe command arguments instead of
+  remaining unstructured work items.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -540,6 +543,7 @@ This version intentionally includes:
   - `strategy-lineage`
   - `create-lineage-research-agenda`
   - `create-decision-blocker-research-agenda`
+  - `decision-blocker-research-plan`
   - `lineage-research-plan`
   - `record-lineage-research-task-run`
   - `execute-lineage-research-next-task`
@@ -1546,6 +1550,18 @@ next, such as event-edge evaluation, backtest, walk-forward validation, or
 baseline evidence. `run-once --also-decide` attempts the same agenda creation
 after decision generation and records the agenda id in the command JSON when a
 research blocker summary is available.
+
+Plan the next decision-blocker research task:
+
+```powershell
+python run_forecast_loop.py decision-blocker-research-plan --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD
+```
+
+`decision-blocker-research-plan` is read-only. It chooses the latest
+`decision_blocker_research_agenda` for the symbol and emits the next research
+task. Event-edge blockers can produce a directly runnable `build-event-edge`
+command. Backtest and walk-forward blockers remain explicit blocked tasks until
+the operator or future executor supplies safe `start` / `end` windows.
 
 Turn that lineage agenda into a machine-readable next research task:
 

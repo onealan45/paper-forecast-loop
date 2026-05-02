@@ -987,6 +987,10 @@ V1 MVP should include:
 - decision-blocker research agendas, so the latest readable BUY/SELL blocker is
   converted into a concrete `research_agendas.jsonl` work item with expected
   evidence artifacts for the next strategy-research loop
+- decision-blocker research task planning, so that work item becomes a
+  prioritized read-only task plan with command arguments for safe evidence
+  builders such as event-edge evaluation and explicit missing inputs for
+  windowed validation
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

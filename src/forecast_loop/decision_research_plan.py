@@ -15,6 +15,7 @@ from forecast_loop.models import (
     MarketReactionCheck,
     ResearchAgenda,
     StrategyDecision,
+    WalkForwardValidation,
 )
 from forecast_loop.storage import ArtifactRepository
 
@@ -101,6 +102,7 @@ def build_decision_blocker_research_task_plan(
             repository.load_canonical_events(),
             repository.load_market_reaction_checks(),
             repository.load_market_candles(),
+            repository.load_walk_forward_validations(),
         )
     )
     next_task = next((task for task in tasks if task.status != "completed"), None)
@@ -167,6 +169,7 @@ def _evidence_tasks(
     events: list[CanonicalEvent],
     reactions: list[MarketReactionCheck],
     candles: list[MarketCandleRecord],
+    walk_forwards: list[WalkForwardValidation],
 ) -> list[DecisionBlockerResearchTask]:
     tasks: list[DecisionBlockerResearchTask] = []
     expected = set(agenda.expected_artifacts)
@@ -175,7 +178,7 @@ def _evidence_tasks(
     if "backtest_result" in expected:
         tasks.append(_backtest_task(blockers))
     if "walk_forward_validation" in expected:
-        tasks.append(_walk_forward_task(blockers))
+        tasks.append(_walk_forward_task(agenda, storage, symbol, now, blockers, candles, walk_forwards))
     if "baseline_evaluation" in expected:
         tasks.append(_baseline_task(blockers))
     return tasks
@@ -263,14 +266,83 @@ def _backtest_task(blockers: list[str]) -> DecisionBlockerResearchTask:
     )
 
 
-def _walk_forward_task(blockers: list[str]) -> DecisionBlockerResearchTask:
-    return _window_blocked_task(
+def _walk_forward_task(
+    agenda: ResearchAgenda,
+    storage: Path | None,
+    symbol: str,
+    now: datetime,
+    blockers: list[str],
+    candles: list[MarketCandleRecord],
+    walk_forwards: list[WalkForwardValidation],
+) -> DecisionBlockerResearchTask:
+    latest_walk_forward = _latest_walk_forward_after_agenda(walk_forwards, agenda)
+    if latest_walk_forward is not None:
+        return DecisionBlockerResearchTask(
+            task_id="run_walk_forward_validation",
+            title="Run blocker-focused walk-forward validation",
+            status="completed",
+            required_artifact="walk_forward_validation",
+            artifact_id=latest_walk_forward.validation_id,
+            command_args=None,
+            worker_prompt=_worker_prompt("walk-forward validation", blockers),
+            blocked_reason=None,
+            missing_inputs=[],
+            rationale="A same-symbol walk-forward validation already exists after this blocker agenda.",
+        )
+    if storage is None:
+        return _window_blocked_task(
+            task_id="run_walk_forward_validation",
+            title="Run blocker-focused walk-forward validation",
+            required_artifact="walk_forward_validation",
+            blocked_reason="missing_storage_dir",
+            worker_prompt=_worker_prompt("walk-forward validation", blockers),
+            rationale="Walk-forward validation needs a storage directory before a command can be emitted.",
+            missing_inputs=["storage_dir"],
+        )
+    window = _walk_forward_window(candles, symbol=symbol, now=now)
+    if window is None:
+        return _window_blocked_task(
+            task_id="run_walk_forward_validation",
+            title="Run blocker-focused walk-forward validation",
+            required_artifact="walk_forward_validation",
+            blocked_reason="missing_walk_forward_window",
+            worker_prompt=_worker_prompt("walk-forward validation", blockers),
+            rationale="Walk-forward validation needs at least 10 same-symbol candles imported by plan time.",
+            missing_inputs=["market_candles"],
+        )
+    start, end = window
+    command = _base_command() + [
+        "walk-forward",
+        "--storage-dir",
+        str(storage),
+        "--symbol",
+        symbol,
+        "--start",
+        start.isoformat(),
+        "--end",
+        end.isoformat(),
+        "--created-at",
+        now.isoformat(),
+        "--train-size",
+        "4",
+        "--validation-size",
+        "3",
+        "--test-size",
+        "3",
+        "--step-size",
+        "1",
+    ]
+    return DecisionBlockerResearchTask(
         task_id="run_walk_forward_validation",
         title="Run blocker-focused walk-forward validation",
+        status="ready",
         required_artifact="walk_forward_validation",
-        blocked_reason="missing_walk_forward_window",
+        artifact_id=None,
+        command_args=command,
         worker_prompt=_worker_prompt("walk-forward validation", blockers),
-        rationale="Walk-forward validation needs explicit start/end windows before a safe command can be emitted.",
+        blocked_reason=None,
+        missing_inputs=[],
+        rationale="Stored candles cover a conservative walk-forward window for the blocker evidence task.",
     )
 
 
@@ -297,6 +369,7 @@ def _window_blocked_task(
     blocked_reason: str,
     worker_prompt: str,
     rationale: str,
+    missing_inputs: list[str] | None = None,
 ) -> DecisionBlockerResearchTask:
     return DecisionBlockerResearchTask(
         task_id=task_id,
@@ -307,7 +380,7 @@ def _window_blocked_task(
         command_args=None,
         worker_prompt=worker_prompt,
         blocked_reason=blocked_reason,
-        missing_inputs=["start", "end"],
+        missing_inputs=missing_inputs or ["start", "end"],
         rationale=rationale,
     )
 
@@ -329,6 +402,43 @@ def _latest_event_edge_after_agenda(
         if evaluation.symbol == agenda.symbol and evaluation.created_at >= agenda.created_at
     ]
     return max(candidates, key=lambda item: (item.created_at, item.evaluation_id)) if candidates else None
+
+
+def _latest_walk_forward_after_agenda(
+    walk_forwards: list[WalkForwardValidation],
+    agenda: ResearchAgenda,
+) -> WalkForwardValidation | None:
+    candidates = [
+        validation
+        for validation in walk_forwards
+        if validation.symbol == agenda.symbol and validation.created_at >= agenda.created_at
+    ]
+    return max(candidates, key=lambda item: (item.created_at, item.validation_id)) if candidates else None
+
+
+def _walk_forward_window(
+    candles: list[MarketCandleRecord],
+    *,
+    symbol: str,
+    now: datetime,
+) -> tuple[datetime, datetime] | None:
+    by_time: dict[datetime, MarketCandleRecord] = {}
+    for candle in candles:
+        if candle.symbol != symbol:
+            continue
+        if candle.timestamp > now or candle.imported_at > now:
+            continue
+        existing = by_time.get(candle.timestamp)
+        if existing is None or (candle.imported_at, candle.source, candle.candle_id) > (
+            existing.imported_at,
+            existing.source,
+            existing.candle_id,
+        ):
+            by_time[candle.timestamp] = candle
+    timestamps = sorted(by_time)
+    if len(timestamps) < 10:
+        return None
+    return timestamps[0], timestamps[-1]
 
 
 def _missing_event_edge_inputs(

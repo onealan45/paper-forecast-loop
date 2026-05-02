@@ -89,6 +89,7 @@ class OperatorConsoleSnapshot:
     latest_research_agenda: ResearchAgenda | None
     latest_research_autopilot_run: ResearchAutopilotRun | None
     latest_strategy_research_digest: StrategyResearchDigest | None
+    latest_strategy_research_digest_card: StrategyCard | None
     latest_strategy_lineage_summary: StrategyLineageSummary | None
     latest_lineage_research_agenda: ResearchAgenda | None
     latest_lineage_research_task_plan: LineageResearchTaskPlan | None
@@ -249,6 +250,8 @@ def build_operator_console_snapshot(
         revision_card=lineage_replacement_card,
     )
 
+    latest_digest = _latest(strategy_research_digests)
+
     return OperatorConsoleSnapshot(
         storage_dir=storage_path,
         generated_at=generated_at,
@@ -268,7 +271,11 @@ def build_operator_console_snapshot(
         latest_paper_shadow_outcome=research_chain.paper_shadow_outcome,
         latest_research_agenda=research_chain.research_agenda,
         latest_research_autopilot_run=research_chain.research_autopilot_run,
-        latest_strategy_research_digest=_latest(strategy_research_digests),
+        latest_strategy_research_digest=latest_digest,
+        latest_strategy_research_digest_card=_strategy_card_by_id(
+            strategy_cards,
+            latest_digest.strategy_card_id if latest_digest else None,
+        ),
         latest_strategy_lineage_summary=lineage_summary,
         latest_lineage_research_agenda=lineage_research_agenda,
         latest_lineage_research_task_plan=lineage_research_task_plan,
@@ -1032,7 +1039,7 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
     <h3>策略研究結論</h3>
     <p>{escape(build_strategy_research_conclusion(card=card, outcome=outcome, autopilot=autopilot))}</p>
   </article>
-  {_strategy_research_digest_panel(snapshot.latest_strategy_research_digest)}
+  {_strategy_research_digest_panel(snapshot.latest_strategy_research_digest, snapshot.latest_strategy_research_digest_card)}
   <article class="panel">
     <h3>下一步研究動作</h3>
     <div class="metric">{escape(_display_research_action(autopilot.next_research_action if autopilot else None))}</div>
@@ -1888,7 +1895,10 @@ def _revision_retest_autopilot_run_panel(run: ResearchAutopilotRun | None) -> st
 """
 
 
-def _strategy_research_digest_panel(digest: StrategyResearchDigest | None) -> str:
+def _strategy_research_digest_panel(
+    digest: StrategyResearchDigest | None,
+    card: StrategyCard | None = None,
+) -> str:
     if digest is None:
         return ""
     return f"""
@@ -1903,13 +1913,18 @@ def _strategy_research_digest_panel(digest: StrategyResearchDigest | None) -> st
     {_plain_list(_digest_failure_attributions(digest), empty="目前沒有 digest failure attribution")}
     <p>Lineage：Revisions {digest.lineage_revision_count} / Outcomes {digest.lineage_outcome_count}</p>
     <p>Next rationale：{escape(digest.next_step_rationale)}</p>
+    <h4>Digest strategy rules</h4>
+    {_digest_strategy_rules(card)}
     <p>Evidence：</p>
     {_plain_list(digest.evidence_artifact_ids, empty="目前沒有 digest evidence")}
   </article>
 """
 
 
-def _strategy_research_digest_preview(digest: StrategyResearchDigest | None) -> str:
+def _strategy_research_digest_preview(
+    digest: StrategyResearchDigest | None,
+    card: StrategyCard | None = None,
+) -> str:
     if digest is None:
         return ""
     return f"""
@@ -1919,8 +1934,24 @@ def _strategy_research_digest_preview(digest: StrategyResearchDigest | None) -> 
 <p>Next rationale：{escape(digest.next_step_rationale)}</p>
 <p>Failure concentration：</p>
 {_plain_list(_digest_failure_attributions(digest), empty="目前沒有 digest failure attribution")}
+<p>Digest strategy rules</p>
+{_digest_strategy_rules(card)}
 <p>Evidence：</p>
 {_plain_list(digest.evidence_artifact_ids, empty="目前沒有 digest evidence")}
+"""
+
+
+def _digest_strategy_rules(card: StrategyCard | None) -> str:
+    if card is None:
+        return '<p class="muted">沒有對應 strategy card artifact</p>'
+    return f"""
+<p>Hypothesis：{escape(card.hypothesis)}</p>
+<p>Entry：</p>
+{_plain_list(card.entry_rules[:3], empty="目前沒有 entry rules")}
+<p>Exit：</p>
+{_plain_list(card.exit_rules[:3], empty="目前沒有 exit rules")}
+<p>Risk：</p>
+{_plain_list(card.risk_rules[:3], empty="目前沒有 risk rules")}
 """
 
 
@@ -1947,7 +1978,7 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
 <p>假設：{escape(card.hypothesis if card else "目前沒有 strategy_cards artifact。")}</p>
 <h4>策略研究結論</h4>
 <p>{escape(build_strategy_research_conclusion(card=card, outcome=outcome, autopilot=autopilot))}</p>
-{_strategy_research_digest_preview(digest)}
+{_strategy_research_digest_preview(digest, snapshot.latest_strategy_research_digest_card)}
 <p>Leaderboard：{_artifact_id(leaderboard, "entry_id")} / alpha_score={_format_number(leaderboard.alpha_score if leaderboard else None)}</p>
 <p>Paper-shadow：{escape(_display_research_action(outcome.recommended_strategy_action if outcome else None))} / {escape(_display_outcome_grade(outcome.outcome_grade if outcome else None))}</p>
 <p>下一步：{escape(_display_research_action(autopilot.next_research_action if autopilot else None))} / Run {_artifact_id(autopilot, "run_id")}</p>

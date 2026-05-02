@@ -965,6 +965,9 @@ def test_operator_console_surfaces_strategy_research_digest_in_research_and_over
         assert "優先修正 回撤超標 (drawdown_breach)，再重跑 locked retest。" in html
         assert "負超額報酬 (negative_excess_return), 回撤超標 (drawdown_breach)" in html
         assert "paper-shadow-outcome:visible-revision-quarantine" in html
+        assert "Digest strategy rules" in html
+        assert "突破前高且成交量放大" in html
+        assert "single-trial max position 10%" in html
 
 
 def test_research_page_uses_autopilot_linked_chain_instead_of_latest_symbol_artifacts(tmp_path):

@@ -1142,6 +1142,9 @@ def test_dashboard_surfaces_strategy_research_digest_summary(tmp_path):
     assert "優先修正 回撤超標 (drawdown_breach)，再重跑 locked retest。" in html
     assert "負超額報酬 (negative_excess_return), 回撤超標 (drawdown_breach)" in html
     assert "paper-shadow-outcome:dashboard-revision-quarantine" in html
+    assert "Digest strategy rules" in html
+    assert "突破前高且成交量放大" in html
+    assert "paper-shadow fail -&gt; revise" in html
     assert html.index("策略研究摘要") < html.index("目前策略假設")
 
 

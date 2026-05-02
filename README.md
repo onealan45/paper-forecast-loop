@@ -444,6 +444,9 @@ factory:
 - PR134 makes `health-check` flag PASSED revision/replacement retest trials
   whose linked backtest or walk-forward evidence lacks a verifiable matching
   retest chain `id_context`, so polluted evidence chains become repair-visible.
+- PR135 extends `repair-storage` so those context-polluted PASSED retest trials
+  can be quarantined from active `experiment_trials.jsonl` while preserving an
+  auditable `quarantine/retest_context_experiment_trials.jsonl` copy.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -1936,8 +1939,12 @@ python run_forecast_loop.py repair-storage --storage-dir .\paper_storage\manual-
 ```
 
 The repair command writes `storage_repair_report.json` with a fresh
-`generated_at_utc`, active forecast count, latest forecast id, and quarantine
-status. Treat that report as a point-in-time audit record, not a live monitor.
+`generated_at_utc`, active forecast count, latest forecast id, active experiment
+trial count, latest experiment trial id, and quarantine status. It can
+quarantine legacy off-boundary forecasts and PASSED retest trials whose linked
+backtest or walk-forward evidence does not carry the matching retest
+`id_context`. Treat that report as a point-in-time audit record, not a live
+monitor.
 
 Initialize the M2 SQLite repository:
 

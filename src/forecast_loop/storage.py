@@ -210,6 +210,8 @@ class ArtifactRepository(Protocol):
 
     def load_experiment_trials(self) -> list[ExperimentTrial]: ...
 
+    def replace_experiment_trials(self, trials: list[ExperimentTrial]) -> None: ...
+
     def save_split_manifest(self, manifest: SplitManifest) -> None: ...
 
     def load_split_manifests(self) -> list[SplitManifest]: ...
@@ -683,6 +685,11 @@ class JsonFileRepository:
 
     def load_experiment_trials(self) -> list[ExperimentTrial]:
         return self._load_lines(self.experiment_trials_path, ExperimentTrial.from_dict)
+
+    def replace_experiment_trials(self, trials: list[ExperimentTrial]) -> None:
+        with self.experiment_trials_path.open("w", encoding="utf-8") as handle:
+            for trial in trials:
+                handle.write(json.dumps(trial.to_dict()) + "\n")
 
     def save_split_manifest(self, manifest: SplitManifest) -> None:
         self._append_unique(

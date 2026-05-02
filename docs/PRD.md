@@ -970,6 +970,9 @@ V1 MVP should include:
   whose linked backtest or walk-forward evidence belongs to another retest
   chain, or cannot be context-verified, are treated as repair-visible storage
   defects
+- retest evidence-context repair in `repair-storage`, so those polluted PASSED
+  retest trials can be quarantined from active experiment-trial state while
+  retaining an auditable quarantine copy and point-in-time repair report
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

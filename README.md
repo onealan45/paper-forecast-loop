@@ -456,6 +456,10 @@ factory:
 - PR138 carries that latest decision blocker context into the strategy research
   digest and read-only UX, linking the decision id as evidence so the next
   research handoff sees both lineage history and the active BUY/SELL blocker.
+- PR139 turns those latest decision blockers into an idempotent research agenda
+  through `create-decision-blocker-research-agenda` and the `run-once
+  --also-decide` loop, so the next research worker gets concrete artifacts to
+  produce instead of only reading blocker copy.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -535,6 +539,7 @@ This version intentionally includes:
   - `operator-console`
   - `strategy-lineage`
   - `create-lineage-research-agenda`
+  - `create-decision-blocker-research-agenda`
   - `lineage-research-plan`
   - `record-lineage-research-task-run`
   - `execute-lineage-research-next-task`
@@ -1526,6 +1531,21 @@ python run_forecast_loop.py create-lineage-research-agenda --storage-dir .\paper
 the latest lineage verdict and next research focus to seed the next research
 loop; it does not create a decision, mutate a strategy card, or submit any
 order.
+
+Persist the latest strategy-decision blocker as a research agenda:
+
+```powershell
+python run_forecast_loop.py create-decision-blocker-research-agenda --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD
+```
+
+`create-decision-blocker-research-agenda` reads the latest same-symbol
+strategy decision, extracts the `主要研究阻擋` list from its reason summary, and
+writes an idempotent `decision_blocker_research_agenda` entry to
+`research_agendas.jsonl`. The agenda names the evidence artifacts to produce
+next, such as event-edge evaluation, backtest, walk-forward validation, or
+baseline evidence. `run-once --also-decide` attempts the same agenda creation
+after decision generation and records the agenda id in the command JSON when a
+research blocker summary is available.
 
 Turn that lineage agenda into a machine-readable next research task:
 

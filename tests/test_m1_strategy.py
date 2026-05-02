@@ -759,6 +759,7 @@ def test_cli_run_once_also_decide_writes_one_command_strategy_decision(tmp_path,
     assert exit_code == 0
     assert payload["decision_action"] == "HOLD"
     assert payload["strategy_research_digest_id"] is None
+    assert payload["decision_blocker_research_agenda_id"] is None
     assert payload["automation_run_id"].startswith("automation-run:")
     assert payload["notification_count"] >= 1
     assert (tmp_path / "forecasts.jsonl").exists()
@@ -789,6 +790,7 @@ def test_cli_run_once_also_decide_writes_one_command_strategy_decision(tmp_path,
         "decide",
         "notifications",
         "strategy_research_digest",
+        "decision_blocker_research_agenda",
     ]
 
 

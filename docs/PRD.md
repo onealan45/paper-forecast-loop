@@ -984,6 +984,9 @@ V1 MVP should include:
 - strategy research digest decision context, so the latest same-symbol decision
   id, action, blocked reason, and readable research blockers are carried into
   the digest and surfaced in dashboard/operator-console strategy panels
+- decision-blocker research agendas, so the latest readable BUY/SELL blocker is
+  converted into a concrete `research_agendas.jsonl` work item with expected
+  evidence artifacts for the next strategy-research loop
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

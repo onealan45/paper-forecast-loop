@@ -429,10 +429,15 @@ def _seed_visible_strategy_research_digest(repository: JsonFileRepository, now: 
                 "strategy-card:visible",
                 "paper-shadow-outcome:visible",
                 "paper-shadow-outcome:visible-revision-quarantine",
+                "event-edge:visible",
+                "backtest-result:visible",
+                "walk-forward:visible",
             ],
             research_summary=(
                 "目前策略 BTC strategy visibility candidate：paper-shadow 失敗；"
-                "下一步修訂策略。"
+                "下一步修訂策略。 研究證據：Event edge：樣本 2，after-cost edge -1.14%；"
+                "Backtest：策略 -8.72%，benchmark +1.02%；"
+                "Walk-forward：excess -0.09%，windows 176。"
             ),
             next_step_rationale="優先修正 回撤超標 (drawdown_breach)，再重跑 locked retest。",
             decision_basis="test",
@@ -976,11 +981,17 @@ def test_operator_console_surfaces_strategy_research_digest_in_research_and_over
         assert "策略研究摘要" in html
         assert "strategy-research-digest:visible" in html
         assert "目前策略 BTC strategy visibility candidate：paper-shadow 失敗；下一步修訂策略。" in html
+        assert "Event edge：樣本 2，after-cost edge -1.14%" in html
+        assert "Backtest：策略 -8.72%，benchmark +1.02%" in html
+        assert "Walk-forward：excess -0.09%，windows 176" in html
         assert "優先修正 回撤超標 (drawdown_breach)，再重跑 locked retest。" in html
         assert "負超額報酬 (negative_excess_return), 回撤超標 (drawdown_breach)" in html
         assert "paper-shadow-outcome:visible-revision-quarantine" in html
+        assert "event-edge:visible" in html
+        assert "backtest-result:visible" in html
+        assert "walk-forward:visible" in html
         digest_start = html.index("策略研究摘要")
-        digest_section = html[digest_start : html.index("證據", digest_start)]
+        digest_section = html[digest_start : html.index("<p>證據", digest_start)]
         assert "摘要 ID" in digest_section
         assert "下一步理由" in digest_section
         assert "失敗集中" in digest_section

@@ -234,10 +234,15 @@ def _seed_dashboard_strategy_research_digest(repository: JsonFileRepository, now
                 "strategy-card:dashboard-visible",
                 "paper-shadow-outcome:dashboard-visible",
                 "paper-shadow-outcome:dashboard-revision-quarantine",
+                "event-edge:dashboard-visible",
+                "backtest-result:dashboard-visible",
+                "walk-forward:dashboard-visible",
             ],
             research_summary=(
                 "目前策略 Dashboard BTC breakout candidate：paper-shadow 失敗；"
-                "下一步修訂策略。"
+                "下一步修訂策略。 研究證據：Event edge：樣本 2，after-cost edge -1.14%；"
+                "Backtest：策略 -8.72%，benchmark +1.02%；"
+                "Walk-forward：excess -0.09%，windows 176。"
             ),
             next_step_rationale="優先修正 回撤超標 (drawdown_breach)，再重跑 locked retest。",
             decision_basis="test",
@@ -1192,9 +1197,15 @@ def test_dashboard_surfaces_strategy_research_digest_summary(tmp_path):
     assert "策略研究摘要" in html
     assert "strategy-research-digest:dashboard-visible" in html
     assert "目前策略 Dashboard BTC breakout candidate：paper-shadow 失敗；下一步修訂策略。" in html
+    assert "Event edge：樣本 2，after-cost edge -1.14%" in html
+    assert "Backtest：策略 -8.72%，benchmark +1.02%" in html
+    assert "Walk-forward：excess -0.09%，windows 176" in html
     assert "優先修正 回撤超標 (drawdown_breach)，再重跑 locked retest。" in html
     assert "負超額報酬 (negative_excess_return), 回撤超標 (drawdown_breach)" in html
     assert "paper-shadow-outcome:dashboard-revision-quarantine" in html
+    assert "event-edge:dashboard-visible" in html
+    assert "backtest-result:dashboard-visible" in html
+    assert "walk-forward:dashboard-visible" in html
     digest_start = html.index("策略研究摘要")
     digest_section = html[digest_start : html.index("<dt>證據</dt>", digest_start)]
     assert "<dt>摘要 ID</dt>" in digest_section

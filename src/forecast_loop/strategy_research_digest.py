@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from forecast_loop.models import StrategyCard, StrategyDecision, StrategyResearchDigest
+from forecast_loop.models import (
+    BacktestResult,
+    EventEdgeEvaluation,
+    StrategyCard,
+    StrategyDecision,
+    StrategyResearchDigest,
+    WalkForwardValidation,
+)
 from forecast_loop.storage import ArtifactRepository
 from forecast_loop.decision_research_agenda import extract_decision_research_blockers
 from forecast_loop.strategy_lineage import build_strategy_lineage_summary
@@ -40,20 +47,30 @@ def build_strategy_research_digest(
 ) -> StrategyResearchDigest:
     created_at = created_at or datetime.now(tz=UTC)
     symbol = symbol.upper()
-    strategy_cards = [card for card in repository.load_strategy_cards() if symbol in card.symbols]
+    strategy_cards = [
+        card for card in _artifacts_as_of(repository.load_strategy_cards(), created_at) if symbol in card.symbols
+    ]
     paper_shadow_outcomes = [
-        outcome for outcome in repository.load_paper_shadow_outcomes() if outcome.symbol == symbol
+        outcome
+        for outcome in _artifacts_as_of(repository.load_paper_shadow_outcomes(), created_at)
+        if outcome.symbol == symbol
     ]
     chain = resolve_latest_strategy_research_chain(
         symbol=symbol,
         strategy_cards=strategy_cards,
-        experiment_trials=repository.load_experiment_trials(),
-        locked_evaluations=repository.load_locked_evaluation_results(),
-        split_manifests=repository.load_split_manifests(),
-        leaderboard_entries=repository.load_leaderboard_entries(),
+        experiment_trials=_artifacts_as_of(repository.load_experiment_trials(), created_at),
+        locked_evaluations=_artifacts_as_of(
+            repository.load_locked_evaluation_results(),
+            created_at,
+        ),
+        split_manifests=_artifacts_as_of(repository.load_split_manifests(), created_at),
+        leaderboard_entries=_artifacts_as_of(repository.load_leaderboard_entries(), created_at),
         paper_shadow_outcomes=paper_shadow_outcomes,
-        research_agendas=repository.load_research_agendas(),
-        research_autopilot_runs=repository.load_research_autopilot_runs(),
+        research_agendas=_artifacts_as_of(repository.load_research_agendas(), created_at),
+        research_autopilot_runs=_artifacts_as_of(
+            repository.load_research_autopilot_runs(),
+            created_at,
+        ),
         prefer_latest_anchor=True,
     )
     lineage = build_strategy_lineage_summary(
@@ -67,13 +84,56 @@ def build_strategy_research_digest(
     )
     next_research_action = _next_research_action(chain, lineage)
     evidence_artifact_ids = _evidence_artifact_ids(chain, lineage)
-    latest_decision = _latest_strategy_decision(repository.load_strategy_decisions(), symbol)
+    latest_decision = _latest_strategy_decision(
+        _artifacts_as_of(repository.load_strategy_decisions(), created_at),
+        symbol,
+    )
     decision_research_blockers = (
         extract_decision_research_blockers(latest_decision) if latest_decision else []
     )
     if latest_decision is not None:
         _append_id(evidence_artifact_ids, latest_decision.decision_id)
+    latest_event_edge = _latest_symbol_artifact(
+        repository.load_event_edge_evaluations(),
+        symbol=symbol,
+        as_of=created_at,
+    )
+    latest_backtest = _latest_symbol_artifact(
+        repository.load_backtest_results(),
+        symbol=symbol,
+        as_of=created_at,
+    )
+    latest_walk_forward = _latest_symbol_artifact(
+        repository.load_walk_forward_validations(),
+        symbol=symbol,
+        as_of=created_at,
+    )
+    _append_id(
+        evidence_artifact_ids,
+        latest_event_edge.evaluation_id if latest_event_edge else None,
+    )
+    _append_id(
+        evidence_artifact_ids,
+        latest_backtest.result_id if latest_backtest else None,
+    )
+    _append_id(
+        evidence_artifact_ids,
+        latest_walk_forward.validation_id if latest_walk_forward else None,
+    )
     lineage_latest_outcome_id = lineage.latest_outcome_id if lineage else None
+    research_summary = build_strategy_research_conclusion(
+        card=chain.strategy_card,
+        outcome=chain.paper_shadow_outcome,
+        autopilot=chain.research_autopilot_run,
+        next_research_action=next_research_action,
+    )
+    evidence_summary = _research_evidence_summary(
+        latest_event_edge=latest_event_edge,
+        latest_backtest=latest_backtest,
+        latest_walk_forward=latest_walk_forward,
+    )
+    if evidence_summary:
+        research_summary = f"{research_summary} 研究證據：{evidence_summary}"
 
     return StrategyResearchDigest(
         digest_id=StrategyResearchDigest.build_id(
@@ -113,12 +173,7 @@ def build_strategy_research_digest(
         next_research_action=next_research_action,
         autopilot_run_id=chain.research_autopilot_run.run_id if chain.research_autopilot_run else None,
         evidence_artifact_ids=evidence_artifact_ids,
-        research_summary=build_strategy_research_conclusion(
-            card=chain.strategy_card,
-            outcome=chain.paper_shadow_outcome,
-            autopilot=chain.research_autopilot_run,
-            next_research_action=next_research_action,
-        ),
+        research_summary=research_summary,
         next_step_rationale=_next_step_rationale(
             next_research_action=next_research_action,
             lineage_focus=lineage.next_research_focus if lineage else None,
@@ -206,6 +261,14 @@ def _append_id(ids: list[str], artifact_id: str | None) -> None:
         ids.append(artifact_id)
 
 
+def _artifacts_as_of(items: list, as_of: datetime) -> list:
+    return [
+        item
+        for item in items
+        if getattr(item, "created_at", as_of) <= as_of
+    ]
+
+
 def _latest_strategy_decision(
     decisions: list[StrategyDecision],
     symbol: str,
@@ -214,6 +277,67 @@ def _latest_strategy_decision(
         if decision.symbol == symbol:
             return decision
     return None
+
+
+def _latest_symbol_artifact(items: list, *, symbol: str, as_of: datetime):
+    matches = [
+        item
+        for item in items
+        if getattr(item, "symbol", None) == symbol and getattr(item, "created_at", as_of) <= as_of
+    ]
+    return max(matches, key=lambda item: item.created_at) if matches else None
+
+
+def _research_evidence_summary(
+    *,
+    latest_event_edge: EventEdgeEvaluation | None,
+    latest_backtest: BacktestResult | None,
+    latest_walk_forward: WalkForwardValidation | None,
+) -> str:
+    parts: list[str] = []
+    if latest_event_edge is not None:
+        passed = "是" if latest_event_edge.passed else "否"
+        flags = _format_flags(latest_event_edge.flags)
+        parts.append(
+            "Event edge："
+            f"樣本 {latest_event_edge.sample_n}，"
+            f"after-cost edge {_format_signed_pct(latest_event_edge.average_excess_return_after_costs)}，"
+            f"hit-rate {_format_unsigned_pct(latest_event_edge.hit_rate)}，"
+            f"pass {passed}，"
+            f"flags {flags}"
+        )
+    if latest_backtest is not None:
+        parts.append(
+            "Backtest："
+            f"策略 {_format_signed_pct(latest_backtest.strategy_return)}，"
+            f"benchmark {_format_signed_pct(latest_backtest.benchmark_return)}，"
+            f"max DD {_format_unsigned_pct(latest_backtest.max_drawdown)}，"
+            f"win-rate {_format_unsigned_pct(latest_backtest.win_rate)}，"
+            f"trades {latest_backtest.trade_count}"
+        )
+    if latest_walk_forward is not None:
+        flags = _format_flags(latest_walk_forward.overfit_risk_flags)
+        parts.append(
+            "Walk-forward："
+            f"excess {_format_signed_pct(latest_walk_forward.average_excess_return)}，"
+            f"windows {latest_walk_forward.window_count}，"
+            f"test win-rate {_format_unsigned_pct(latest_walk_forward.test_win_rate)}，"
+            f"overfit windows {latest_walk_forward.overfit_window_count}，"
+            f"flags {flags}"
+        )
+    return "；".join(parts)
+
+
+def _format_signed_pct(value: float | None) -> str:
+    return "n/a" if value is None else f"{value * 100:+.2f}%"
+
+
+def _format_unsigned_pct(value: float | None) -> str:
+    return "n/a" if value is None else f"{abs(value) * 100:.2f}%"
+
+
+def _format_flags(flags: list[str]) -> str:
+    return ", ".join(flags[:5]) if flags else "none"
 
 
 def _next_step_rationale(

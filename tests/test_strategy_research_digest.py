@@ -246,6 +246,13 @@ def test_record_strategy_research_digest_persists_current_strategy_and_lineage_c
     assert "BTC breakout research" in digest.research_summary
     assert "paper-shadow" in digest.research_summary
     assert "回撤超標" in digest.next_step_rationale
+    assert digest.strategy_rule_summary == [
+        "假說: Tighten risk controls after drawdown-heavy failed samples.",
+        "訊號: Breakout with risk filter.",
+        "進場: Require breakout and drawdown filter.",
+        "出場: Exit when drawdown filter fails.",
+        "風控: Quarantine if drawdown repeats.",
+    ]
 
 
 def test_strategy_research_digest_prefers_newer_retest_leaderboard_over_stale_autopilot_run(
@@ -354,6 +361,13 @@ def test_strategy_research_digest_prefers_newer_retest_leaderboard_over_stale_au
         "已有 leaderboard entry，但尚未有 post-entry paper-shadow observation；"
         "等待下一個完整觀察視窗，不捏造未來報酬。"
     )
+    assert digest.strategy_rule_summary == [
+        "假說: A newer replacement strategy is in retest and must own the digest.",
+        "訊號: Replacement retest signal.",
+        "進場: Enter only after retest evidence passes.",
+        "出場: Exit when retest invalidates.",
+        "風控: Wait for paper-shadow outcome before promotion.",
+    ]
 
 
 def test_strategy_research_digest_cli_writes_digest_artifact(tmp_path, capsys):

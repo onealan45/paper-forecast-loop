@@ -1914,7 +1914,7 @@ def _strategy_research_digest_panel(
     <p>Lineage：Revisions {digest.lineage_revision_count} / Outcomes {digest.lineage_outcome_count}</p>
     <p>Next rationale：{escape(digest.next_step_rationale)}</p>
     <h4>Digest strategy rules</h4>
-    {_digest_strategy_rules(card)}
+    {_digest_strategy_rules(digest, card)}
     <p>Evidence：</p>
     {_plain_list(digest.evidence_artifact_ids, empty="目前沒有 digest evidence")}
   </article>
@@ -1935,13 +1935,15 @@ def _strategy_research_digest_preview(
 <p>Failure concentration：</p>
 {_plain_list(_digest_failure_attributions(digest), empty="目前沒有 digest failure attribution")}
 <p>Digest strategy rules</p>
-{_digest_strategy_rules(card)}
+{_digest_strategy_rules(digest, card)}
 <p>Evidence：</p>
 {_plain_list(digest.evidence_artifact_ids, empty="目前沒有 digest evidence")}
 """
 
 
-def _digest_strategy_rules(card: StrategyCard | None) -> str:
+def _digest_strategy_rules(digest: StrategyResearchDigest, card: StrategyCard | None) -> str:
+    if digest.strategy_rule_summary:
+        return _plain_list(digest.strategy_rule_summary)
     if card is None:
         return '<p class="muted">沒有對應 strategy card artifact</p>'
     return f"""

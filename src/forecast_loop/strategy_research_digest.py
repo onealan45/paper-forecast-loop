@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from forecast_loop.models import StrategyResearchDigest
+from forecast_loop.models import StrategyCard, StrategyResearchDigest
 from forecast_loop.storage import ArtifactRepository
 from forecast_loop.strategy_lineage import build_strategy_lineage_summary
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
@@ -115,6 +115,7 @@ def build_strategy_research_digest(
             primary_failure=lineage.primary_failure_attribution if lineage else None,
         ),
         decision_basis="strategy_research_digest_v1",
+        strategy_rule_summary=_strategy_rule_summary(chain.strategy_card),
     )
 
 
@@ -209,3 +210,29 @@ def _next_step_rationale(
     if next_research_action:
         return f"下一步依研究 autopilot 執行 {format_research_action(next_research_action)}。"
     return "目前沒有足夠策略研究證據，先補齊策略卡、回測、paper-shadow 與 lineage 證據。"
+
+
+def _strategy_rule_summary(card: StrategyCard | None) -> list[str]:
+    if card is None:
+        return []
+    summary: list[str] = []
+    _append_summary(summary, "假說", card.hypothesis)
+    _append_summary(summary, "訊號", card.signal_description)
+    if card.entry_rules:
+        _append_summary(summary, "進場", card.entry_rules[0])
+    if card.exit_rules:
+        _append_summary(summary, "出場", card.exit_rules[0])
+    if card.risk_rules:
+        _append_summary(summary, "風控", card.risk_rules[0])
+    controls = card.parameters.get("source_failure_controls")
+    if isinstance(controls, list) and controls:
+        _append_summary(summary, "失敗控制", ", ".join(str(item) for item in controls[:5]))
+    required_research = card.parameters.get("replacement_required_research")
+    if isinstance(required_research, list) and required_research:
+        _append_summary(summary, "驗證門檻", ", ".join(str(item) for item in required_research[:5]))
+    return summary
+
+
+def _append_summary(summary: list[str], label: str, value: str | None) -> None:
+    if value:
+        summary.append(f"{label}: {value}")

@@ -966,6 +966,10 @@ V1 MVP should include:
   retest can copy train/validation/holdout windows from a same-symbol,
   same-dataset locked split while still producing its own current-card split
   before backtest and walk-forward evidence can run
+- retest evidence-context integrity in health-check, so PASSED retest trials
+  whose linked backtest or walk-forward evidence belongs to another retest
+  chain, or cannot be context-verified, are treated as repair-visible storage
+  defects
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

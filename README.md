@@ -441,6 +441,9 @@ factory:
 - PR133 lets revision/replacement retests reuse an existing locked split window
   only when symbol and dataset match, then creates a new split for the current
   strategy card before backtest evidence can run.
+- PR134 makes `health-check` flag PASSED revision/replacement retest trials
+  whose linked backtest or walk-forward evidence lacks a verifiable matching
+  retest chain `id_context`, so polluted evidence chains become repair-visible.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

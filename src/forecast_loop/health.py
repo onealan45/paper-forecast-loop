@@ -52,6 +52,7 @@ from forecast_loop.models import (
     SplitManifest,
     WalkForwardValidation,
 )
+from forecast_loop.revision_retest import RETEST_PROTOCOL_VERSION
 from forecast_loop.storage import JsonFileRepository
 from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
 
@@ -397,6 +398,14 @@ def run_health_check(
         research_agendas,
         research_autopilot_runs,
         findings,
+    )
+    _check_revision_retest_passed_trial_contexts(
+        storage_path=storage_path,
+        experiment_trials=experiment_trials,
+        backtest_runs=backtest_runs,
+        backtest_results=backtest_results,
+        walk_forward_validations=walk_forward_validations,
+        findings=findings,
     )
     _check_m7_evidence_integrity(
         storage_path,
@@ -1487,6 +1496,121 @@ def _check_links(
                     outcome.trial_id,
                     findings,
                 )
+
+
+def _check_revision_retest_passed_trial_contexts(
+    *,
+    storage_path: Path,
+    experiment_trials: list[ExperimentTrial],
+    backtest_runs: list[BacktestRun],
+    backtest_results: list[BacktestResult],
+    walk_forward_validations: list[WalkForwardValidation],
+    findings: list[HealthFinding],
+) -> None:
+    backtest_results_by_id = {result.result_id: result for result in backtest_results}
+    backtest_runs_by_id = {run.backtest_id: run for run in backtest_runs}
+    walk_forwards_by_id = {validation.validation_id: validation for validation in walk_forward_validations}
+    for trial in experiment_trials:
+        if not _is_revision_retest_passed_trial(trial):
+            continue
+        valid_contexts = _valid_revision_retest_contexts(trial, experiment_trials)
+        if not valid_contexts:
+            _add_integrity_finding(
+                "revision_retest_passed_trial_context_unverifiable",
+                storage_path / "experiment_trials.jsonl",
+                trial.trial_id,
+                (
+                    "PASSED revision retest trial is missing source outcome "
+                    "metadata needed to verify retest evidence id_context"
+                ),
+                findings,
+            )
+            continue
+        if trial.backtest_result_id:
+            backtest = backtest_results_by_id.get(trial.backtest_result_id)
+            backtest_run = backtest_runs_by_id.get(backtest.backtest_id) if backtest is not None else None
+            if backtest_run is not None and not _decision_basis_has_any_id_context(
+                backtest_run.decision_basis,
+                valid_contexts,
+            ):
+                _add_integrity_finding(
+                    "revision_retest_passed_trial_backtest_context_mismatch",
+                    storage_path / "experiment_trials.jsonl",
+                    trial.trial_id,
+                    (
+                        "PASSED revision retest trial links a backtest whose run "
+                        "does not carry this retest chain id_context"
+                    ),
+                    findings,
+                )
+        if trial.walk_forward_validation_id:
+            walk_forward = walk_forwards_by_id.get(trial.walk_forward_validation_id)
+            if walk_forward is not None and not _decision_basis_has_any_id_context(
+                walk_forward.decision_basis,
+                valid_contexts,
+            ):
+                _add_integrity_finding(
+                    "revision_retest_passed_trial_walk_forward_context_mismatch",
+                    storage_path / "experiment_trials.jsonl",
+                    trial.trial_id,
+                    (
+                        "PASSED revision retest trial links a walk-forward validation "
+                        "whose decision_basis does not carry this retest chain id_context"
+                    ),
+                    findings,
+                )
+
+
+def _is_revision_retest_passed_trial(trial: ExperimentTrial) -> bool:
+    return (
+        trial.status == "PASSED"
+        and trial.parameters.get("revision_retest_protocol") == RETEST_PROTOCOL_VERSION
+        and (trial.backtest_result_id is not None or trial.walk_forward_validation_id is not None)
+    )
+
+
+def _valid_revision_retest_contexts(
+    trial: ExperimentTrial,
+    experiment_trials: list[ExperimentTrial],
+) -> list[str]:
+    source_outcome_id = trial.parameters.get("revision_source_outcome_id")
+    if not isinstance(source_outcome_id, str) or not source_outcome_id:
+        return []
+    contexts = [f"revision_retest:{trial.strategy_card_id}:{trial.trial_id}:{source_outcome_id}"]
+    for candidate in experiment_trials:
+        if candidate.trial_id == trial.trial_id:
+            continue
+        if candidate.status != "PENDING":
+            continue
+        if not _same_revision_retest_chain(candidate, trial, source_outcome_id=source_outcome_id):
+            continue
+        contexts.append(f"revision_retest:{candidate.strategy_card_id}:{candidate.trial_id}:{source_outcome_id}")
+    return list(dict.fromkeys(contexts))
+
+
+def _same_revision_retest_chain(
+    candidate: ExperimentTrial,
+    trial: ExperimentTrial,
+    *,
+    source_outcome_id: str,
+) -> bool:
+    return (
+        candidate.strategy_card_id == trial.strategy_card_id
+        and candidate.symbol == trial.symbol
+        and candidate.dataset_id == trial.dataset_id
+        and candidate.trial_index == trial.trial_index
+        and candidate.parameters.get("revision_retest_protocol") == RETEST_PROTOCOL_VERSION
+        and candidate.parameters.get("revision_retest_source_card_id") == trial.strategy_card_id
+        and candidate.parameters.get("revision_source_outcome_id") == source_outcome_id
+    )
+
+
+def _decision_basis_has_any_id_context(decision_basis: str, contexts: list[str]) -> bool:
+    return bool(set(contexts) & set(_id_context_tokens(decision_basis)))
+
+
+def _id_context_tokens(decision_basis: str) -> list[str]:
+    return re.findall(r"(?:^|[;,\s])id_context=([^;,\s]+)", decision_basis)
 
 
 def _add_link_finding(code: str, path: Path, source_id: str, missing_id: str, findings: list[HealthFinding]) -> None:

@@ -79,6 +79,9 @@ factory:
   samples.
 - M7F integrates event-edge evidence into the research gate, so BUY/SELL remains
   blocked unless the latest event edge evaluation also passes.
+- PR143 adds a market-derived event builder, so stored candles can create
+  auditable source/event/reaction artifacts for backtestable event-edge research
+  even before external source ingestion exists.
 - PR6 adds versioned strategy cards, experiment budget snapshots, and an
   append-only experiment trial registry.
 - PR7 adds locked split manifests, cost model snapshots, locked evaluation
@@ -576,6 +579,7 @@ This version intentionally includes:
   - `source-registry`
   - `build-events`
   - `build-market-reactions`
+  - `build-market-derived-events`
   - `build-event-edge`
   - `build-research-dataset`
   - `research-report`
@@ -1566,6 +1570,19 @@ least one event-edge sample. If those inputs are missing, the task is blocked
 with explicit missing inputs instead of pretending it can execute. Backtest and
 walk-forward blockers remain explicit blocked tasks until the operator or future
 executor supplies safe `start` / `end` windows.
+
+Create market-derived event inputs from stored candles:
+
+```powershell
+python run_forecast_loop.py build-market-derived-events --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD --created-at 2026-05-02T12:00:00+00:00 --min-abs-return 0.02
+```
+
+`build-market-derived-events` detects same-symbol hourly candle moves that have
+an exact 24-hour forward candle available. It writes synthetic but auditable
+`source_documents`, `canonical_events`, and passed `market_reaction_checks`
+derived only from local market-candle artifacts. This is for research,
+simulation, and event-edge backtesting; it does not fetch external sources,
+mutate strategies, place orders, or call broker/exchange adapters.
 
 Execute the next supported decision-blocker research task:
 

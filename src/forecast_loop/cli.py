@@ -42,6 +42,7 @@ from forecast_loop.lineage_research_plan import build_lineage_research_task_plan
 from forecast_loop.lineage_research_run_log import record_lineage_research_task_run
 from forecast_loop.locked_evaluation import evaluate_leaderboard_gate, lock_evaluation_protocol
 from forecast_loop.macro_events import import_macro_events, macro_calendar
+from forecast_loop.market_derived_events import build_market_derived_events
 from forecast_loop.market_reaction import build_market_reactions
 from forecast_loop.maintenance import repair_storage
 from forecast_loop.models import PaperControlAction, StrategyDecision
@@ -370,6 +371,13 @@ def main(argv: list[str] | None = None) -> int:
     build_market_reactions_cmd.add_argument("--already-priced-return-threshold", type=float, default=0.03)
     build_market_reactions_cmd.add_argument("--volume-shock-z-threshold", type=float, default=3.0)
 
+    build_market_derived_events_cmd = subparsers.add_parser("build-market-derived-events")
+    build_market_derived_events_cmd.add_argument("--storage-dir", required=True)
+    build_market_derived_events_cmd.add_argument("--symbol", default="BTC-USD")
+    build_market_derived_events_cmd.add_argument("--created-at", required=True)
+    build_market_derived_events_cmd.add_argument("--min-abs-return", type=float, default=0.02)
+    build_market_derived_events_cmd.add_argument("--max-events", type=int, default=20)
+
     build_event_edge_cmd = subparsers.add_parser("build-event-edge")
     build_event_edge_cmd.add_argument("--storage-dir", required=True)
     build_event_edge_cmd.add_argument("--symbol")
@@ -683,6 +691,8 @@ def main(argv: list[str] | None = None) -> int:
             return _build_events(args)
         if args.command == "build-market-reactions":
             return _build_market_reactions(args)
+        if args.command == "build-market-derived-events":
+            return _build_market_derived_events(args)
         if args.command == "build-event-edge":
             return _build_event_edge(args)
         if args.command == "build-research-dataset":
@@ -1897,6 +1907,19 @@ def _build_market_reactions(args) -> int:
         symbol=args.symbol,
         already_priced_return_threshold=args.already_priced_return_threshold,
         volume_shock_z_threshold=args.volume_shock_z_threshold,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _build_market_derived_events(args) -> int:
+    created_at = _parse_datetime(args.created_at)
+    result = build_market_derived_events(
+        storage_dir=args.storage_dir,
+        symbol=args.symbol,
+        created_at=created_at,
+        min_abs_return=args.min_abs_return,
+        max_events=args.max_events,
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0

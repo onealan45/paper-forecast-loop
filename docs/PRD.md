@@ -72,6 +72,9 @@ The PRD follows that decision:
 - M7B-M7F implement the Alpha Evidence Engine: source registry, source document
   import, event reliability, market reaction / already-priced checks,
   historical edge, and decision integration.
+- PR143 adds market-derived event building from stored candles so the research
+  loop can create auditable event-edge samples before external source ingestion
+  is available.
 - PR6 starts the Strategy Card and Experiment Registry layer: strategy cards,
   trial budget snapshots, and append-only experiment trials including failed,
   aborted, and invalid results.

@@ -1010,6 +1010,9 @@ V1 MVP should include:
   event-edge, backtest, and walk-forward sample/return/edge/overfit metrics are
   visible in the digest, dashboard, and operator console alongside their
   artifact ids
+- structured digest evidence cards in dashboard and operator console, so
+  event-edge, backtest, and walk-forward metrics can be scanned without parsing
+  a dense summary sentence
 - point-in-time digest construction, so strategy chain, latest decision, and
   metric evidence created after the digest timestamp are not leaked into
   backdated research summaries
@@ -1057,6 +1060,8 @@ V1 should be considered product-ready for internal iteration only when:
 - strategy research digests show the latest same-symbol event-edge, backtest,
   and walk-forward evidence that helps inspect BUY/SELL blockers without
   leaking future artifacts into backdated summaries
+- dashboard and operator console expose those digest evidence metrics as
+  structured read-only cards without changing strategy gates or artifact state
 - blocking storage, ingestion, or provider problems create repair requests
 - the system can fail safely and fall back to development mode
 - the UI can present strategy logic, prediction rationale, backtests, revisions,

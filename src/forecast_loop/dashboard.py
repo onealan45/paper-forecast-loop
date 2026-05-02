@@ -65,6 +65,7 @@ from forecast_loop.strategy_research_display import (
     format_strategy_card_status,
 )
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
+from forecast_loop.strategy_digest_evidence import StrategyDigestEvidence, resolve_strategy_digest_evidence
 from forecast_loop.storage import JsonFileRepository
 
 
@@ -91,6 +92,7 @@ class DashboardSnapshot:
     latest_research_autopilot_run: ResearchAutopilotRun | None
     latest_strategy_research_digest: StrategyResearchDigest | None
     latest_strategy_research_digest_card: StrategyCard | None
+    latest_strategy_research_digest_evidence: StrategyDigestEvidence
     latest_strategy_lineage_summary: StrategyLineageSummary | None
     latest_lineage_research_agenda: ResearchAgenda | None
     latest_lineage_research_task_plan: LineageResearchTaskPlan | None
@@ -174,6 +176,15 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
     research_autopilot_runs = [item for item in repository.load_research_autopilot_runs() if item.symbol == dashboard_symbol]
     strategy_research_digests = [
         item for item in repository.load_strategy_research_digests() if item.symbol == dashboard_symbol
+    ]
+    event_edge_evaluations = [
+        item for item in repository.load_event_edge_evaluations() if item.symbol == dashboard_symbol
+    ]
+    backtest_results = [
+        item for item in repository.load_backtest_results() if item.symbol == dashboard_symbol
+    ]
+    walk_forward_validations = [
+        item for item in repository.load_walk_forward_validations() if item.symbol == dashboard_symbol
     ]
     automation_runs = [item for item in repository.load_automation_runs() if item.symbol == dashboard_symbol]
     research_chain = resolve_latest_strategy_research_chain(
@@ -298,6 +309,12 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         latest_strategy_research_digest_card=_strategy_card_by_id(
             strategy_cards,
             latest_digest.strategy_card_id if latest_digest else None,
+        ),
+        latest_strategy_research_digest_evidence=resolve_strategy_digest_evidence(
+            digest=latest_digest,
+            event_edges=event_edge_evaluations,
+            backtests=backtest_results,
+            walk_forwards=walk_forward_validations,
         ),
         latest_strategy_lineage_summary=lineage_summary,
         latest_lineage_research_agenda=lineage_research_agenda,
@@ -1152,6 +1169,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
     digest_block = _render_strategy_research_digest(
         snapshot.latest_strategy_research_digest,
         snapshot.latest_strategy_research_digest_card,
+        snapshot.latest_strategy_research_digest_evidence,
     )
     lineage_agenda_block = _render_lineage_research_agenda(snapshot.latest_lineage_research_agenda)
     lineage_task_plan_block = _render_lineage_research_task_plan(snapshot.latest_lineage_research_task_plan)
@@ -1287,6 +1305,7 @@ def render_strategy_research_panel(snapshot: DashboardSnapshot) -> str:
 def _render_strategy_research_digest(
     digest: StrategyResearchDigest | None,
     card: StrategyCard | None = None,
+    evidence: StrategyDigestEvidence | None = None,
 ) -> str:
     if digest is None:
         return ""
@@ -1309,6 +1328,7 @@ def _render_strategy_research_digest(
           <dt>目前決策阻擋</dt><dd>{_render_digest_decision_blockers(digest)}</dd>
           <dt>下一步理由</dt><dd>{escape(digest.next_step_rationale)}</dd>
           <dt>策略規則摘要</dt><dd>{_render_digest_strategy_rules(digest, card)}</dd>
+          <dt>策略證據指標</dt><dd>{_render_digest_evidence_metrics(evidence)}</dd>
           <dt>證據</dt><dd>{_dashboard_list_inline(digest.evidence_artifact_ids)}</dd>
         </dl>
       </div>
@@ -1346,6 +1366,46 @@ def _render_digest_strategy_rules(digest: StrategyResearchDigest, card: Strategy
         <p><strong>風控</strong> {_dashboard_list_inline(card.risk_rules[:3])}</p>
       </div>
     """
+
+
+def _render_digest_evidence_metrics(evidence: StrategyDigestEvidence | None) -> str:
+    if evidence is None or not any((evidence.event_edge, evidence.backtest, evidence.walk_forward)):
+        return '<span class="empty">沒有結構化 strategy evidence metrics</span>'
+    items: list[str] = []
+    if evidence.event_edge is not None:
+        edge = evidence.event_edge
+        items.append(
+            "Event edge "
+            f"<code>{escape(edge.evaluation_id)}</code>："
+            f"樣本 {edge.sample_n}；"
+            f"after-cost edge {_format_signed_ratio(edge.average_excess_return_after_costs)}；"
+            f"hit-rate {_format_optional_ratio(edge.hit_rate)}；"
+            f"pass {_display_boolean(edge.passed)}；"
+            f"flags {escape(', '.join(edge.flags[:5]) if edge.flags else 'none')}"
+        )
+    if evidence.backtest is not None:
+        backtest = evidence.backtest
+        items.append(
+            "Backtest "
+            f"<code>{escape(backtest.result_id)}</code>："
+            f"策略 {_format_signed_ratio(backtest.strategy_return)}；"
+            f"benchmark {_format_optional_ratio(backtest.benchmark_return)}；"
+            f"max DD {_format_optional_ratio(backtest.max_drawdown)}；"
+            f"win-rate {_format_optional_ratio(backtest.win_rate)}；"
+            f"trades {backtest.trade_count}"
+        )
+    if evidence.walk_forward is not None:
+        walk_forward = evidence.walk_forward
+        items.append(
+            "Walk-forward "
+            f"<code>{escape(walk_forward.validation_id)}</code>："
+            f"excess {_format_signed_ratio(walk_forward.average_excess_return)}；"
+            f"windows {walk_forward.window_count}；"
+            f"test win-rate {_format_optional_ratio(walk_forward.test_win_rate)}；"
+            f"overfit windows {walk_forward.overfit_window_count}；"
+            f"flags {escape(', '.join(walk_forward.overfit_risk_flags[:5]) if walk_forward.overfit_risk_flags else 'none')}"
+        )
+    return _dashboard_list_block(items, css_class="digest-rule-list")
 
 
 def _render_lineage_research_agenda(agenda: ResearchAgenda | None) -> str:
@@ -2580,6 +2640,12 @@ def _format_optional_ratio(value: float | None) -> str:
     if value is None:
         return "無"
     return f"{value:.2%}"
+
+
+def _format_signed_ratio(value: float | None) -> str:
+    if value is None:
+        return "無"
+    return f"{value:+.2%}"
 
 
 def _format_optional_number(value: float | None) -> str:

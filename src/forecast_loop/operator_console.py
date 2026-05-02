@@ -61,6 +61,7 @@ from forecast_loop.strategy_research_display import (
     format_strategy_card_status,
 )
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
+from forecast_loop.strategy_digest_evidence import StrategyDigestEvidence, resolve_strategy_digest_evidence
 from forecast_loop.storage import JsonFileRepository
 
 
@@ -90,6 +91,7 @@ class OperatorConsoleSnapshot:
     latest_research_autopilot_run: ResearchAutopilotRun | None
     latest_strategy_research_digest: StrategyResearchDigest | None
     latest_strategy_research_digest_card: StrategyCard | None
+    latest_strategy_research_digest_evidence: StrategyDigestEvidence
     latest_strategy_lineage_summary: StrategyLineageSummary | None
     latest_lineage_research_agenda: ResearchAgenda | None
     latest_lineage_research_task_plan: LineageResearchTaskPlan | None
@@ -147,6 +149,7 @@ def build_operator_console_snapshot(
     baselines = [item for item in _safe_load(repository.load_baseline_evaluations) if item.symbol == symbol]
     backtests = [item for item in _safe_load(repository.load_backtest_results) if item.symbol == symbol]
     walk_forwards = [item for item in _safe_load(repository.load_walk_forward_validations) if item.symbol == symbol]
+    event_edges = [item for item in _safe_load(repository.load_event_edge_evaluations) if item.symbol == symbol]
     strategy_cards = [item for item in _safe_load(repository.load_strategy_cards) if symbol in item.symbols]
     strategy_card_ids = {item.card_id for item in strategy_cards}
     experiment_trials = [item for item in _safe_load(repository.load_experiment_trials) if item.symbol == symbol]
@@ -275,6 +278,12 @@ def build_operator_console_snapshot(
         latest_strategy_research_digest_card=_strategy_card_by_id(
             strategy_cards,
             latest_digest.strategy_card_id if latest_digest else None,
+        ),
+        latest_strategy_research_digest_evidence=resolve_strategy_digest_evidence(
+            digest=latest_digest,
+            event_edges=event_edges,
+            backtests=backtests,
+            walk_forwards=walk_forwards,
         ),
         latest_strategy_lineage_summary=lineage_summary,
         latest_lineage_research_agenda=lineage_research_agenda,
@@ -1039,7 +1048,7 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
     <h3>策略研究結論</h3>
     <p>{escape(build_strategy_research_conclusion(card=card, outcome=outcome, autopilot=autopilot))}</p>
   </article>
-  {_strategy_research_digest_panel(snapshot.latest_strategy_research_digest, snapshot.latest_strategy_research_digest_card)}
+  {_strategy_research_digest_panel(snapshot.latest_strategy_research_digest, snapshot.latest_strategy_research_digest_card, snapshot.latest_strategy_research_digest_evidence)}
   <article class="panel">
     <h3>下一步研究動作</h3>
     <div class="metric">{escape(_display_research_action(autopilot.next_research_action if autopilot else None))}</div>
@@ -1898,6 +1907,7 @@ def _revision_retest_autopilot_run_panel(run: ResearchAutopilotRun | None) -> st
 def _strategy_research_digest_panel(
     digest: StrategyResearchDigest | None,
     card: StrategyCard | None = None,
+    evidence: StrategyDigestEvidence | None = None,
 ) -> str:
     if digest is None:
         return ""
@@ -1916,6 +1926,8 @@ def _strategy_research_digest_panel(
     <p>下一步理由：{escape(digest.next_step_rationale)}</p>
     <h4>策略規則摘要</h4>
     {_digest_strategy_rules(digest, card)}
+    <h4>策略證據指標</h4>
+    {_digest_evidence_metrics(evidence)}
     <p>證據：</p>
     {_plain_list(digest.evidence_artifact_ids, empty="目前沒有 digest evidence")}
   </article>
@@ -1925,6 +1937,7 @@ def _strategy_research_digest_panel(
 def _strategy_research_digest_preview(
     digest: StrategyResearchDigest | None,
     card: StrategyCard | None = None,
+    evidence: StrategyDigestEvidence | None = None,
 ) -> str:
     if digest is None:
         return ""
@@ -1938,6 +1951,8 @@ def _strategy_research_digest_preview(
 {_plain_list(_digest_failure_attributions(digest), empty="目前沒有 digest failure attribution")}
 <p>策略規則摘要</p>
 {_digest_strategy_rules(digest, card)}
+<p>策略證據指標</p>
+{_digest_evidence_metrics(evidence)}
 <p>證據：</p>
 {_plain_list(digest.evidence_artifact_ids, empty="目前沒有 digest evidence")}
 """
@@ -1957,6 +1972,46 @@ def _digest_strategy_rules(digest: StrategyResearchDigest, card: StrategyCard | 
 <p>風控：</p>
 {_plain_list(card.risk_rules[:3], empty="目前沒有 risk rules")}
 """
+
+
+def _digest_evidence_metrics(evidence: StrategyDigestEvidence | None) -> str:
+    if evidence is None or not any((evidence.event_edge, evidence.backtest, evidence.walk_forward)):
+        return '<p class="muted">沒有結構化 strategy evidence metrics</p>'
+    items: list[str] = []
+    if evidence.event_edge is not None:
+        edge = evidence.event_edge
+        items.append(
+            "Event edge "
+            f"{edge.evaluation_id}："
+            f"樣本 {edge.sample_n}；"
+            f"after-cost edge {_format_signed_pct(edge.average_excess_return_after_costs)}；"
+            f"hit-rate {_format_pct(edge.hit_rate)}；"
+            f"pass {'是' if edge.passed else '否'}；"
+            f"flags {', '.join(edge.flags[:5]) if edge.flags else 'none'}"
+        )
+    if evidence.backtest is not None:
+        backtest = evidence.backtest
+        items.append(
+            "Backtest "
+            f"{backtest.result_id}："
+            f"策略 {_format_signed_pct(backtest.strategy_return)}；"
+            f"benchmark {_format_pct(backtest.benchmark_return)}；"
+            f"max DD {_format_pct(backtest.max_drawdown)}；"
+            f"win-rate {_format_pct(backtest.win_rate)}；"
+            f"trades {backtest.trade_count}"
+        )
+    if evidence.walk_forward is not None:
+        walk_forward = evidence.walk_forward
+        items.append(
+            "Walk-forward "
+            f"{walk_forward.validation_id}："
+            f"excess {_format_signed_pct(walk_forward.average_excess_return)}；"
+            f"windows {walk_forward.window_count}；"
+            f"test win-rate {_format_pct(walk_forward.test_win_rate)}；"
+            f"overfit windows {walk_forward.overfit_window_count}；"
+            f"flags {', '.join(walk_forward.overfit_risk_flags[:5]) if walk_forward.overfit_risk_flags else 'none'}"
+        )
+    return _plain_list(items)
 
 
 def _digest_decision_blockers(digest: StrategyResearchDigest) -> str:
@@ -1991,7 +2046,7 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
 <p>假設：{escape(card.hypothesis if card else "目前沒有 strategy_cards artifact。")}</p>
 <h4>策略研究結論</h4>
 <p>{escape(build_strategy_research_conclusion(card=card, outcome=outcome, autopilot=autopilot))}</p>
-{_strategy_research_digest_preview(digest, snapshot.latest_strategy_research_digest_card)}
+{_strategy_research_digest_preview(digest, snapshot.latest_strategy_research_digest_card, snapshot.latest_strategy_research_digest_evidence)}
 <p>Leaderboard：{_artifact_id(leaderboard, "entry_id")} / alpha_score={_format_number(leaderboard.alpha_score if leaderboard else None)}</p>
 <p>Paper-shadow：{escape(_display_research_action(outcome.recommended_strategy_action if outcome else None))} / {escape(_display_outcome_grade(outcome.outcome_grade if outcome else None))}</p>
 <p>下一步：{escape(_display_research_action(autopilot.next_research_action if autopilot else None))} / Run {_artifact_id(autopilot, "run_id")}</p>
@@ -2157,6 +2212,10 @@ def _format_money(value: float | None) -> str:
 
 def _format_pct(value: float | None) -> str:
     return "n/a" if value is None else f"{value * 100:.2f}%"
+
+
+def _format_signed_pct(value: float | None) -> str:
+    return "n/a" if value is None else f"{value * 100:+.2f}%"
 
 
 def _format_number(value: float | None) -> str:

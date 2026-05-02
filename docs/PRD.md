@@ -948,6 +948,8 @@ V1 MVP should include:
 - strategy research digest rule summaries, so the active strategy hypothesis,
   signal, entry, exit, and risk logic are available directly from the digest
   artifact for automation, dashboard, and operator-console consumers
+- dashboard digest rule-list rendering, so those strategy rules are scannable
+  even when the hypothesis is long or failure-control lists contain many keys
 - append-only replacement-card refresh, so a legacy DRAFT replacement strategy
   can be superseded by a failure-aware successor card without rewriting old
   artifacts or pretending older retest evidence was produced under the newer

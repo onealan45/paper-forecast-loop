@@ -867,6 +867,24 @@ def render_dashboard_html(snapshot: DashboardSnapshot) -> str:
     }}
     dt {{ color: var(--muted); }}
     dd {{ margin: 0; overflow-wrap: anywhere; }}
+    .digest-rule-list {{
+      display: grid;
+      gap: 8px;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }}
+    .digest-rule-list li {{
+      padding: 9px 11px;
+      border: 1px solid rgba(116, 150, 181, 0.18);
+      border-radius: 12px;
+      background: rgba(125, 211, 252, 0.06);
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+    }}
+    .digest-rule-list code {{
+      white-space: normal;
+    }}
     .tag {{
       display: inline-flex;
       align-items: center;
@@ -1298,7 +1316,7 @@ def _render_strategy_research_digest(
 
 def _render_digest_strategy_rules(digest: StrategyResearchDigest, card: StrategyCard | None) -> str:
     if digest.strategy_rule_summary:
-        return _dashboard_list_inline(digest.strategy_rule_summary)
+        return _dashboard_list_block(digest.strategy_rule_summary, css_class="digest-rule-list")
     if card is None:
         return '<span class="empty">沒有對應 strategy card artifact</span>'
     return f"""
@@ -2609,6 +2627,13 @@ def _dashboard_list_inline(items: list[str]) -> str:
     if not items:
         return '<span class="empty">none</span>'
     return "；".join(f"<code>{escape(item)}</code>" for item in items)
+
+
+def _dashboard_list_block(items: list[str], *, css_class: str) -> str:
+    if not items:
+        return '<span class="empty">none</span>'
+    list_items = "".join(f"<li><code>{escape(item)}</code></li>" for item in items)
+    return f'<ul class="{css_class}">{list_items}</ul>'
 
 
 def _dashboard_dict_inline(values: dict[str, object]) -> str:

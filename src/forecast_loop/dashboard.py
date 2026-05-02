@@ -1300,15 +1300,15 @@ def _render_strategy_research_digest(
         <h3>策略研究摘要</h3>
         <p>{escape(digest.research_summary)}</p>
         <dl>
-          <dt>Digest</dt><dd><code>{escape(digest.digest_id)}</code></dd>
-          <dt>Strategy</dt><dd>{escape(digest.strategy_name)} / {escape(_display_strategy_card_status(digest.strategy_status))}</dd>
-          <dt>Outcome</dt><dd>{escape(_display_outcome_grade(digest.outcome_grade))} / {_format_optional_ratio(digest.excess_return_after_costs)}</dd>
-          <dt>Recommended</dt><dd>{escape(_display_research_action(digest.recommended_strategy_action))}</dd>
-          <dt>Failure concentration</dt><dd>{_dashboard_list_inline(failure_attributions)}</dd>
-          <dt>Lineage</dt><dd>Revisions {digest.lineage_revision_count} / Outcomes {digest.lineage_outcome_count}</dd>
-          <dt>Next rationale</dt><dd>{escape(digest.next_step_rationale)}</dd>
-          <dt>Digest strategy rules</dt><dd>{_render_digest_strategy_rules(digest, card)}</dd>
-          <dt>Evidence</dt><dd>{_dashboard_list_inline(digest.evidence_artifact_ids)}</dd>
+          <dt>摘要 ID</dt><dd><code>{escape(digest.digest_id)}</code></dd>
+          <dt>策略</dt><dd>{escape(digest.strategy_name)} / {escape(_display_strategy_card_status(digest.strategy_status))}</dd>
+          <dt>Paper-shadow 結果</dt><dd>{escape(_display_outcome_grade(digest.outcome_grade))} / {_format_optional_ratio(digest.excess_return_after_costs)}</dd>
+          <dt>建議動作</dt><dd>{escape(_display_research_action(digest.recommended_strategy_action))}</dd>
+          <dt>失敗集中</dt><dd>{_dashboard_list_inline(failure_attributions)}</dd>
+          <dt>Lineage</dt><dd>修訂 {digest.lineage_revision_count} / 結果 {digest.lineage_outcome_count}</dd>
+          <dt>下一步理由</dt><dd>{escape(digest.next_step_rationale)}</dd>
+          <dt>策略規則摘要</dt><dd>{_render_digest_strategy_rules(digest, card)}</dd>
+          <dt>證據</dt><dd>{_dashboard_list_inline(digest.evidence_artifact_ids)}</dd>
         </dl>
       </div>
     """
@@ -1321,10 +1321,10 @@ def _render_digest_strategy_rules(digest: StrategyResearchDigest, card: Strategy
         return '<span class="empty">沒有對應 strategy card artifact</span>'
     return f"""
       <div class="compact-stack">
-        <p><strong>Hypothesis</strong> {escape(card.hypothesis)}</p>
-        <p><strong>Entry</strong> {_dashboard_list_inline(card.entry_rules[:3])}</p>
-        <p><strong>Exit</strong> {_dashboard_list_inline(card.exit_rules[:3])}</p>
-        <p><strong>Risk</strong> {_dashboard_list_inline(card.risk_rules[:3])}</p>
+        <p><strong>假說</strong> {escape(card.hypothesis)}</p>
+        <p><strong>進場</strong> {_dashboard_list_inline(card.entry_rules[:3])}</p>
+        <p><strong>出場</strong> {_dashboard_list_inline(card.exit_rules[:3])}</p>
+        <p><strong>風控</strong> {_dashboard_list_inline(card.risk_rules[:3])}</p>
       </div>
     """
 

@@ -432,6 +432,9 @@ factory:
 - PR130 renders dashboard digest strategy rules as a vertical rule list instead
   of one inline metadata string, so long hypotheses and concrete entry / exit /
   risk logic remain scannable.
+- PR131 localizes the strategy research digest panel labels in the dashboard
+  and operator console, so the current strategy handoff reads as a Traditional
+  Chinese operator surface instead of mixed English metadata.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

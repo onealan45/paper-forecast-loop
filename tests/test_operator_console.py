@@ -971,9 +971,16 @@ def test_operator_console_surfaces_strategy_research_digest_in_research_and_over
         assert "優先修正 回撤超標 (drawdown_breach)，再重跑 locked retest。" in html
         assert "負超額報酬 (negative_excess_return), 回撤超標 (drawdown_breach)" in html
         assert "paper-shadow-outcome:visible-revision-quarantine" in html
-        assert "Digest strategy rules" in html
-        rules_start = html.index("Digest strategy rules")
-        rules_section = html[rules_start : html.index("Evidence", rules_start)]
+        digest_start = html.index("策略研究摘要")
+        digest_section = html[digest_start : html.index("證據", digest_start)]
+        assert "摘要 ID" in digest_section
+        assert "下一步理由" in digest_section
+        assert "失敗集中" in digest_section
+        assert "策略規則摘要" in digest_section
+        assert "Digest strategy rules" not in digest_section
+        assert "Failure concentration" not in digest_section
+        rules_start = html.index("策略規則摘要")
+        rules_section = html[rules_start : html.index("證據", rules_start)]
         assert "Digest-only operator hypothesis should own the strategy summary." in rules_section
         assert "Digest-only operator signal filter." in rules_section
         assert "Digest-only operator entry rule." in rules_section

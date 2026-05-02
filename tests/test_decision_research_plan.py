@@ -5,7 +5,14 @@ import pytest
 
 from forecast_loop.cli import main
 from forecast_loop.decision_research_plan import build_decision_blocker_research_task_plan
-from forecast_loop.models import CanonicalEvent, MarketCandle, MarketCandleRecord, MarketReactionCheck, ResearchAgenda
+from forecast_loop.models import (
+    BacktestResult,
+    CanonicalEvent,
+    MarketCandle,
+    MarketCandleRecord,
+    MarketReactionCheck,
+    ResearchAgenda,
+)
 from forecast_loop.storage import JsonFileRepository
 
 
@@ -149,6 +156,28 @@ def _save_walk_forward_candles(repository: JsonFileRepository, *, start: datetim
         )
 
 
+def _backtest_result(*, created_at: datetime, symbol: str = "BTC-USD") -> BacktestResult:
+    return BacktestResult(
+        result_id=f"backtest-result:planner-{created_at.timestamp()}",
+        backtest_id=f"backtest:planner-{created_at.timestamp()}",
+        created_at=created_at,
+        symbol=symbol,
+        start=datetime(2026, 5, 1, 0, 0, tzinfo=UTC),
+        end=datetime(2026, 5, 1, 11, 0, tzinfo=UTC),
+        initial_cash=10_000.0,
+        final_equity=10_050.0,
+        strategy_return=0.005,
+        benchmark_return=0.003,
+        max_drawdown=0.01,
+        sharpe=None,
+        turnover=1.0,
+        win_rate=None,
+        trade_count=1,
+        equity_curve=[],
+        decision_basis="planner fixture backtest",
+    )
+
+
 def _seed_event_edge_prerequisites(repository: JsonFileRepository) -> None:
     event = _event(1)
     repository.save_canonical_event(event)
@@ -275,6 +304,86 @@ def test_decision_blocker_research_plan_blocks_event_edge_without_exact_horizon_
     assert task.command_args is None
     assert task.blocked_reason == "missing_event_edge_inputs"
     assert task.missing_inputs == ["market_candles"]
+
+
+def test_decision_blocker_research_plan_blocks_backtest_without_window(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
+    agenda = _agenda(
+        agenda_id="research-agenda:backtest-only",
+        created_at=now,
+        expected_artifacts=["strategy_decision", "research_dataset", "backtest_result"],
+        hypothesis="Latest decision decision:blocked is HOLD because backtest 未打贏 benchmark.",
+    )
+    repository.save_research_agenda(agenda)
+
+    plan = build_decision_blocker_research_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=now,
+    )
+
+    assert plan.next_task_id == "run_backtest"
+    task = plan.task_by_id("run_backtest")
+    assert task.status == "blocked"
+    assert task.command_args is None
+    assert task.blocked_reason == "missing_backtest_window"
+    assert task.missing_inputs == ["market_candles"]
+
+
+def test_decision_blocker_research_plan_blocks_backtest_until_asof_replay_exists(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
+    candle_start = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    agenda = _agenda(
+        agenda_id="research-agenda:backtest-ready",
+        created_at=now,
+        expected_artifacts=["strategy_decision", "research_dataset", "backtest_result"],
+        hypothesis="Latest decision decision:blocked is HOLD because backtest 未打贏 benchmark.",
+    )
+    repository.save_research_agenda(agenda)
+    _save_walk_forward_candles(repository, start=candle_start, count=12)
+
+    plan = build_decision_blocker_research_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=now,
+    )
+
+    assert plan.next_task_id == "run_backtest"
+    task = plan.task_by_id("run_backtest")
+    assert task.status == "blocked"
+    assert task.command_args is None
+    assert task.blocked_reason == "missing_backtest_asof_replay"
+    assert task.missing_inputs == ["backtest_asof_replay"]
+
+
+def test_decision_blocker_research_plan_marks_backtest_complete_when_recent_result_exists(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    agenda_created_at = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
+    agenda = _agenda(
+        agenda_id="research-agenda:backtest-complete",
+        created_at=agenda_created_at,
+        expected_artifacts=["strategy_decision", "research_dataset", "backtest_result"],
+        hypothesis="Latest decision decision:blocked is HOLD because backtest 未打贏 benchmark.",
+    )
+    repository.save_research_agenda(agenda)
+    repository.save_backtest_result(_backtest_result(created_at=agenda_created_at + timedelta(minutes=5)))
+
+    plan = build_decision_blocker_research_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=agenda_created_at + timedelta(minutes=10),
+    )
+
+    task = plan.task_by_id("run_backtest")
+    assert task.status == "completed"
+    assert task.artifact_id is not None
+    assert task.command_args is None
+    assert plan.next_task_id is None
 
 
 def test_decision_blocker_research_plan_blocks_walk_forward_without_window(tmp_path):

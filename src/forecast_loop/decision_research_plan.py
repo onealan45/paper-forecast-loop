@@ -9,6 +9,7 @@ from forecast_loop.decision_research_agenda import (
     extract_decision_research_blockers,
 )
 from forecast_loop.models import (
+    BacktestResult,
     CanonicalEvent,
     EventEdgeEvaluation,
     MarketCandleRecord,
@@ -102,6 +103,7 @@ def build_decision_blocker_research_task_plan(
             repository.load_canonical_events(),
             repository.load_market_reaction_checks(),
             repository.load_market_candles(),
+            repository.load_backtest_results(),
             repository.load_walk_forward_validations(),
         )
     )
@@ -169,6 +171,7 @@ def _evidence_tasks(
     events: list[CanonicalEvent],
     reactions: list[MarketReactionCheck],
     candles: list[MarketCandleRecord],
+    backtests: list[BacktestResult],
     walk_forwards: list[WalkForwardValidation],
 ) -> list[DecisionBlockerResearchTask]:
     tasks: list[DecisionBlockerResearchTask] = []
@@ -176,7 +179,7 @@ def _evidence_tasks(
     if "event_edge_evaluation" in expected:
         tasks.append(_event_edge_task(agenda, storage, symbol, now, blockers, event_edges, events, reactions, candles))
     if "backtest_result" in expected:
-        tasks.append(_backtest_task(blockers))
+        tasks.append(_backtest_task(agenda, storage, symbol, now, blockers, candles, backtests))
     if "walk_forward_validation" in expected:
         tasks.append(_walk_forward_task(agenda, storage, symbol, now, blockers, candles, walk_forwards))
     if "baseline_evaluation" in expected:
@@ -255,14 +258,62 @@ def _event_edge_task(
     )
 
 
-def _backtest_task(blockers: list[str]) -> DecisionBlockerResearchTask:
+def _backtest_task(
+    agenda: ResearchAgenda,
+    storage: Path | None,
+    symbol: str,
+    now: datetime,
+    blockers: list[str],
+    candles: list[MarketCandleRecord],
+    backtests: list[BacktestResult],
+) -> DecisionBlockerResearchTask:
+    latest_backtest = _latest_backtest_after_agenda(backtests, agenda)
+    if latest_backtest is not None:
+        return DecisionBlockerResearchTask(
+            task_id="run_backtest",
+            title="Run blocker-focused backtest",
+            status="completed",
+            required_artifact="backtest_result",
+            artifact_id=latest_backtest.result_id,
+            command_args=None,
+            worker_prompt=_worker_prompt("backtest", blockers),
+            blocked_reason=None,
+            missing_inputs=[],
+            rationale="A same-symbol backtest result already exists after this blocker agenda.",
+        )
+    if storage is None:
+        return _window_blocked_task(
+            task_id="run_backtest",
+            title="Run blocker-focused backtest",
+            required_artifact="backtest_result",
+            blocked_reason="missing_storage_dir",
+            worker_prompt=_worker_prompt("backtest", blockers),
+            rationale="Backtest evidence needs a storage directory before a command can be emitted.",
+            missing_inputs=["storage_dir"],
+        )
+    window = _candle_window(candles, symbol=symbol, now=now, min_count=10)
+    if window is None:
+        return _window_blocked_task(
+            task_id="run_backtest",
+            title="Run blocker-focused backtest",
+            required_artifact="backtest_result",
+            blocked_reason="missing_backtest_window",
+            worker_prompt=_worker_prompt("backtest", blockers),
+            rationale="Backtest evidence needs at least 10 same-symbol candles imported by plan time.",
+            missing_inputs=["market_candles"],
+        )
+    _start, _end = window
     return _window_blocked_task(
         task_id="run_backtest",
         title="Run blocker-focused backtest",
         required_artifact="backtest_result",
-        blocked_reason="missing_backtest_window",
+        blocked_reason="missing_backtest_asof_replay",
         worker_prompt=_worker_prompt("backtest", blockers),
-        rationale="Backtest evidence needs explicit start/end windows before a safe command can be emitted.",
+        rationale=(
+            "Stored candles cover a backtest window, but the current backtest CLI cannot pin the "
+            "plan-time candle as-of set, so emitting a replay command would not be reproducible."
+        ),
+        missing_inputs=["backtest_asof_replay"],
     )
 
 
@@ -299,7 +350,7 @@ def _walk_forward_task(
             rationale="Walk-forward validation needs a storage directory before a command can be emitted.",
             missing_inputs=["storage_dir"],
         )
-    window = _walk_forward_window(candles, symbol=symbol, now=now)
+    window = _candle_window(candles, symbol=symbol, now=now, min_count=10)
     if window is None:
         return _window_blocked_task(
             task_id="run_walk_forward_validation",
@@ -404,6 +455,16 @@ def _latest_event_edge_after_agenda(
     return max(candidates, key=lambda item: (item.created_at, item.evaluation_id)) if candidates else None
 
 
+def _latest_backtest_after_agenda(
+    backtests: list[BacktestResult],
+    agenda: ResearchAgenda,
+) -> BacktestResult | None:
+    candidates = [
+        result for result in backtests if result.symbol == agenda.symbol and result.created_at >= agenda.created_at
+    ]
+    return max(candidates, key=lambda item: (item.created_at, item.result_id)) if candidates else None
+
+
 def _latest_walk_forward_after_agenda(
     walk_forwards: list[WalkForwardValidation],
     agenda: ResearchAgenda,
@@ -416,11 +477,12 @@ def _latest_walk_forward_after_agenda(
     return max(candidates, key=lambda item: (item.created_at, item.validation_id)) if candidates else None
 
 
-def _walk_forward_window(
+def _candle_window(
     candles: list[MarketCandleRecord],
     *,
     symbol: str,
     now: datetime,
+    min_count: int,
 ) -> tuple[datetime, datetime] | None:
     by_time: dict[datetime, MarketCandleRecord] = {}
     for candle in candles:
@@ -436,7 +498,7 @@ def _walk_forward_window(
         ):
             by_time[candle.timestamp] = candle
     timestamps = sorted(by_time)
-    if len(timestamps) < 10:
+    if len(timestamps) < min_count:
         return None
     return timestamps[0], timestamps[-1]
 

@@ -1567,11 +1567,11 @@ task. Event-edge blockers produce a directly runnable `build-event-edge` command
 only when the storage already has same-symbol canonical events, passed market
 reaction checks, and exact event/horizon market candles that can produce at
 least one event-edge sample. If those inputs are missing, the task is blocked
-with explicit missing inputs instead of pretending it can execute. Backtest
-blockers remain explicit blocked tasks until a safe windowing policy exists.
-Walk-forward blockers emit a conservative `walk-forward` command when stored
-same-symbol candles cover at least the minimum rolling validation window;
-otherwise they stay blocked with `market_candles` as the missing input.
+with explicit missing inputs instead of pretending it can execute. Walk-forward
+blockers emit conservative commands when stored same-symbol candles cover the
+minimum evidence window. Backtest blockers detect the same candle coverage but
+remain blocked with `backtest_asof_replay` until the backtest CLI can pin the
+plan-time candle as-of set.
 
 Create market-derived event inputs from stored candles:
 

@@ -173,6 +173,15 @@ def test_execute_lineage_research_next_task_creates_replacement_strategy_card(tm
     assert replacement.parameters["replacement_source_outcome_id"] == "paper-shadow-outcome:revision-fail"
     assert replacement.parameters["replacement_not_child_revision"] is True
     assert "drawdown_breach" in replacement.hypothesis
+    assert "drawdown-aware replacement stack" in replacement.hypothesis
+    assert "baseline-edge" in replacement.signal_description
+    assert any("volatility-adjusted trend quality" in rule for rule in replacement.entry_rules)
+    assert any("baseline edge is not positive" in rule for rule in replacement.exit_rules)
+    assert any("max adverse excursion" in rule for rule in replacement.risk_rules)
+    assert replacement.parameters["replacement_strategy_archetype"] == "drawdown_controlled_edge_rebuild"
+    assert replacement.parameters["minimum_after_cost_edge"] >= 0.02
+    assert replacement.parameters["max_position_multiplier"] <= 0.5
+    assert replacement.parameters["confirmation_count"] >= 2
     assert result.automation_run.command == "execute-lineage-research-next-task"
     assert result.automation_run.status == "LINEAGE_RESEARCH_TASK_EXECUTED"
     assert any(
@@ -187,6 +196,52 @@ def test_execute_lineage_research_next_task_creates_replacement_strategy_card(tm
         for step in result.automation_run.steps
     )
     assert repository.load_automation_runs() == [result.automation_run]
+
+
+def test_execute_lineage_research_next_task_handles_missing_adverse_excursion_metric(tmp_path):
+    now = datetime(2026, 4, 30, 10, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    parent = _card("strategy-card:parent")
+    revision = _revision_card(
+        "strategy-card:revision",
+        parent_card_id=parent.card_id,
+        source_outcome_id="paper-shadow-outcome:parent-fail",
+    )
+    repository.save_strategy_card(parent)
+    repository.save_strategy_card(revision)
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:parent-fail",
+            card_id=parent.card_id,
+            created_at=now,
+            action="REVISE_STRATEGY",
+            attributions=["negative_excess_return"],
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _outcome(
+            "paper-shadow-outcome:revision-fail",
+            card_id=revision.card_id,
+            created_at=now + timedelta(hours=1),
+            action="QUARANTINE_STRATEGY",
+            attributions=["drawdown_breach"],
+            max_adverse_excursion=None,
+        )
+    )
+    create_lineage_research_agenda(repository=repository, created_at=now + timedelta(hours=2), symbol="BTC-USD")
+
+    result = execute_lineage_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=now + timedelta(hours=3),
+    )
+
+    replacement = next(
+        card for card in repository.load_strategy_cards() if card.card_id == result.created_artifact_ids[0]
+    )
+    assert replacement.parameters["max_position_multiplier"] == 0.5
+    assert "max_adverse_excursion_limit" not in replacement.parameters
 
 
 def test_execute_lineage_research_next_task_rejects_non_replacement_task(tmp_path):

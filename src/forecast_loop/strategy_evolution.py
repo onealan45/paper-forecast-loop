@@ -26,6 +26,17 @@ class StrategyReplacementResult:
     strategy_card: StrategyCard
 
 
+@dataclass(frozen=True, slots=True)
+class ReplacementStrategyDesign:
+    archetype: str
+    hypothesis: str
+    signal_description: str
+    entry_rules: list[str]
+    exit_rules: list[str]
+    risk_rules: list[str]
+    parameters: dict[str, object]
+
+
 def propose_strategy_revision(
     *,
     repository: ArtifactRepository,
@@ -154,25 +165,23 @@ def draft_replacement_strategy_hypothesis(
 
     attributions = _failure_attributions(outcome)
     strategy_name = f"Replacement for {root.strategy_name}"
-    hypothesis = (
-        f"Replacement hypothesis after lineage {root.card_id} was quarantined by {outcome.outcome_id}. "
-        f"Do not recursively tune the failed rules; test a distinct signal stack focused on "
-        f"{', '.join(attributions)}."
-    )
+    design = _replacement_strategy_design(root=root, outcome=outcome, attributions=attributions)
     parameters: dict[str, object] = {
         "replacement_source_lineage_root_card_id": root.card_id,
         "replacement_source_outcome_id": outcome.outcome_id,
         "replacement_failure_attributions": attributions,
         "replacement_required_research": ["locked_backtest", "walk_forward", "paper_shadow"],
         "replacement_not_child_revision": True,
+        "replacement_strategy_archetype": design.archetype,
         "minimum_after_cost_edge": max(float(root.parameters.get("minimum_after_cost_edge", 0.0)), 0.015),
     }
+    parameters.update(design.parameters)
     card_id = StrategyCard.build_id(
         strategy_name=strategy_name,
         strategy_family=root.strategy_family,
         version=f"{root.version}.replacement1",
         symbols=list(root.symbols),
-        hypothesis=hypothesis,
+        hypothesis=design.hypothesis,
         parameters=parameters,
     )
     existing_by_id = _find_optional(repository.load_strategy_cards(), "card_id", card_id)
@@ -188,23 +197,11 @@ def draft_replacement_strategy_hypothesis(
         version=f"{root.version}.replacement1",
         status="DRAFT",
         symbols=list(root.symbols),
-        hypothesis=hypothesis,
-        signal_description=(
-            "Research an alternative signal stack for the same symbol instead of a child revision of the "
-            "quarantined lineage."
-        ),
-        entry_rules=[
-            "Define a replacement entry signal that does not reuse the quarantined lineage as its primary trigger.",
-            "Require explicit baseline-edge evidence before any simulated BUY/SELL action.",
-        ],
-        exit_rules=[
-            "Exit the simulated hypothesis when the replacement signal loses its baseline edge.",
-            "Stop the paper-shadow test if the invalidation condition tied to the source failure appears.",
-        ],
-        risk_rules=[
-            "Keep the replacement in DRAFT until locked backtest, walk-forward, and paper-shadow evidence exist.",
-            f"Prioritize mitigation of {', '.join(attributions)} before any promotion attempt.",
-        ],
+        hypothesis=design.hypothesis,
+        signal_description=design.signal_description,
+        entry_rules=design.entry_rules,
+        exit_rules=design.exit_rules,
+        risk_rules=design.risk_rules,
         parameters=parameters,
         data_requirements=list(root.data_requirements),
         feature_snapshot_ids=[],
@@ -217,6 +214,90 @@ def draft_replacement_strategy_hypothesis(
     )
     repository.save_strategy_card(replacement)
     return StrategyReplacementResult(strategy_card=replacement)
+
+
+def _replacement_strategy_design(
+    *,
+    root: StrategyCard,
+    outcome: PaperShadowOutcome,
+    attributions: list[str],
+) -> ReplacementStrategyDesign:
+    attribution_set = set(attributions)
+    archetype = "baseline_edge_rebuild"
+    if attribution_set & {"drawdown_breach", "adverse_excursion_breach"}:
+        archetype = "drawdown_controlled_edge_rebuild"
+    elif attribution_set & {"turnover_breach", "turnover_limit_exceeded"}:
+        archetype = "low_turnover_confirmation_rebuild"
+    elif attribution_set & {"overfit_risk_flagged", "walk_forward_excess_not_positive"}:
+        archetype = "walk_forward_stability_rebuild"
+
+    hypothesis = (
+        f"Test a {archetype} as a drawdown-aware replacement stack after lineage "
+        f"{root.card_id} was quarantined by {outcome.outcome_id}. The new hypothesis must not "
+        f"recursively tune the failed trigger; it must explain whether independent confirmation, "
+        f"baseline-edge recovery, and source-failure controls can repair {', '.join(attributions)}."
+    )
+    signal_description = (
+        "Alternative signal stack using volatility-adjusted trend quality, independent baseline-edge "
+        "confirmation, and explicit source-failure invalidation instead of reusing the quarantined "
+        "lineage trigger as the primary signal."
+    )
+    entry_rules = [
+        "Enter simulation only when volatility-adjusted trend quality and at least two independent confirmations agree.",
+        "Require positive baseline-edge evidence versus no-trade, persistence, and buy-and-hold before simulated BUY/SELL.",
+        "Block entries when the source failure attribution is active in the current research window.",
+    ]
+    exit_rules = [
+        "Exit or refuse the simulated trade when baseline edge is not positive after estimated costs.",
+        "Exit when volatility-adjusted trend quality falls below the locked evaluation threshold.",
+        "Stop the paper-shadow test if the source-failure condition repeats before the observation window ends.",
+    ]
+    risk_rules = [
+        "Keep the replacement in DRAFT until locked backtest, walk-forward, leaderboard, and paper-shadow evidence exist.",
+        f"Explicitly test mitigation of {', '.join(attributions)} before any promotion attempt.",
+    ]
+    parameters: dict[str, object] = {
+        "confirmation_count": 2,
+        "requires_independent_signal_stack": True,
+        "source_failure_controls": attributions,
+    }
+
+    if attribution_set & {"drawdown_breach", "adverse_excursion_breach"}:
+        risk_rules.append(
+            "Cap simulated exposure while max adverse excursion remains above the replacement threshold."
+        )
+        parameters["max_position_multiplier"] = 0.5
+        if outcome.max_adverse_excursion is not None:
+            parameters["max_adverse_excursion_limit"] = min(float(outcome.max_adverse_excursion), 0.08)
+    if attribution_set & {"weak_baseline_edge", "baseline_edge_not_positive", "holdout_excess_not_positive"}:
+        entry_rules.append("Require holdout excess return to clear the strengthened after-cost edge threshold.")
+        risk_rules.append("Quarantine immediately if baseline edge is not positive on the locked holdout window.")
+        parameters["minimum_after_cost_edge"] = max(float(root.parameters.get("minimum_after_cost_edge", 0.0)), 0.02)
+    if attribution_set & {"turnover_breach", "turnover_limit_exceeded"}:
+        exit_rules.append("Apply a cooldown before reversing direction to avoid churn-driven false edge.")
+        parameters["cooldown_hours"] = max(int(root.parameters.get("cooldown_hours", 0)), 12)
+        parameters["max_turnover"] = 1.0
+    if attribution_set & {"overfit_risk_flagged", "walk_forward_excess_not_positive"}:
+        risk_rules.append("Require walk-forward excess return to stay positive across every locked split.")
+        parameters["requires_all_walk_forward_splits_positive"] = True
+    if attribution_set & {
+        "leaderboard_entry_not_rankable",
+        "locked_evaluation_not_rankable",
+        "leaderboard_entry_alpha_score_missing",
+        "locked_evaluation_alpha_score_missing",
+    }:
+        risk_rules.append("Do not rank the replacement until alpha score and leaderboard evidence are complete.")
+        parameters["requires_rankable_leaderboard_entry"] = True
+
+    return ReplacementStrategyDesign(
+        archetype=archetype,
+        hypothesis=hypothesis,
+        signal_description=signal_description,
+        entry_rules=_unique(entry_rules),
+        exit_rules=_unique(exit_rules),
+        risk_rules=_unique(risk_rules),
+        parameters=parameters,
+    )
 
 
 def _revision_mutation(

@@ -429,6 +429,9 @@ factory:
   digest, so automation and UX can read the current hypothesis, signal, entry,
   exit, and risk logic from one artifact without joining back to the strategy
   card.
+- PR130 renders dashboard digest strategy rules as a vertical rule list instead
+  of one inline metadata string, so long hypotheses and concrete entry / exit /
+  risk logic remain scannable.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

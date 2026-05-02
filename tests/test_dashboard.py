@@ -1151,10 +1151,12 @@ def test_dashboard_surfaces_strategy_research_digest_summary(tmp_path):
     assert "Digest strategy rules" in html
     rules_start = html.index("Digest strategy rules")
     rules_section = html[rules_start : html.index("<dt>Evidence</dt>", rules_start)]
+    assert '<ul class="digest-rule-list">' in rules_section
     assert "Digest-only dashboard hypothesis should own the strategy summary." in rules_section
     assert "Digest-only dashboard signal filter." in rules_section
     assert "Digest-only dashboard entry rule." in rules_section
     assert "Digest-only dashboard risk control." in rules_section
+    assert "；<code>" not in rules_section
     assert "paper-shadow fail -&gt; revise" not in rules_section
     assert html.index("策略研究摘要") < html.index("目前策略假設")
 

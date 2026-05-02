@@ -350,6 +350,10 @@ def test_strategy_research_digest_prefers_newer_retest_leaderboard_over_stale_au
     assert digest.next_research_action == "WAIT_FOR_PAPER_SHADOW_OUTCOME"
     assert "等待 paper-shadow 視窗" in digest.research_summary
     assert "尚未有 paper-shadow 結果" in digest.research_summary
+    assert digest.next_step_rationale == (
+        "已有 leaderboard entry，但尚未有 post-entry paper-shadow observation；"
+        "等待下一個完整觀察視窗，不捏造未來報酬。"
+    )
 
 
 def test_strategy_research_digest_cli_writes_digest_artifact(tmp_path, capsys):

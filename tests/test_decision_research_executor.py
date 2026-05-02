@@ -194,6 +194,32 @@ def test_execute_decision_blocker_research_next_task_rejects_blocked_walk_forwar
         )
 
 
+def test_execute_decision_blocker_research_next_task_rejects_blocked_backtest_without_asof_replay(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    created_at = datetime(2026, 5, 2, 10, 0, tzinfo=UTC)
+    repository.save_research_agenda(
+        _agenda(
+            created_at=created_at,
+            expected_artifacts=["strategy_decision", "backtest_result"],
+            hypothesis="Latest decision decision:blocker is HOLD because backtest 未打贏 benchmark.",
+        )
+    )
+    _save_walk_forward_candles(repository, start=datetime(2026, 5, 1, 0, 0, tzinfo=UTC), count=12)
+
+    with pytest.raises(
+        ValueError,
+        match="decision_blocker_research_next_task_not_ready:run_backtest:missing_backtest_asof_replay",
+    ):
+        execute_decision_blocker_research_next_task(
+            repository=repository,
+            storage_dir=tmp_path,
+            symbol="BTC-USD",
+            created_at=created_at,
+        )
+
+    assert repository.load_automation_runs() == []
+
+
 def test_execute_decision_blocker_research_next_task_rejects_ready_but_unsupported_walk_forward(tmp_path):
     repository = JsonFileRepository(tmp_path)
     created_at = datetime(2026, 5, 2, 10, 0, tzinfo=UTC)

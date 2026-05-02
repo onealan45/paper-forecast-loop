@@ -992,13 +992,14 @@ V1 MVP should include:
   evidence artifacts for the next strategy-research loop
 - decision-blocker research task planning, so that work item becomes a
   prioritized read-only task plan with command arguments for safe evidence
-  builders such as event-edge evaluation, conservative walk-forward validation
-  when same-symbol stored candles cover the minimum rolling window, and explicit
-  missing inputs when event-edge or walk-forward prerequisites are absent
+  builders such as event-edge evaluation and conservative walk-forward
+  validation when same-symbol stored candles cover the minimum evidence window;
+  backtest blockers detect candle coverage but remain blocked until the backtest
+  CLI can replay the plan-time candle as-of set
 - decision-blocker research task execution for the first supported task, so a
   ready event-edge evaluation plan can become evidence plus an automation-run
-  audit trail while blocked backtest work and unsupported walk-forward execution
-  remain fail-closed instead of pretending progress happened
+  audit trail while unsupported backtest and walk-forward execution remain
+  fail-closed instead of pretending progress happened
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

@@ -438,6 +438,9 @@ factory:
 - PR132 compacts overly long digest rule-summary text by keeping short rules
   unchanged, preferring the first sentence for long hypotheses, and truncating
   only when no sentence boundary is available.
+- PR133 lets revision/replacement retests reuse an existing locked split window
+  only when symbol and dataset match, then creates a new split for the current
+  strategy card before backtest evidence can run.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

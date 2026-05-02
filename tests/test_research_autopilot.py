@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 import json
 
@@ -11,6 +12,7 @@ from forecast_loop.experiment_registry import record_experiment_trial
 from forecast_loop.health import run_health_check
 from forecast_loop.lineage_agenda import create_lineage_research_agenda
 from forecast_loop.lineage_research_executor import execute_lineage_research_next_task
+from forecast_loop.locked_evaluation import lock_evaluation_protocol
 from forecast_loop.models import (
     BaselineEvaluation,
     ExperimentTrial,
@@ -1054,6 +1056,114 @@ def test_revision_retest_task_plan_is_read_only_and_blocks_missing_split_inputs(
     assert before_files == after_files
 
 
+def test_revision_retest_task_plan_reuses_existing_dataset_split_windows(tmp_path):
+    repository, card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    prior_split, _prior_cost = lock_evaluation_protocol(
+        repository=repository,
+        created_at=_now(),
+        strategy_card_id=card.card_id,
+        dataset_id="research-dataset:revision-retest",
+        symbol="BTC-USD",
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 2, 1, tzinfo=UTC),
+        validation_start=datetime(2026, 2, 2, tzinfo=UTC),
+        validation_end=datetime(2026, 3, 1, tzinfo=UTC),
+        holdout_start=datetime(2026, 3, 2, tzinfo=UTC),
+        holdout_end=datetime(2026, 4, 1, tzinfo=UTC),
+        embargo_hours=24,
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    scaffold = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+    )
+
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+
+    assert plan.split_manifest_id is None
+    assert plan.next_task_id == "lock_evaluation_protocol"
+    lock_task = plan.task_by_id("lock_evaluation_protocol")
+    assert lock_task.status == "ready"
+    assert lock_task.artifact_id == prior_split.manifest_id
+    assert lock_task.blocked_reason is None
+    assert lock_task.missing_inputs == []
+    assert "--train-start" in lock_task.command_args
+    assert "2026-01-01T00:00:00+00:00" in lock_task.command_args
+    assert "--holdout-end" in lock_task.command_args
+    assert "2026-04-01T00:00:00+00:00" in lock_task.command_args
+
+
+def test_execute_revision_retest_next_task_locks_protocol_from_reusable_split(tmp_path):
+    repository, card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    prior_split, _prior_cost = lock_evaluation_protocol(
+        repository=repository,
+        created_at=_now(),
+        strategy_card_id=card.card_id,
+        dataset_id="research-dataset:revision-retest",
+        symbol="BTC-USD",
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 2, 1, tzinfo=UTC),
+        validation_start=datetime(2026, 2, 2, tzinfo=UTC),
+        validation_end=datetime(2026, 3, 1, tzinfo=UTC),
+        holdout_start=datetime(2026, 3, 2, tzinfo=UTC),
+        holdout_end=datetime(2026, 4, 1, tzinfo=UTC),
+        embargo_hours=24,
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    scaffold = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now(),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+    )
+
+    result = execute_revision_retest_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        created_at=_now() + timedelta(minutes=1),
+    )
+
+    assert result.executed_task_id == "lock_evaluation_protocol"
+    assert result.created_artifact_ids
+    assert result.after_plan.split_manifest_id is not None
+    assert result.after_plan.split_manifest_id != prior_split.manifest_id
+    assert result.after_plan.next_task_id == "generate_baseline_evaluation"
+    assert result.after_plan.task_by_id("run_backtest").status == "ready"
+    split = repository.load_split_manifests()[-1]
+    assert split.strategy_card_id == revision.card_id
+    assert split.train_start == prior_split.train_start
+    assert split.holdout_end == prior_split.holdout_end
+
+
 def test_revision_retest_task_plan_accepts_raw_quarantine_lineage_replacement(tmp_path):
     repository, replacement_card_id, source_outcome = _seed_lineage_replacement_card_from_shadow(
         tmp_path,
@@ -1327,7 +1437,7 @@ def test_revision_retest_task_plan_does_not_record_passed_trial_from_unlinked_ev
         created_at=_now(),
         paper_shadow_outcome_id=outcome.outcome_id,
     ).strategy_card
-    create_revision_retest_scaffold(
+    scaffold = create_revision_retest_scaffold(
         repository=repository,
         created_at=_now(),
         revision_card_id=revision.card_id,
@@ -1342,28 +1452,21 @@ def test_revision_retest_task_plan_does_not_record_passed_trial_from_unlinked_ev
         holdout_start=datetime(2026, 1, 8, tzinfo=UTC),
         holdout_end=datetime(2026, 1, 10, tzinfo=UTC),
     )
-    backtest = BacktestResult(
-        result_id="backtest-result:split-aligned",
-        backtest_id="backtest:split-aligned",
-        created_at=_now(),
+    retest_context = (
+        f"revision_retest:{revision.card_id}:{scaffold.experiment_trial.trial_id}:{outcome.outcome_id}"
+    )
+    _seed_retest_full_window_candles(repository)
+    backtest = run_backtest(
+        storage_dir=tmp_path,
         symbol="BTC-USD",
         start=datetime(2026, 1, 8, tzinfo=UTC),
         end=datetime(2026, 1, 10, tzinfo=UTC),
-        initial_cash=10_000.0,
-        final_equity=10_500.0,
-        strategy_return=0.05,
-        benchmark_return=0.01,
-        max_drawdown=0.02,
-        sharpe=1.2,
-        turnover=1.0,
-        win_rate=0.6,
-        trade_count=3,
-        equity_curve=[],
-        decision_basis="test-split-aligned",
-    )
+        created_at=_now() + timedelta(minutes=30),
+        id_context=retest_context,
+    ).result
     unlinked_walk_forward = WalkForwardValidation(
         validation_id="walk-forward:split-aligned-unlinked",
-        created_at=_now(),
+        created_at=_now() + timedelta(minutes=45),
         symbol="BTC-USD",
         start=datetime(2026, 1, 1, tzinfo=UTC),
         end=datetime(2026, 1, 10, tzinfo=UTC),
@@ -1386,9 +1489,8 @@ def test_revision_retest_task_plan_does_not_record_passed_trial_from_unlinked_ev
         overfit_risk_flags=[],
         backtest_result_ids=["backtest-result:different-holdout"],
         windows=[],
-        decision_basis="test-split-aligned-unlinked",
+        decision_basis=f"test-split-aligned-unlinked; id_context={retest_context}",
     )
-    repository.save_backtest_result(backtest)
     repository.save_walk_forward_validation(unlinked_walk_forward)
     repository.save_baseline_evaluation(
         BaselineEvaluation(
@@ -2184,6 +2286,216 @@ def test_execute_revision_retest_walk_forward_writes_retest_specific_validation_
     assert result.created_artifact_ids != [generic.validation_id]
     assert result.after_plan.walk_forward_validation_id == result.created_artifact_ids[0]
     assert result.after_plan.next_task_id == "record_passed_retest_trial"
+
+
+def test_revision_retest_plan_rejects_cross_card_backtest_result_after_pending_trial(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now() + timedelta(hours=1),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 1, 4, tzinfo=UTC),
+        validation_start=datetime(2026, 1, 5, tzinfo=UTC),
+        validation_end=datetime(2026, 1, 7, tzinfo=UTC),
+        holdout_start=datetime(2026, 1, 8, tzinfo=UTC),
+        holdout_end=datetime(2026, 1, 10, tzinfo=UTC),
+    )
+    repository.save_baseline_evaluation(
+        BaselineEvaluation(
+            baseline_id="baseline:cross-card-backtest",
+            created_at=_now(),
+            symbol="BTC-USD",
+            sample_size=10,
+            directional_accuracy=0.7,
+            baseline_accuracy=0.5,
+            model_edge=0.2,
+            recent_score=0.8,
+            evidence_grade="B",
+            forecast_ids=[],
+            score_ids=[],
+            decision_basis="test-baseline",
+        )
+    )
+    _seed_retest_full_window_candles(repository)
+    alien = run_backtest(
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        start=datetime(2026, 1, 8, tzinfo=UTC),
+        end=datetime(2026, 1, 10, tzinfo=UTC),
+        created_at=_now() + timedelta(hours=2),
+        id_context="revision_retest:other-card:other-trial:other-source-outcome",
+    ).result
+
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+
+    assert alien.result_id in {result.result_id for result in repository.load_backtest_results()}
+    assert plan.backtest_result_id is None
+    assert plan.next_task_id == "run_backtest"
+
+
+def test_revision_retest_plan_rejects_cross_card_walk_forward_after_pending_trial(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now() + timedelta(hours=1),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 1, 4, tzinfo=UTC),
+        validation_start=datetime(2026, 1, 5, tzinfo=UTC),
+        validation_end=datetime(2026, 1, 7, tzinfo=UTC),
+        holdout_start=datetime(2026, 1, 8, tzinfo=UTC),
+        holdout_end=datetime(2026, 1, 10, tzinfo=UTC),
+    )
+    repository.save_baseline_evaluation(
+        BaselineEvaluation(
+            baseline_id="baseline:cross-card-walk-forward",
+            created_at=_now(),
+            symbol="BTC-USD",
+            sample_size=10,
+            directional_accuracy=0.7,
+            baseline_accuracy=0.5,
+            model_edge=0.2,
+            recent_score=0.8,
+            evidence_grade="B",
+            forecast_ids=[],
+            score_ids=[],
+            decision_basis="test-baseline",
+        )
+    )
+    _seed_retest_full_window_candles(repository)
+    alien = run_walk_forward_validation(
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        start=datetime(2026, 1, 1, tzinfo=UTC),
+        end=datetime(2026, 1, 10, tzinfo=UTC),
+        created_at=_now() + timedelta(hours=2),
+        id_context="revision_retest:other-card:other-trial:other-source-outcome",
+    ).validation
+
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+
+    assert alien.validation_id in {validation.validation_id for validation in repository.load_walk_forward_validations()}
+    assert plan.walk_forward_validation_id is None
+    assert plan.next_task_id == "run_backtest"
+
+
+def test_revision_retest_plan_rejects_passed_trial_with_cross_card_evidence_context(tmp_path):
+    repository, _card, _trial, _evaluation, _entry, _decision, outcome = _seed_repository(
+        tmp_path,
+        shadow_action="RETIRE",
+    )
+    revision = propose_strategy_revision(
+        repository=repository,
+        created_at=_now(),
+        paper_shadow_outcome_id=outcome.outcome_id,
+    ).strategy_card
+    scaffold = create_revision_retest_scaffold(
+        repository=repository,
+        created_at=_now() + timedelta(hours=1),
+        revision_card_id=revision.card_id,
+        symbol="BTC-USD",
+        dataset_id="research-dataset:revision-retest",
+        max_trials=20,
+        seed=7,
+        train_start=datetime(2026, 1, 1, tzinfo=UTC),
+        train_end=datetime(2026, 1, 4, tzinfo=UTC),
+        validation_start=datetime(2026, 1, 5, tzinfo=UTC),
+        validation_end=datetime(2026, 1, 7, tzinfo=UTC),
+        holdout_start=datetime(2026, 1, 8, tzinfo=UTC),
+        holdout_end=datetime(2026, 1, 10, tzinfo=UTC),
+    )
+    _seed_retest_full_window_candles(repository)
+    alien_context = "revision_retest:other-card:other-trial:other-source-outcome"
+    alien_backtest = run_backtest(
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        start=datetime(2026, 1, 8, tzinfo=UTC),
+        end=datetime(2026, 1, 10, tzinfo=UTC),
+        created_at=_now() + timedelta(hours=2),
+        id_context=alien_context,
+    ).result
+    alien_walk_forward = run_walk_forward_validation(
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        start=datetime(2026, 1, 1, tzinfo=UTC),
+        end=datetime(2026, 1, 10, tzinfo=UTC),
+        created_at=_now() + timedelta(hours=2, minutes=15),
+        id_context=alien_context,
+    ).validation
+    linked_alien_walk_forward = replace(
+        alien_walk_forward,
+        validation_id="walk-forward:alien-linked-to-holdout",
+        created_at=_now() + timedelta(hours=2, minutes=30),
+        backtest_result_ids=[*alien_walk_forward.backtest_result_ids, alien_backtest.result_id],
+    )
+    repository.save_walk_forward_validation(linked_alien_walk_forward)
+    polluted_trial = record_experiment_trial(
+        repository=repository,
+        created_at=_now() + timedelta(hours=3),
+        strategy_card_id=revision.card_id,
+        trial_index=scaffold.experiment_trial.trial_index + 1,
+        status="PASSED",
+        symbol="BTC-USD",
+        max_trials=20,
+        seed=8,
+        dataset_id=scaffold.experiment_trial.dataset_id,
+        backtest_result_id=alien_backtest.result_id,
+        walk_forward_validation_id=linked_alien_walk_forward.validation_id,
+        parameters={
+            "revision_retest_protocol": RETEST_PROTOCOL_VERSION,
+            "revision_retest_source_card_id": revision.card_id,
+            "revision_source_outcome_id": outcome.outcome_id,
+        },
+        started_at=_now() + timedelta(hours=1),
+        completed_at=_now() + timedelta(hours=3),
+    )
+
+    plan = build_revision_retest_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        revision_card_id=revision.card_id,
+    )
+
+    assert plan.passed_trial_id != polluted_trial.trial_id
+    assert plan.backtest_result_id is None
+    assert plan.walk_forward_validation_id is None
+    assert plan.next_task_id == "generate_baseline_evaluation"
 
 
 def test_execute_revision_retest_passed_trial_writes_evidence_specific_trial_when_stale_trial_id_exists(tmp_path):

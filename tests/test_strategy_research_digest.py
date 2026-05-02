@@ -3,6 +3,8 @@ import json
 
 from forecast_loop.cli import main
 from forecast_loop.models import (
+    BacktestResult,
+    EventEdgeEvaluation,
     ExperimentTrial,
     LeaderboardEntry,
     LockedEvaluationResult,
@@ -12,6 +14,8 @@ from forecast_loop.models import (
     StrategyDecision,
     StrategyCard,
     StrategyResearchDigest,
+    WalkForwardValidation,
+    WalkForwardWindow,
 )
 from forecast_loop.sqlite_repository import SQLiteRepository
 from forecast_loop.storage import JsonFileRepository
@@ -218,6 +222,125 @@ def _seed_strategy_research_chain(repository, now: datetime) -> dict:
     }
 
 
+def _digest_backtest(
+    now: datetime,
+    *,
+    result_id: str = "backtest-result:digest-latest",
+    symbol: str = "BTC-USD",
+    strategy_return: float = -0.0872,
+    benchmark_return: float = 0.0102,
+) -> BacktestResult:
+    return BacktestResult(
+        result_id=result_id,
+        backtest_id=f"backtest-run:{result_id}",
+        created_at=now,
+        symbol=symbol,
+        start=now - timedelta(days=30),
+        end=now,
+        initial_cash=10_000,
+        final_equity=9_128,
+        strategy_return=strategy_return,
+        benchmark_return=benchmark_return,
+        max_drawdown=0.0921,
+        sharpe=-3.108,
+        turnover=0.75,
+        win_rate=0.214,
+        trade_count=14,
+        equity_curve=[],
+        decision_basis="test",
+    )
+
+
+def _digest_walk_forward(
+    now: datetime,
+    *,
+    validation_id: str = "walk-forward:digest-latest",
+    symbol: str = "BTC-USD",
+    average_excess_return: float = -0.000930657,
+) -> WalkForwardValidation:
+    window = WalkForwardWindow(
+        window_id=f"{validation_id}:window",
+        train_start=now - timedelta(days=20),
+        train_end=now - timedelta(days=15),
+        validation_start=now - timedelta(days=14),
+        validation_end=now - timedelta(days=10),
+        test_start=now - timedelta(days=9),
+        test_end=now,
+        train_candle_count=120,
+        validation_candle_count=96,
+        test_candle_count=216,
+        validation_backtest_result_id="backtest-result:digest-latest",
+        test_backtest_result_id="backtest-result:digest-latest",
+        validation_return=-0.001,
+        test_return=-0.000834,
+        benchmark_return=0.000096,
+        excess_return=average_excess_return,
+        overfit_flags=["aggregate_underperforms_benchmark"],
+        decision_basis="test",
+    )
+    return WalkForwardValidation(
+        validation_id=validation_id,
+        created_at=now,
+        symbol=symbol,
+        start=now - timedelta(days=20),
+        end=now,
+        strategy_name="moving_average_trend",
+        train_size=120,
+        validation_size=96,
+        test_size=216,
+        step_size=24,
+        initial_cash=10_000,
+        fee_bps=5,
+        slippage_bps=10,
+        moving_average_window=24,
+        window_count=176,
+        average_validation_return=-0.001,
+        average_test_return=-0.000834,
+        average_benchmark_return=0.000096,
+        average_excess_return=average_excess_return,
+        test_win_rate=0.0,
+        overfit_window_count=108,
+        overfit_risk_flags=["aggregate_underperforms_benchmark"],
+        backtest_result_ids=["backtest-result:digest-latest"],
+        windows=[window],
+        decision_basis="test",
+    )
+
+
+def _digest_event_edge(
+    now: datetime,
+    *,
+    evaluation_id: str = "event-edge:digest-latest",
+    symbol: str = "BTC-USD",
+    average_excess_return_after_costs: float = -0.011366,
+) -> EventEdgeEvaluation:
+    return EventEdgeEvaluation(
+        evaluation_id=evaluation_id,
+        event_family="crypto_flow",
+        event_type="CRYPTO_FLOW",
+        symbol=symbol,
+        created_at=now,
+        split="historical_event_sample",
+        horizon_hours=24,
+        sample_n=2,
+        average_forward_return=-0.02,
+        average_benchmark_return=-0.008,
+        average_excess_return_after_costs=average_excess_return_after_costs,
+        hit_rate=0.0,
+        max_adverse_excursion_p50=-0.03,
+        max_adverse_excursion_p90=-0.05,
+        max_drawdown_if_traded=-0.09,
+        turnover=2.0,
+        estimated_cost_bps=15.0,
+        dsr=None,
+        white_rc_p=None,
+        stability_score=None,
+        passed=False,
+        blocked_reason="non_positive_after_cost_edge",
+        flags=["insufficient_sample_size", "non_positive_after_cost_edge"],
+    )
+
+
 def test_record_strategy_research_digest_persists_current_strategy_and_lineage_context(tmp_path):
     repository = JsonFileRepository(tmp_path)
     now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
@@ -289,6 +412,99 @@ def test_record_strategy_research_digest_persists_current_strategy_and_lineage_c
         "出場: Exit when drawdown filter fails.",
         "風控: Quarantine if drawdown repeats.",
     ]
+
+
+def test_strategy_research_digest_surfaces_latest_blocker_evidence_metrics(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 10, 0, tzinfo=UTC)
+    _seed_strategy_research_chain(repository, now)
+    repository.save_event_edge_evaluation(
+        _digest_event_edge(now - timedelta(hours=1), evaluation_id="event-edge:digest-stale")
+    )
+    repository.save_event_edge_evaluation(_digest_event_edge(now))
+    repository.save_event_edge_evaluation(
+        _digest_event_edge(now + timedelta(minutes=1), evaluation_id="event-edge:eth", symbol="ETH-USD")
+    )
+    repository.save_backtest_result(
+        _digest_backtest(now - timedelta(hours=1), result_id="backtest-result:digest-stale")
+    )
+    repository.save_backtest_result(_digest_backtest(now))
+    repository.save_backtest_result(
+        _digest_backtest(now + timedelta(minutes=1), result_id="backtest-result:eth", symbol="ETH-USD")
+    )
+    repository.save_walk_forward_validation(
+        _digest_walk_forward(now - timedelta(hours=1), validation_id="walk-forward:digest-stale")
+    )
+    repository.save_walk_forward_validation(_digest_walk_forward(now))
+    repository.save_walk_forward_validation(
+        _digest_walk_forward(now + timedelta(minutes=1), validation_id="walk-forward:eth", symbol="ETH-USD")
+    )
+
+    digest = record_strategy_research_digest(
+        repository=repository,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=5),
+    )
+
+    assert "event-edge:digest-latest" in digest.evidence_artifact_ids
+    assert "backtest-result:digest-latest" in digest.evidence_artifact_ids
+    assert "walk-forward:digest-latest" in digest.evidence_artifact_ids
+    assert "event-edge:digest-stale" not in digest.evidence_artifact_ids
+    assert "event-edge:eth" not in digest.evidence_artifact_ids
+    assert "Event edge：樣本 2，after-cost edge -1.14%" in digest.research_summary
+    assert "Backtest：策略 -8.72%，benchmark +1.02%" in digest.research_summary
+    assert "Walk-forward：excess -0.09%，windows 176" in digest.research_summary
+    assert "aggregate_underperforms_benchmark" in digest.research_summary
+
+
+def test_strategy_research_digest_is_point_in_time_for_chain_decision_and_evidence(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 10, 0, tzinfo=UTC)
+    artifacts = _seed_strategy_research_chain(repository, now)
+    repository.save_strategy_decision(
+        StrategyDecision(
+            decision_id="decision:future-digest",
+            created_at=now + timedelta(minutes=20),
+            symbol="BTC-USD",
+            horizon_hours=24,
+            action="HOLD",
+            confidence=0.51,
+            evidence_grade="D",
+            risk_level="MEDIUM",
+            tradeable=False,
+            blocked_reason="model_not_beating_baseline",
+            recommended_position_pct=0.0,
+            current_position_pct=0.0,
+            max_position_pct=0.15,
+            invalidation_conditions=["future decision should be invisible"],
+            reason_summary="Future decision should not leak into a backdated digest.",
+            forecast_ids=[],
+            score_ids=[],
+            review_ids=[],
+            baseline_ids=[],
+            decision_basis="test",
+        )
+    )
+    repository.save_event_edge_evaluation(_digest_event_edge(now))
+    repository.save_event_edge_evaluation(
+        _digest_event_edge(now + timedelta(minutes=20), evaluation_id="event-edge:future")
+    )
+
+    digest = record_strategy_research_digest(
+        repository=repository,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=1),
+    )
+
+    assert digest.strategy_card_id == artifacts["card"].card_id
+    assert digest.paper_shadow_outcome_id == artifacts["outcome"].outcome_id
+    assert digest.lineage_revision_count == 0
+    assert artifacts["revision"].card_id not in digest.evidence_artifact_ids
+    assert artifacts["revision_outcome"].outcome_id not in digest.evidence_artifact_ids
+    assert digest.decision_id is None
+    assert "decision:future-digest" not in digest.evidence_artifact_ids
+    assert "event-edge:digest-latest" in digest.evidence_artifact_ids
+    assert "event-edge:future" not in digest.evidence_artifact_ids
 
 
 def test_strategy_research_digest_prefers_newer_retest_leaderboard_over_stale_autopilot_run(

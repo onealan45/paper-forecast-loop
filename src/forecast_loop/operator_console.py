@@ -1912,6 +1912,7 @@ def _strategy_research_digest_panel(
     <p>失敗集中：</p>
     {_plain_list(_digest_failure_attributions(digest), empty="目前沒有 digest failure attribution")}
     <p>Lineage：修訂 {digest.lineage_revision_count} / 結果 {digest.lineage_outcome_count}</p>
+    <p>目前決策阻擋：{_digest_decision_blockers(digest)}</p>
     <p>下一步理由：{escape(digest.next_step_rationale)}</p>
     <h4>策略規則摘要</h4>
     {_digest_strategy_rules(digest, card)}
@@ -1932,6 +1933,7 @@ def _strategy_research_digest_preview(
 <p>摘要 ID：<code>{escape(digest.digest_id)}</code></p>
 <p>{escape(digest.research_summary)}</p>
 <p>下一步理由：{escape(digest.next_step_rationale)}</p>
+<p>目前決策阻擋：{_digest_decision_blockers(digest)}</p>
 <p>失敗集中：</p>
 {_plain_list(_digest_failure_attributions(digest), empty="目前沒有 digest failure attribution")}
 <p>策略規則摘要</p>
@@ -1955,6 +1957,15 @@ def _digest_strategy_rules(digest: StrategyResearchDigest, card: StrategyCard | 
 <p>風控：</p>
 {_plain_list(card.risk_rules[:3], empty="目前沒有 risk rules")}
 """
+
+
+def _digest_decision_blockers(digest: StrategyResearchDigest) -> str:
+    if digest.decision_id is None:
+        return "尚未連結 strategy decision"
+    action = _translate_action(digest.decision_action or "UNKNOWN")
+    blocked_reason = digest.decision_blocked_reason or "none"
+    blockers = "、".join(digest.decision_research_blockers) if digest.decision_research_blockers else "沒有研究阻擋摘要"
+    return f"{escape(action)} ({escape(digest.decision_action or 'UNKNOWN')}) / {escape(blocked_reason)} / {escape(blockers)}"
 
 
 def _digest_failure_attributions(digest: StrategyResearchDigest) -> list[str]:

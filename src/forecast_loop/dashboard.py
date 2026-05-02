@@ -1306,10 +1306,29 @@ def _render_strategy_research_digest(
           <dt>建議動作</dt><dd>{escape(_display_research_action(digest.recommended_strategy_action))}</dd>
           <dt>失敗集中</dt><dd>{_dashboard_list_inline(failure_attributions)}</dd>
           <dt>Lineage</dt><dd>修訂 {digest.lineage_revision_count} / 結果 {digest.lineage_outcome_count}</dd>
+          <dt>目前決策阻擋</dt><dd>{_render_digest_decision_blockers(digest)}</dd>
           <dt>下一步理由</dt><dd>{escape(digest.next_step_rationale)}</dd>
           <dt>策略規則摘要</dt><dd>{_render_digest_strategy_rules(digest, card)}</dd>
           <dt>證據</dt><dd>{_dashboard_list_inline(digest.evidence_artifact_ids)}</dd>
         </dl>
+      </div>
+    """
+
+
+def _render_digest_decision_blockers(digest: StrategyResearchDigest) -> str:
+    if digest.decision_id is None:
+        return '<span class="empty">尚未連結 strategy decision</span>'
+    action = _display_strategy_action(digest.decision_action or "UNKNOWN")
+    blocked_reason = digest.decision_blocked_reason or "none"
+    blockers = (
+        _dashboard_list_inline(digest.decision_research_blockers)
+        if digest.decision_research_blockers
+        else '<span class="empty">沒有研究阻擋摘要</span>'
+    )
+    return f"""
+      <div class="compact-stack">
+        <p>{escape(action)} / <code>{escape(blocked_reason)}</code></p>
+        <p>{blockers}</p>
       </div>
     """
 

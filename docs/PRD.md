@@ -991,6 +991,10 @@ V1 MVP should include:
   prioritized read-only task plan with command arguments for safe evidence
   builders such as event-edge evaluation and explicit missing inputs for
   windowed validation
+- decision-blocker research task execution for the first supported task, so a
+  ready event-edge evaluation plan can become evidence plus an automation-run
+  audit trail while blocked backtest/walk-forward work remains blocked until
+  safe windows are supplied
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,
@@ -1029,6 +1033,9 @@ V1 should be considered product-ready for internal iteration only when:
 - the system can revise or propose reusable strategy skills from prior evidence
 - the system can turn lineage evidence into a concrete next research task rather
   than only displaying status
+- the system can execute a supported decision-blocker evidence task when the
+  task plan is ready, and can refuse unsupported or under-specified research
+  tasks without pretending progress happened
 - blocking storage, ingestion, or provider problems create repair requests
 - the system can fail safely and fall back to development mode
 - the UI can present strategy logic, prediction rationale, backtests, revisions,

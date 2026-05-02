@@ -8,7 +8,7 @@ from forecast_loop.decision_research_agenda import (
     DECISION_BLOCKER_AGENDA_BASIS,
     extract_decision_research_blockers,
 )
-from forecast_loop.models import ResearchAgenda, StrategyDecision
+from forecast_loop.models import EventEdgeEvaluation, ResearchAgenda, StrategyDecision
 from forecast_loop.storage import ArtifactRepository
 
 
@@ -83,7 +83,8 @@ def build_decision_blocker_research_task_plan(
     if not blockers:
         blockers = _blockers_from_agenda(agenda)
     tasks = [_agenda_task(agenda, latest_decision, blockers)]
-    tasks.extend(_evidence_tasks(agenda, storage, symbol, now, blockers))
+    event_edges = repository.load_event_edge_evaluations()
+    tasks.extend(_evidence_tasks(agenda, storage, symbol, now, blockers, event_edges))
     next_task = next((task for task in tasks if task.status != "completed"), None)
     return DecisionBlockerResearchTaskPlan(
         symbol=symbol,
@@ -144,11 +145,12 @@ def _evidence_tasks(
     symbol: str,
     now: datetime,
     blockers: list[str],
+    event_edges: list[EventEdgeEvaluation],
 ) -> list[DecisionBlockerResearchTask]:
     tasks: list[DecisionBlockerResearchTask] = []
     expected = set(agenda.expected_artifacts)
     if "event_edge_evaluation" in expected:
-        tasks.append(_event_edge_task(storage, symbol, now, blockers))
+        tasks.append(_event_edge_task(agenda, storage, symbol, now, blockers, event_edges))
     if "backtest_result" in expected:
         tasks.append(_backtest_task(blockers))
     if "walk_forward_validation" in expected:
@@ -159,11 +161,27 @@ def _evidence_tasks(
 
 
 def _event_edge_task(
+    agenda: ResearchAgenda,
     storage: Path | None,
     symbol: str,
     now: datetime,
     blockers: list[str],
+    event_edges: list[EventEdgeEvaluation],
 ) -> DecisionBlockerResearchTask:
+    latest_edge = _latest_event_edge_after_agenda(event_edges, agenda)
+    if latest_edge is not None:
+        return DecisionBlockerResearchTask(
+            task_id="build_event_edge_evaluation",
+            title="Build event-edge evaluation for decision blocker",
+            status="completed",
+            required_artifact="event_edge_evaluation",
+            artifact_id=latest_edge.evaluation_id,
+            command_args=None,
+            worker_prompt=_worker_prompt("event-edge evaluation", blockers),
+            blocked_reason=None,
+            missing_inputs=[],
+            rationale="A same-symbol event-edge evaluation already exists after this blocker agenda.",
+        )
     missing = [] if storage is not None else ["storage_dir"]
     command = None
     if storage is not None:
@@ -255,6 +273,18 @@ def _blockers_from_agenda(agenda: ResearchAgenda) -> list[str]:
         return []
     blocker_text = agenda.hypothesis.split(" because ", 1)[1].split(". Research", 1)[0]
     return [item.strip().rstrip(".") for item in blocker_text.split(",") if item.strip()]
+
+
+def _latest_event_edge_after_agenda(
+    event_edges: list[EventEdgeEvaluation],
+    agenda: ResearchAgenda,
+) -> EventEdgeEvaluation | None:
+    candidates = [
+        evaluation
+        for evaluation in event_edges
+        if evaluation.symbol == agenda.symbol and evaluation.created_at >= agenda.created_at
+    ]
+    return max(candidates, key=lambda item: (item.created_at, item.evaluation_id)) if candidates else None
 
 
 def _decision_id_from_text(value: str) -> str | None:

@@ -28,6 +28,7 @@ from forecast_loop.control import record_control_event
 from forecast_loop.dashboard import write_dashboard_html
 from forecast_loop.decision import generate_strategy_decision
 from forecast_loop.decision_research_agenda import create_decision_blocker_research_agenda
+from forecast_loop.decision_research_executor import execute_decision_blocker_research_next_task
 from forecast_loop.decision_research_plan import build_decision_blocker_research_task_plan
 from forecast_loop.evaluation import build_evaluation_summary
 from forecast_loop.event_edge import build_event_edge_evaluations
@@ -146,6 +147,11 @@ def main(argv: list[str] | None = None) -> int:
     decision_blocker_plan_cmd.add_argument("--storage-dir", required=True)
     decision_blocker_plan_cmd.add_argument("--symbol", default="BTC-USD")
     decision_blocker_plan_cmd.add_argument("--now")
+
+    execute_decision_blocker_task_cmd = subparsers.add_parser("execute-decision-blocker-research-next-task")
+    execute_decision_blocker_task_cmd.add_argument("--storage-dir", required=True)
+    execute_decision_blocker_task_cmd.add_argument("--symbol", default="BTC-USD")
+    execute_decision_blocker_task_cmd.add_argument("--now")
 
     lineage_plan_cmd = subparsers.add_parser("lineage-research-plan")
     lineage_plan_cmd.add_argument("--storage-dir", required=True)
@@ -607,6 +613,8 @@ def main(argv: list[str] | None = None) -> int:
             return _create_decision_blocker_research_agenda(args)
         if args.command == "decision-blocker-research-plan":
             return _decision_blocker_research_plan(args)
+        if args.command == "execute-decision-blocker-research-next-task":
+            return _execute_decision_blocker_research_next_task(args)
         if args.command == "lineage-research-plan":
             return _lineage_research_plan(args)
         if args.command == "record-lineage-research-task-run":
@@ -1234,6 +1242,23 @@ def _decision_blocker_research_plan(args) -> int:
             ensure_ascii=False,
         )
     )
+    return 0
+
+
+def _execute_decision_blocker_research_next_task(args) -> int:
+    storage_dir = Path(args.storage_dir)
+    if not storage_dir.exists():
+        raise ValueError(f"storage directory does not exist: {storage_dir}")
+    if not storage_dir.is_dir():
+        raise ValueError(f"storage path is not a directory: {storage_dir}")
+    created_at = _parse_datetime(args.now) if args.now else datetime.now(tz=UTC)
+    result = execute_decision_blocker_research_next_task(
+        repository=JsonFileRepository(storage_dir),
+        storage_dir=storage_dir,
+        symbol=args.symbol,
+        created_at=created_at,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0
 
 

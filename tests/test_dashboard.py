@@ -1088,6 +1088,45 @@ def test_dashboard_prioritizes_strategy_decision_and_health_status(tmp_path):
     assert "需要修復" not in html.split('id="strategy"', 1)[1].split("</section>", 1)[0]
 
 
+def test_dashboard_uses_specific_blocked_decision_reason_summary(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 4, 0, tzinfo=UTC)
+    decision = StrategyDecision(
+        decision_id="decision:blocker-summary",
+        created_at=now,
+        symbol="BTC-USD",
+        horizon_hours=24,
+        action="HOLD",
+        confidence=0.55,
+        evidence_grade="D",
+        risk_level="MEDIUM",
+        tradeable=False,
+        blocked_reason="model_not_beating_baseline",
+        recommended_position_pct=0.0,
+        current_position_pct=0.0,
+        max_position_pct=0.15,
+        invalidation_conditions=[],
+        reason_summary=(
+            "模型證據沒有打贏 naive persistence baseline；"
+            "主要研究阻擋：event edge 缺失、walk-forward overfit risk。"
+        ),
+        forecast_ids=["forecast:latest"],
+        score_ids=[],
+        review_ids=[],
+        baseline_ids=["baseline:latest"],
+        decision_basis="test",
+    )
+    repository.save_strategy_decision(decision)
+
+    html = render_dashboard_html(build_dashboard_snapshot(tmp_path))
+    strategy_section = html.split('id="strategy"', 1)[1].split("</section>", 1)[0]
+
+    assert "主要研究阻擋：event edge 缺失、walk-forward overfit risk。" in strategy_section
+    assert "模型證據沒有打贏 naive persistence baseline，因此買進/賣出被擋住。" not in strategy_section
+
+
 def test_dashboard_surfaces_strategy_research_context_before_raw_metadata(tmp_path):
     from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
 

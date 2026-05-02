@@ -188,6 +188,9 @@ def test_strategy_decision_blocks_buy_sell_when_model_does_not_beat_baseline(tmp
     assert decision.action == "HOLD"
     assert decision.blocked_reason == "model_not_beating_baseline"
     assert decision.tradeable is False
+    assert "主要研究阻擋" in decision.reason_summary
+    assert "event edge 缺失" in decision.reason_summary
+    assert "backtest 缺失" in decision.reason_summary
 
 
 def test_strategy_decision_reduces_risk_when_recent_score_is_poor(tmp_path):

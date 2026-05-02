@@ -1559,9 +1559,13 @@ python run_forecast_loop.py decision-blocker-research-plan --storage-dir .\paper
 
 `decision-blocker-research-plan` is read-only. It chooses the latest
 `decision_blocker_research_agenda` for the symbol and emits the next research
-task. Event-edge blockers can produce a directly runnable `build-event-edge`
-command. Backtest and walk-forward blockers remain explicit blocked tasks until
-the operator or future executor supplies safe `start` / `end` windows.
+task. Event-edge blockers produce a directly runnable `build-event-edge` command
+only when the storage already has same-symbol canonical events, passed market
+reaction checks, and exact event/horizon market candles that can produce at
+least one event-edge sample. If those inputs are missing, the task is blocked
+with explicit missing inputs instead of pretending it can execute. Backtest and
+walk-forward blockers remain explicit blocked tasks until the operator or future
+executor supplies safe `start` / `end` windows.
 
 Execute the next supported decision-blocker research task:
 

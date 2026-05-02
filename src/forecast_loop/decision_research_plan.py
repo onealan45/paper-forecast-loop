@@ -1,14 +1,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from forecast_loop.decision_research_agenda import (
     DECISION_BLOCKER_AGENDA_BASIS,
     extract_decision_research_blockers,
 )
-from forecast_loop.models import EventEdgeEvaluation, ResearchAgenda, StrategyDecision
+from forecast_loop.models import (
+    CanonicalEvent,
+    EventEdgeEvaluation,
+    MarketCandleRecord,
+    MarketReactionCheck,
+    ResearchAgenda,
+    StrategyDecision,
+)
 from forecast_loop.storage import ArtifactRepository
 
 
@@ -83,8 +90,19 @@ def build_decision_blocker_research_task_plan(
     if not blockers:
         blockers = _blockers_from_agenda(agenda)
     tasks = [_agenda_task(agenda, latest_decision, blockers)]
-    event_edges = repository.load_event_edge_evaluations()
-    tasks.extend(_evidence_tasks(agenda, storage, symbol, now, blockers, event_edges))
+    tasks.extend(
+        _evidence_tasks(
+            agenda,
+            storage,
+            symbol,
+            now,
+            blockers,
+            repository.load_event_edge_evaluations(),
+            repository.load_canonical_events(),
+            repository.load_market_reaction_checks(),
+            repository.load_market_candles(),
+        )
+    )
     next_task = next((task for task in tasks if task.status != "completed"), None)
     return DecisionBlockerResearchTaskPlan(
         symbol=symbol,
@@ -146,11 +164,14 @@ def _evidence_tasks(
     now: datetime,
     blockers: list[str],
     event_edges: list[EventEdgeEvaluation],
+    events: list[CanonicalEvent],
+    reactions: list[MarketReactionCheck],
+    candles: list[MarketCandleRecord],
 ) -> list[DecisionBlockerResearchTask]:
     tasks: list[DecisionBlockerResearchTask] = []
     expected = set(agenda.expected_artifacts)
     if "event_edge_evaluation" in expected:
-        tasks.append(_event_edge_task(agenda, storage, symbol, now, blockers, event_edges))
+        tasks.append(_event_edge_task(agenda, storage, symbol, now, blockers, event_edges, events, reactions, candles))
     if "backtest_result" in expected:
         tasks.append(_backtest_task(blockers))
     if "walk_forward_validation" in expected:
@@ -167,6 +188,9 @@ def _event_edge_task(
     now: datetime,
     blockers: list[str],
     event_edges: list[EventEdgeEvaluation],
+    events: list[CanonicalEvent],
+    reactions: list[MarketReactionCheck],
+    candles: list[MarketCandleRecord],
 ) -> DecisionBlockerResearchTask:
     latest_edge = _latest_event_edge_after_agenda(event_edges, agenda)
     if latest_edge is not None:
@@ -181,6 +205,26 @@ def _event_edge_task(
             blocked_reason=None,
             missing_inputs=[],
             rationale="A same-symbol event-edge evaluation already exists after this blocker agenda.",
+        )
+    missing = _missing_event_edge_inputs(
+        symbol=symbol,
+        now=now,
+        events=events,
+        reactions=reactions,
+        candles=candles,
+    )
+    if missing:
+        return DecisionBlockerResearchTask(
+            task_id="build_event_edge_evaluation",
+            title="Build event-edge evaluation for decision blocker",
+            status="blocked",
+            required_artifact="event_edge_evaluation",
+            artifact_id=None,
+            command_args=None,
+            worker_prompt=_worker_prompt("event-edge evaluation", blockers),
+            blocked_reason="missing_event_edge_inputs",
+            missing_inputs=missing,
+            rationale="Event-edge evaluation needs historical events, market reactions, and candles before execution.",
         )
     missing = [] if storage is not None else ["storage_dir"]
     command = None
@@ -285,6 +329,124 @@ def _latest_event_edge_after_agenda(
         if evaluation.symbol == agenda.symbol and evaluation.created_at >= agenda.created_at
     ]
     return max(candidates, key=lambda item: (item.created_at, item.evaluation_id)) if candidates else None
+
+
+def _missing_event_edge_inputs(
+    *,
+    symbol: str,
+    now: datetime,
+    events: list[CanonicalEvent],
+    reactions: list[MarketReactionCheck],
+    candles: list[MarketCandleRecord],
+) -> list[str]:
+    missing: list[str] = []
+    usable_events = {
+        event.event_id: event
+        for event in events
+        if _event_edge_event_available(event, symbol=symbol, now=now)
+    }
+    if not usable_events:
+        missing.append("canonical_events")
+    latest_reactions = _latest_event_edge_reactions_by_event(reactions, now=now)
+    usable_reactions = {
+        event_id: reaction
+        for event_id, reaction in latest_reactions.items()
+        if reaction.passed and event_id in usable_events
+    }
+    if not usable_reactions:
+        missing.append("market_reaction_checks")
+    candles_by_symbol = _event_edge_candles_by_symbol(candles, now=now)
+    symbol_candles = candles_by_symbol.get(symbol, [])
+    if usable_reactions:
+        sample_exists = any(
+            _has_event_edge_sample(
+                event=usable_events[event_id],
+                reaction=reaction,
+                candles=symbol_candles,
+            )
+            for event_id, reaction in usable_reactions.items()
+        )
+    else:
+        sample_exists = bool(symbol_candles)
+    if not sample_exists:
+        missing.append("market_candles")
+    return missing
+
+
+def _event_edge_event_available(event: CanonicalEvent, *, symbol: str, now: datetime) -> bool:
+    return (
+        event.symbol == symbol
+        and event.available_at is not None
+        and event.available_at <= now
+        and event.fetched_at <= now
+        and (event.created_at is None or event.created_at <= now)
+    )
+
+
+def _latest_event_edge_reactions_by_event(
+    reactions: list[MarketReactionCheck],
+    *,
+    now: datetime,
+) -> dict[str, MarketReactionCheck]:
+    latest: dict[str, MarketReactionCheck] = {}
+    for reaction in sorted(reactions, key=lambda item: (item.created_at, item.check_id)):
+        if reaction.created_at > now:
+            continue
+        latest[reaction.event_id] = reaction
+    return latest
+
+
+def _event_edge_candles_by_symbol(
+    candles: list[MarketCandleRecord],
+    *,
+    now: datetime,
+) -> dict[str, list[MarketCandleRecord]]:
+    by_symbol_and_time: dict[tuple[str, datetime], MarketCandleRecord] = {}
+    for candle in candles:
+        if candle.timestamp > now or candle.imported_at > now:
+            continue
+        key = (candle.symbol, candle.timestamp)
+        existing = by_symbol_and_time.get(key)
+        if existing is None or (candle.imported_at, candle.source, candle.candle_id) > (
+            existing.imported_at,
+            existing.source,
+            existing.candle_id,
+        ):
+            by_symbol_and_time[key] = candle
+    result: dict[str, list[MarketCandleRecord]] = {}
+    for candle in by_symbol_and_time.values():
+        result.setdefault(candle.symbol, []).append(candle)
+    for symbol_candles in result.values():
+        symbol_candles.sort(key=lambda item: item.timestamp)
+    return result
+
+
+def _has_event_edge_sample(
+    *,
+    event: CanonicalEvent,
+    reaction: MarketReactionCheck,
+    candles: list[MarketCandleRecord],
+) -> bool:
+    if reaction.symbol != event.symbol:
+        return False
+    if reaction.event_timestamp_used != _hour_boundary(reaction.event_timestamp_used):
+        return False
+    start = reaction.event_timestamp_used
+    end = start + timedelta(hours=24)
+    start_candle = _candle_at(candles, start)
+    end_candle = _candle_at(candles, end)
+    return start_candle is not None and end_candle is not None and start_candle.close != 0
+
+
+def _hour_boundary(timestamp: datetime) -> datetime:
+    return timestamp.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+
+
+def _candle_at(candles: list[MarketCandleRecord], timestamp: datetime) -> MarketCandleRecord | None:
+    for candle in candles:
+        if candle.timestamp == timestamp:
+            return candle
+    return None
 
 
 def _decision_id_from_text(value: str) -> str | None:

@@ -425,6 +425,10 @@ factory:
   when strategy research artifacts already exist, so automation cycles keep the
   dashboard/operator-console strategy summary current without creating empty
   `no_strategy_card` digest noise in fresh storage.
+- PR129 persists a `strategy_rule_summary` inside each strategy research
+  digest, so automation and UX can read the current hypothesis, signal, entry,
+  exit, and risk logic from one artifact without joining back to the strategy
+  card.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.
@@ -1473,9 +1477,10 @@ python run_forecast_loop.py strategy-research-digest --storage-dir .\paper_stora
 `strategy-research-digest` writes `strategy_research_digests.jsonl`. Each row
 captures the current strategy hypothesis, paper-shadow grade/action,
 after-cost excess return, lineage failure concentration, linked evidence ids,
-and next research rationale. It is the machine-readable handoff for strategy
-learning loops; it does not execute the strategy, mutate cards, or place
-orders.
+next research rationale, and a compact `strategy_rule_summary` list for the
+current hypothesis / signal / entry / exit / risk logic. It is the
+machine-readable handoff for strategy learning loops; it does not execute the
+strategy, mutate cards, or place orders.
 
 `run-once --also-decide` also refreshes this digest when the storage already
 contains strategy research artifacts for the requested symbol. Fresh storage

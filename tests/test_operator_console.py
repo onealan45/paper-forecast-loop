@@ -436,6 +436,12 @@ def _seed_visible_strategy_research_digest(repository: JsonFileRepository, now: 
             ),
             next_step_rationale="優先修正 回撤超標 (drawdown_breach)，再重跑 locked retest。",
             decision_basis="test",
+            strategy_rule_summary=[
+                "假說: Digest-only operator hypothesis should own the strategy summary.",
+                "訊號: Digest-only operator signal filter.",
+                "進場: Digest-only operator entry rule.",
+                "風控: Digest-only operator risk control.",
+            ],
         )
     )
 
@@ -966,8 +972,13 @@ def test_operator_console_surfaces_strategy_research_digest_in_research_and_over
         assert "負超額報酬 (negative_excess_return), 回撤超標 (drawdown_breach)" in html
         assert "paper-shadow-outcome:visible-revision-quarantine" in html
         assert "Digest strategy rules" in html
-        assert "突破前高且成交量放大" in html
-        assert "single-trial max position 10%" in html
+        rules_start = html.index("Digest strategy rules")
+        rules_section = html[rules_start : html.index("Evidence", rules_start)]
+        assert "Digest-only operator hypothesis should own the strategy summary." in rules_section
+        assert "Digest-only operator signal filter." in rules_section
+        assert "Digest-only operator entry rule." in rules_section
+        assert "Digest-only operator risk control." in rules_section
+        assert "single-trial max position 10%" not in rules_section
 
 
 def test_research_page_uses_autopilot_linked_chain_instead_of_latest_symbol_artifacts(tmp_path):

@@ -1289,14 +1289,16 @@ def _render_strategy_research_digest(
           <dt>Failure concentration</dt><dd>{_dashboard_list_inline(failure_attributions)}</dd>
           <dt>Lineage</dt><dd>Revisions {digest.lineage_revision_count} / Outcomes {digest.lineage_outcome_count}</dd>
           <dt>Next rationale</dt><dd>{escape(digest.next_step_rationale)}</dd>
-          <dt>Digest strategy rules</dt><dd>{_render_digest_strategy_rules(card)}</dd>
+          <dt>Digest strategy rules</dt><dd>{_render_digest_strategy_rules(digest, card)}</dd>
           <dt>Evidence</dt><dd>{_dashboard_list_inline(digest.evidence_artifact_ids)}</dd>
         </dl>
       </div>
     """
 
 
-def _render_digest_strategy_rules(card: StrategyCard | None) -> str:
+def _render_digest_strategy_rules(digest: StrategyResearchDigest, card: StrategyCard | None) -> str:
+    if digest.strategy_rule_summary:
+        return _dashboard_list_inline(digest.strategy_rule_summary)
     if card is None:
         return '<span class="empty">沒有對應 strategy card artifact</span>'
     return f"""

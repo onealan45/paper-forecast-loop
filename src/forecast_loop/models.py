@@ -1461,6 +1461,7 @@ class StrategyResearchDigest:
     research_summary: str
     next_step_rationale: str
     decision_basis: str
+    strategy_rule_summary: list[str] = field(default_factory=list)
 
     @classmethod
     def build_id(
@@ -1516,6 +1517,7 @@ class StrategyResearchDigest:
             research_summary=payload.get("research_summary", ""),
             next_step_rationale=payload.get("next_step_rationale", ""),
             decision_basis=payload.get("decision_basis", "legacy_strategy_research_digest"),
+            strategy_rule_summary=list(payload.get("strategy_rule_summary", [])),
         )
 
 

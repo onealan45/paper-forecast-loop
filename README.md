@@ -1563,6 +1563,20 @@ task. Event-edge blockers can produce a directly runnable `build-event-edge`
 command. Backtest and walk-forward blockers remain explicit blocked tasks until
 the operator or future executor supplies safe `start` / `end` windows.
 
+Execute the next supported decision-blocker research task:
+
+```powershell
+python run_forecast_loop.py execute-decision-blocker-research-next-task --storage-dir .\paper_storage\manual-coingecko --symbol BTC-USD --now 2026-05-02T10:00:00+00:00
+```
+
+`execute-decision-blocker-research-next-task` builds the same task plan, then
+executes only a ready `build_event_edge_evaluation` task. It writes the
+event-edge evaluation artifact and records an `AutomationRun` with the before
+and after task plans. If the next task is blocked, unsupported, or produces no
+artifact, the command fails with an operator-readable error instead of treating
+the research loop as complete. It does not run backtests, choose walk-forward
+windows, mutate strategies, place orders, or call broker/exchange adapters.
+
 Turn that lineage agenda into a machine-readable next research task:
 
 ```powershell

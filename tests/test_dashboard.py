@@ -1148,9 +1148,19 @@ def test_dashboard_surfaces_strategy_research_digest_summary(tmp_path):
     assert "優先修正 回撤超標 (drawdown_breach)，再重跑 locked retest。" in html
     assert "負超額報酬 (negative_excess_return), 回撤超標 (drawdown_breach)" in html
     assert "paper-shadow-outcome:dashboard-revision-quarantine" in html
-    assert "Digest strategy rules" in html
-    rules_start = html.index("Digest strategy rules")
-    rules_section = html[rules_start : html.index("<dt>Evidence</dt>", rules_start)]
+    digest_start = html.index("策略研究摘要")
+    digest_section = html[digest_start : html.index("<dt>證據</dt>", digest_start)]
+    assert "<dt>摘要 ID</dt>" in digest_section
+    assert "<dt>策略</dt>" in digest_section
+    assert "<dt>Paper-shadow 結果</dt>" in digest_section
+    assert "<dt>建議動作</dt>" in digest_section
+    assert "<dt>失敗集中</dt>" in digest_section
+    assert "<dt>下一步理由</dt>" in digest_section
+    assert "<dt>策略規則摘要</dt>" in digest_section
+    assert "Digest strategy rules" not in digest_section
+    assert "Failure concentration" not in digest_section
+    rules_start = html.index("策略規則摘要")
+    rules_section = html[rules_start : html.index("<dt>證據</dt>", rules_start)]
     assert '<ul class="digest-rule-list">' in rules_section
     assert "Digest-only dashboard hypothesis should own the strategy summary." in rules_section
     assert "Digest-only dashboard signal filter." in rules_section

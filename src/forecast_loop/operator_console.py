@@ -1905,17 +1905,17 @@ def _strategy_research_digest_panel(
   <article class="panel wide">
     <h3>策略研究摘要</h3>
     <p>{escape(digest.research_summary)}</p>
-    <p>Digest：<code>{escape(digest.digest_id)}</code></p>
-    <p>Strategy：{escape(digest.strategy_name)} / {escape(_display_strategy_card_status(digest.strategy_status))}</p>
-    <p>Outcome：{escape(_display_outcome_grade(digest.outcome_grade))} / {_format_pct(digest.excess_return_after_costs)}</p>
-    <p>Recommended：{escape(_display_research_action(digest.recommended_strategy_action))}</p>
-    <p>Failure concentration：</p>
+    <p>摘要 ID：<code>{escape(digest.digest_id)}</code></p>
+    <p>策略：{escape(digest.strategy_name)} / {escape(_display_strategy_card_status(digest.strategy_status))}</p>
+    <p>Paper-shadow 結果：{escape(_display_outcome_grade(digest.outcome_grade))} / {_format_pct(digest.excess_return_after_costs)}</p>
+    <p>建議動作：{escape(_display_research_action(digest.recommended_strategy_action))}</p>
+    <p>失敗集中：</p>
     {_plain_list(_digest_failure_attributions(digest), empty="目前沒有 digest failure attribution")}
-    <p>Lineage：Revisions {digest.lineage_revision_count} / Outcomes {digest.lineage_outcome_count}</p>
-    <p>Next rationale：{escape(digest.next_step_rationale)}</p>
-    <h4>Digest strategy rules</h4>
+    <p>Lineage：修訂 {digest.lineage_revision_count} / 結果 {digest.lineage_outcome_count}</p>
+    <p>下一步理由：{escape(digest.next_step_rationale)}</p>
+    <h4>策略規則摘要</h4>
     {_digest_strategy_rules(digest, card)}
-    <p>Evidence：</p>
+    <p>證據：</p>
     {_plain_list(digest.evidence_artifact_ids, empty="目前沒有 digest evidence")}
   </article>
 """
@@ -1929,14 +1929,14 @@ def _strategy_research_digest_preview(
         return ""
     return f"""
 <h4>策略研究摘要</h4>
-<p>Digest：<code>{escape(digest.digest_id)}</code></p>
+<p>摘要 ID：<code>{escape(digest.digest_id)}</code></p>
 <p>{escape(digest.research_summary)}</p>
-<p>Next rationale：{escape(digest.next_step_rationale)}</p>
-<p>Failure concentration：</p>
+<p>下一步理由：{escape(digest.next_step_rationale)}</p>
+<p>失敗集中：</p>
 {_plain_list(_digest_failure_attributions(digest), empty="目前沒有 digest failure attribution")}
-<p>Digest strategy rules</p>
+<p>策略規則摘要</p>
 {_digest_strategy_rules(digest, card)}
-<p>Evidence：</p>
+<p>證據：</p>
 {_plain_list(digest.evidence_artifact_ids, empty="目前沒有 digest evidence")}
 """
 
@@ -1947,12 +1947,12 @@ def _digest_strategy_rules(digest: StrategyResearchDigest, card: StrategyCard | 
     if card is None:
         return '<p class="muted">沒有對應 strategy card artifact</p>'
     return f"""
-<p>Hypothesis：{escape(card.hypothesis)}</p>
-<p>Entry：</p>
+<p>假說：{escape(card.hypothesis)}</p>
+<p>進場：</p>
 {_plain_list(card.entry_rules[:3], empty="目前沒有 entry rules")}
-<p>Exit：</p>
+<p>出場：</p>
 {_plain_list(card.exit_rules[:3], empty="目前沒有 exit rules")}
-<p>Risk：</p>
+<p>風控：</p>
 {_plain_list(card.risk_rules[:3], empty="目前沒有 risk rules")}
 """
 

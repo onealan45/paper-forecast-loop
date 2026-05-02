@@ -9,6 +9,7 @@ from forecast_loop.baselines import build_baseline_evaluation
 from forecast_loop.experiment_registry import record_experiment_trial
 from forecast_loop.locked_evaluation import evaluate_leaderboard_gate, lock_evaluation_protocol
 from forecast_loop.models import AutomationRun, BacktestResult, LeaderboardEntry, MarketCandleRecord, WalkForwardValidation
+from forecast_loop.models import SplitManifest
 from forecast_loop.paper_shadow import record_paper_shadow_outcome
 from forecast_loop.revision_retest import (
     RETEST_EVIDENCE_CONTEXT_PARAMETER,
@@ -620,14 +621,7 @@ def _execute_lock_evaluation_protocol(
 ) -> list[str]:
     if plan.dataset_id is None:
         raise ValueError("revision_retest_dataset_missing")
-    if plan.split_manifest_id is None:
-        raise ValueError("revision_retest_split_manifest_missing")
-    split = next(
-        (item for item in repository.load_split_manifests() if item.manifest_id == plan.split_manifest_id),
-        None,
-    )
-    if split is None:
-        raise ValueError(f"missing_split_manifest:{plan.split_manifest_id}")
+    split = _split_for_lock_protocol(repository=repository, plan=plan)
     locked_split, cost_model = lock_evaluation_protocol(
         repository=repository,
         created_at=created_at,
@@ -643,6 +637,34 @@ def _execute_lock_evaluation_protocol(
         embargo_hours=split.embargo_hours,
     )
     return [locked_split.manifest_id, cost_model.cost_model_id]
+
+
+def _split_for_lock_protocol(
+    *,
+    repository: ArtifactRepository,
+    plan: RevisionRetestTaskPlan,
+) -> SplitManifest:
+    manifests = repository.load_split_manifests()
+    if plan.split_manifest_id is not None:
+        split = next((item for item in manifests if item.manifest_id == plan.split_manifest_id), None)
+        if split is None:
+            raise ValueError(f"missing_split_manifest:{plan.split_manifest_id}")
+        return split
+    reusable_split = max(
+        (
+            manifest
+            for manifest in manifests
+            if manifest.strategy_card_id != plan.strategy_card_id
+            and manifest.dataset_id == plan.dataset_id
+            and manifest.symbol == plan.symbol
+            and manifest.status == "LOCKED"
+        ),
+        key=lambda manifest: manifest.created_at,
+        default=None,
+    )
+    if reusable_split is None:
+        raise ValueError("revision_retest_split_manifest_missing")
+    return reusable_split
 
 
 def _retest_evidence_context(plan: RevisionRetestTaskPlan) -> str:

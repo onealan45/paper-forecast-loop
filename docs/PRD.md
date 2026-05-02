@@ -962,6 +962,10 @@ V1 MVP should include:
 - lineage task-plan and executor support for that refresh path, so automation
   treats legacy replacement cards as actionable research work instead of
   silently considering the replacement step complete
+- reusable retest split-window locking, so a fresh revision or replacement
+  retest can copy train/validation/holdout windows from a same-symbol,
+  same-dataset locked split while still producing its own current-card split
+  before backtest and walk-forward evidence can run
 - decision timeline view exposing latest decision, reason summary, evidence
   grade, linked artifacts, invalidation conditions, and blocked reason
 - portfolio/risk view exposing NAV, cash, realized/unrealized PnL,

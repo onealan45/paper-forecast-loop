@@ -6,6 +6,7 @@ from pathlib import Path
 
 from forecast_loop.models import (
     BacktestResult,
+    BacktestRun,
     BaselineEvaluation,
     CostModelSnapshot,
     ExperimentTrial,
@@ -139,6 +140,7 @@ def build_revision_retest_task_plan(
     )
     research_dataset = _latest_research_dataset(repository.load_research_datasets(), symbol)
     experiment_trials = repository.load_experiment_trials()
+    backtest_runs = repository.load_backtest_runs()
     backtest_results = repository.load_backtest_results()
     walk_forward_validations = repository.load_walk_forward_validations()
     market_candles = repository.load_market_candles()
@@ -159,6 +161,7 @@ def build_revision_retest_task_plan(
     )
     passed_trial = _latest_valid_passed_retest_trial(
         experiment_trials,
+        backtest_runs=backtest_runs,
         backtest_results=backtest_results,
         walk_forward_validations=walk_forward_validations,
         split_manifests=repository.load_split_manifests(),
@@ -179,10 +182,19 @@ def build_revision_retest_task_plan(
     )
     if split is None:
         split = pending_split
+    reusable_split = None
+    if split is None:
+        reusable_split = _latest_reusable_split_manifest(
+            repository.load_split_manifests(),
+            card=card,
+            symbol=symbol,
+            dataset_id=dataset_id,
+        )
     cost_model = _latest_cost_model(repository.load_cost_model_snapshots(), symbol)
     baseline = _latest_baseline(repository.load_baseline_evaluations(), symbol)
     backtest = _selected_backtest(
         backtest_results,
+        backtest_runs=backtest_runs,
         passed_trial=passed_trial,
         pending_trial=pending_trial,
         split=split,
@@ -227,6 +239,7 @@ def build_revision_retest_task_plan(
         passed_trial=passed_trial,
         dataset_id=dataset_id,
         split=split,
+        reusable_split=reusable_split,
         cost_model=cost_model,
         baseline=baseline,
         backtest=backtest,
@@ -268,6 +281,7 @@ def _build_tasks(
     passed_trial: ExperimentTrial | None,
     dataset_id: str | None,
     split: SplitManifest | None,
+    reusable_split: SplitManifest | None,
     cost_model: CostModelSnapshot | None,
     baseline: BaselineEvaluation | None,
     backtest: BacktestResult | None,
@@ -294,6 +308,7 @@ def _build_tasks(
             trial=passed_trial or pending_trial,
             dataset_id=dataset_id,
             split=split,
+            reusable_split=reusable_split,
             cost_model=cost_model,
         ),
         _baseline_task(storage=storage, symbol=symbol, baseline=baseline),
@@ -405,6 +420,7 @@ def _lock_protocol_task(
     trial: ExperimentTrial | None,
     dataset_id: str | None,
     split: SplitManifest | None,
+    reusable_split: SplitManifest | None,
     cost_model: CostModelSnapshot | None,
 ) -> RevisionRetestTask:
     if split is not None and cost_model is not None:
@@ -442,6 +458,24 @@ def _lock_protocol_task(
             "dataset_id_missing",
             ["dataset_id"],
             "The split protocol needs the same dataset ID as the retest trial.",
+        )
+    if split is None and reusable_split is not None and storage is not None:
+        return _task(
+            "lock_evaluation_protocol",
+            "Lock evaluation protocol",
+            "ready",
+            "split_manifest",
+            reusable_split.manifest_id,
+            _lock_protocol_command(
+                storage=storage,
+                symbol=symbol,
+                card=card,
+                dataset_id=dataset_id,
+                split=reusable_split,
+            ),
+            None,
+            [],
+            "Reuse an existing locked split window for the same symbol and dataset.",
         )
     if split is None or storage is None:
         missing = [
@@ -1190,6 +1224,7 @@ def _latest_retest_trial(
 def _latest_valid_passed_retest_trial(
     trials: list[ExperimentTrial],
     *,
+    backtest_runs: list[BacktestRun],
     backtest_results: list[BacktestResult],
     walk_forward_validations: list[WalkForwardValidation],
     split_manifests: list[SplitManifest],
@@ -1229,9 +1264,9 @@ def _latest_valid_passed_retest_trial(
         walk_forward = walk_forwards_by_id.get(trial.walk_forward_validation_id)
         if backtest is None or walk_forward is None:
             continue
-        if not _artifact_belongs_to_retest_trial(backtest, trial):
+        if not _backtest_result_belongs_to_retest_trial(backtest, trial, backtest_runs, related_trials=trials):
             continue
-        if not _artifact_belongs_to_retest_trial(walk_forward, trial):
+        if not _walk_forward_belongs_to_retest_trial(walk_forward, trial, related_trials=trials):
             continue
         if backtest.symbol != symbol or walk_forward.symbol != symbol:
             continue
@@ -1273,6 +1308,27 @@ def _latest_split_manifest(
     )
 
 
+def _latest_reusable_split_manifest(
+    manifests: list[SplitManifest],
+    *,
+    card: StrategyCard,
+    symbol: str,
+    dataset_id: str | None,
+) -> SplitManifest | None:
+    if dataset_id is None:
+        return None
+    return _latest(
+        [
+            manifest
+            for manifest in manifests
+            if manifest.strategy_card_id != card.card_id
+            and manifest.dataset_id == dataset_id
+            and manifest.symbol == symbol
+            and manifest.status == "LOCKED"
+        ]
+    )
+
+
 def _latest_cost_model(
     snapshots: list[CostModelSnapshot],
     symbol: str,
@@ -1296,6 +1352,7 @@ def _latest_baseline(
 def _selected_backtest(
     results: list[BacktestResult],
     *,
+    backtest_runs: list[BacktestRun],
     passed_trial: ExperimentTrial | None,
     pending_trial: ExperimentTrial | None,
     split: SplitManifest | None,
@@ -1312,7 +1369,7 @@ def _selected_backtest(
             result
             for result in results
             if result.symbol == symbol
-            and _artifact_belongs_to_retest_trial(result, pending_trial)
+            and _backtest_result_belongs_to_retest_trial(result, pending_trial, backtest_runs)
             and result.start == split.holdout_start
             and result.end == split.holdout_end
         ]
@@ -1348,7 +1405,7 @@ def _selected_walk_forward(
             validation
             for validation in validations
             if validation.symbol == symbol
-            and _artifact_belongs_to_retest_trial(validation, pending_trial)
+            and _walk_forward_belongs_to_retest_trial(validation, pending_trial)
             and validation.start == split.train_start
             and validation.end == split.holdout_end
             and (
@@ -1364,6 +1421,84 @@ def _artifact_belongs_to_retest_trial(
     trial: ExperimentTrial,
 ) -> bool:
     return artifact.created_at >= (trial.started_at or trial.created_at)
+
+
+def _backtest_result_belongs_to_retest_trial(
+    result: BacktestResult,
+    trial: ExperimentTrial,
+    backtest_runs: list[BacktestRun],
+    *,
+    related_trials: list[ExperimentTrial] | None = None,
+) -> bool:
+    if not _artifact_belongs_to_retest_trial(result, trial):
+        return False
+    run = next((item for item in backtest_runs if item.backtest_id == result.backtest_id), None)
+    if run is None:
+        return False
+    return _decision_basis_has_retest_context(run.decision_basis, trial, related_trials=related_trials)
+
+
+def _walk_forward_belongs_to_retest_trial(
+    validation: WalkForwardValidation,
+    trial: ExperimentTrial,
+    *,
+    related_trials: list[ExperimentTrial] | None = None,
+) -> bool:
+    return (
+        _artifact_belongs_to_retest_trial(validation, trial)
+        and _decision_basis_has_retest_context(validation.decision_basis, trial, related_trials=related_trials)
+    )
+
+
+def _decision_basis_has_retest_context(
+    decision_basis: str,
+    trial: ExperimentTrial,
+    *,
+    related_trials: list[ExperimentTrial] | None = None,
+) -> bool:
+    return any(
+        f"id_context={context}" in decision_basis
+        for context in _valid_retest_id_contexts(trial, related_trials=related_trials)
+    )
+
+
+def _valid_retest_id_contexts(
+    trial: ExperimentTrial,
+    *,
+    related_trials: list[ExperimentTrial] | None = None,
+) -> list[str]:
+    source_outcome_id = trial.parameters.get("revision_source_outcome_id")
+    if not isinstance(source_outcome_id, str) or not source_outcome_id:
+        return []
+    contexts = [f"revision_retest:{trial.strategy_card_id}:{trial.trial_id}:{source_outcome_id}"]
+    if related_trials is None:
+        return contexts
+    for candidate in related_trials:
+        if candidate.trial_id == trial.trial_id:
+            continue
+        if candidate.status != "PENDING":
+            continue
+        if not _same_retest_chain(candidate, trial, source_outcome_id=source_outcome_id):
+            continue
+        contexts.append(f"revision_retest:{candidate.strategy_card_id}:{candidate.trial_id}:{source_outcome_id}")
+    return list(dict.fromkeys(contexts))
+
+
+def _same_retest_chain(
+    candidate: ExperimentTrial,
+    trial: ExperimentTrial,
+    *,
+    source_outcome_id: str,
+) -> bool:
+    return (
+        candidate.strategy_card_id == trial.strategy_card_id
+        and candidate.symbol == trial.symbol
+        and candidate.dataset_id == trial.dataset_id
+        and candidate.trial_index == trial.trial_index
+        and candidate.parameters.get("revision_retest_protocol") == RETEST_PROTOCOL_VERSION
+        and candidate.parameters.get("revision_retest_source_card_id") == trial.strategy_card_id
+        and candidate.parameters.get("revision_source_outcome_id") == source_outcome_id
+    )
 
 
 def _latest_locked_evaluation(

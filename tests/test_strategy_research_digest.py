@@ -550,6 +550,7 @@ def test_run_once_also_decide_refreshes_strategy_research_digest_when_research_a
     assert result["strategy_research_digest_id"] == saved[0].digest_id
     assert saved[0].strategy_card_id == artifacts["revision"].card_id
     assert saved[0].autopilot_run_id is None
+    assert "decision_blocker_research_agenda_id" in result
 
 
 def test_run_once_also_decide_skips_strategy_research_digest_without_research_artifacts(

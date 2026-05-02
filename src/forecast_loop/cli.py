@@ -27,6 +27,7 @@ from forecast_loop.config import LoopConfig
 from forecast_loop.control import record_control_event
 from forecast_loop.dashboard import write_dashboard_html
 from forecast_loop.decision import generate_strategy_decision
+from forecast_loop.decision_research_agenda import create_decision_blocker_research_agenda
 from forecast_loop.evaluation import build_evaluation_summary
 from forecast_loop.event_edge import build_event_edge_evaluations
 from forecast_loop.execution_safety import evaluate_execution_safety_gate
@@ -134,6 +135,11 @@ def main(argv: list[str] | None = None) -> int:
     lineage_agenda_cmd.add_argument("--storage-dir", required=True)
     lineage_agenda_cmd.add_argument("--symbol", default="BTC-USD")
     lineage_agenda_cmd.add_argument("--created-at")
+
+    decision_blocker_agenda_cmd = subparsers.add_parser("create-decision-blocker-research-agenda")
+    decision_blocker_agenda_cmd.add_argument("--storage-dir", required=True)
+    decision_blocker_agenda_cmd.add_argument("--symbol", default="BTC-USD")
+    decision_blocker_agenda_cmd.add_argument("--created-at")
 
     lineage_plan_cmd = subparsers.add_parser("lineage-research-plan")
     lineage_plan_cmd.add_argument("--storage-dir", required=True)
@@ -591,6 +597,8 @@ def main(argv: list[str] | None = None) -> int:
             return _strategy_research_digest(args)
         if args.command == "create-lineage-research-agenda":
             return _create_lineage_research_agenda(args)
+        if args.command == "create-decision-blocker-research-agenda":
+            return _create_decision_blocker_research_agenda(args)
         if args.command == "lineage-research-plan":
             return _lineage_research_plan(args)
         if args.command == "record-lineage-research-task-run":
@@ -788,6 +796,7 @@ def _run_once(args) -> int:
     )
     decision = None
     strategy_research_digest = None
+    decision_blocker_research_agenda = None
     health_result = None
     notifications = []
     if args.also_decide:
@@ -853,6 +862,28 @@ def _run_once(args) -> int:
                     "no_strategy_research_artifacts",
                 )
             )
+        try:
+            decision_blocker_result = create_decision_blocker_research_agenda(
+                repository=repository,
+                symbol=args.symbol,
+                created_at=now,
+            )
+            decision_blocker_research_agenda = decision_blocker_result.research_agenda
+            steps.append(
+                automation_step(
+                    "decision_blocker_research_agenda",
+                    "completed",
+                    decision_blocker_research_agenda.agenda_id,
+                )
+            )
+        except ValueError as exc:
+            steps.append(
+                automation_step(
+                    "decision_blocker_research_agenda",
+                    "skipped",
+                    str(exc),
+                )
+            )
     automation_status = "repair_required" if health_result and health_result.repair_required else "completed"
     automation_run = record_automation_run(
         repository=repository,
@@ -878,6 +909,11 @@ def _run_once(args) -> int:
                 "decision_action": decision.action if decision else None,
                 "strategy_research_digest_id": (
                     strategy_research_digest.digest_id if strategy_research_digest else None
+                ),
+                "decision_blocker_research_agenda_id": (
+                    decision_blocker_research_agenda.agenda_id
+                    if decision_blocker_research_agenda
+                    else None
                 ),
                 "automation_run_id": automation_run.automation_run_id,
                 "notification_count": len(notifications),
@@ -1143,6 +1179,22 @@ def _create_lineage_research_agenda(args) -> int:
         raise ValueError(f"storage path is not a directory: {storage_dir}")
     created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
     result = create_lineage_research_agenda(
+        repository=JsonFileRepository(storage_dir),
+        created_at=created_at,
+        symbol=args.symbol,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
+    return 0
+
+
+def _create_decision_blocker_research_agenda(args) -> int:
+    storage_dir = Path(args.storage_dir)
+    if not storage_dir.exists():
+        raise ValueError(f"storage directory does not exist: {storage_dir}")
+    if not storage_dir.is_dir():
+        raise ValueError(f"storage path is not a directory: {storage_dir}")
+    created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
+    result = create_decision_blocker_research_agenda(
         repository=JsonFileRepository(storage_dir),
         created_at=created_at,
         symbol=args.symbol,

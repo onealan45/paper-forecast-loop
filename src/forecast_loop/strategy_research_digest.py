@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from forecast_loop.models import StrategyCard, StrategyDecision, StrategyResearchDigest
 from forecast_loop.storage import ArtifactRepository
+from forecast_loop.decision_research_agenda import extract_decision_research_blockers
 from forecast_loop.strategy_lineage import build_strategy_lineage_summary
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.strategy_research_display import (
@@ -67,7 +68,9 @@ def build_strategy_research_digest(
     next_research_action = _next_research_action(chain, lineage)
     evidence_artifact_ids = _evidence_artifact_ids(chain, lineage)
     latest_decision = _latest_strategy_decision(repository.load_strategy_decisions(), symbol)
-    decision_research_blockers = _decision_research_blockers(latest_decision)
+    decision_research_blockers = (
+        extract_decision_research_blockers(latest_decision) if latest_decision else []
+    )
     if latest_decision is not None:
         _append_id(evidence_artifact_ids, latest_decision.decision_id)
     lineage_latest_outcome_id = lineage.latest_outcome_id if lineage else None
@@ -211,16 +214,6 @@ def _latest_strategy_decision(
         if decision.symbol == symbol:
             return decision
     return None
-
-
-def _decision_research_blockers(decision: StrategyDecision | None) -> list[str]:
-    if decision is None:
-        return []
-    marker = "主要研究阻擋："
-    if marker not in decision.reason_summary:
-        return []
-    blocker_text = decision.reason_summary.split(marker, 1)[1].split("。", 1)[0]
-    return [item.strip() for item in blocker_text.split("、") if item.strip()]
 
 
 def _next_step_rationale(

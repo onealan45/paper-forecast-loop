@@ -990,7 +990,7 @@ V1 MVP should include:
 - decision-blocker research task planning, so that work item becomes a
   prioritized read-only task plan with command arguments for safe evidence
   builders such as event-edge evaluation and explicit missing inputs for
-  windowed validation
+  missing event-edge inputs and windowed validation
 - decision-blocker research task execution for the first supported task, so a
   ready event-edge evaluation plan can become evidence plus an automation-run
   audit trail while blocked backtest/walk-forward work remains blocked until

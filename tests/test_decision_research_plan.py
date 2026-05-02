@@ -5,7 +5,7 @@ import pytest
 
 from forecast_loop.cli import main
 from forecast_loop.decision_research_plan import build_decision_blocker_research_task_plan
-from forecast_loop.models import ResearchAgenda
+from forecast_loop.models import CanonicalEvent, MarketCandle, MarketCandleRecord, MarketReactionCheck, ResearchAgenda
 from forecast_loop.storage import JsonFileRepository
 
 
@@ -39,6 +39,103 @@ def _agenda(
     )
 
 
+def _event(index: int, *, symbol: str = "BTC-USD") -> CanonicalEvent:
+    event_time = datetime(2026, 4, 20, 10, 0, tzinfo=UTC) + timedelta(days=index)
+    return CanonicalEvent(
+        event_id=f"canonical-event:plan-edge-{index}",
+        event_family="crypto_flow",
+        event_type="CRYPTO_FLOW",
+        symbol=symbol,
+        title=f"Plan Event {index}",
+        summary="Planner event-edge prerequisite fixture.",
+        event_time=event_time,
+        published_at=event_time,
+        available_at=event_time,
+        fetched_at=event_time,
+        source_document_ids=[f"source-document:plan-edge-{index}"],
+        primary_document_id=f"source-document:plan-edge-{index}",
+        credibility_score=80.0,
+        cross_source_count=1,
+        official_source_flag=False,
+        duplicate_group_id=f"duplicate-group:plan-edge-{index}",
+        status="reliable",
+        created_at=event_time,
+    )
+
+
+def _market_reaction(event: CanonicalEvent, *, passed: bool = True) -> MarketReactionCheck:
+    event_time = event.available_at or event.fetched_at
+    return MarketReactionCheck(
+        check_id=f"market-reaction:{event.event_id.split(':')[-1]}",
+        event_id=event.event_id,
+        symbol=event.symbol,
+        created_at=event_time,
+        decision_timestamp=event_time,
+        event_timestamp_used=event_time,
+        pre_event_ret_1h=0.001,
+        pre_event_ret_4h=0.002,
+        pre_event_ret_24h=0.003,
+        post_event_ret_15m=None,
+        post_event_ret_1h=0.004,
+        pre_event_drift_z=0.1,
+        volume_shock_z=0.1,
+        priced_in_ratio=0.1,
+        already_priced=False,
+        passed=passed,
+        blocked_reason=None if passed else "already_priced",
+        flags=[] if passed else ["already_priced"],
+    )
+
+
+def _save_event_candles(repository: JsonFileRepository, event: CanonicalEvent) -> None:
+    event_time = event.available_at or event.fetched_at
+    imported_at = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
+    for timestamp, close in [
+        (event_time, 100.0),
+        (event_time + timedelta(hours=24), 103.0),
+    ]:
+        repository.save_market_candle(
+            MarketCandleRecord.from_candle(
+                MarketCandle(
+                    timestamp=timestamp,
+                    open=close,
+                    high=close + 1.0,
+                    low=close - 1.0,
+                    close=close,
+                    volume=1_000.0,
+                ),
+                symbol=event.symbol,
+                source="planner-fixture",
+                imported_at=imported_at,
+            )
+        )
+
+
+def _save_single_candle(repository: JsonFileRepository, *, timestamp: datetime, close: float = 100.0) -> None:
+    repository.save_market_candle(
+        MarketCandleRecord.from_candle(
+            MarketCandle(
+                timestamp=timestamp,
+                open=close,
+                high=close + 1.0,
+                low=close - 1.0,
+                close=close,
+                volume=1_000.0,
+            ),
+            symbol="BTC-USD",
+            source="planner-fixture",
+            imported_at=datetime(2026, 5, 1, 12, 0, tzinfo=UTC),
+        )
+    )
+
+
+def _seed_event_edge_prerequisites(repository: JsonFileRepository) -> None:
+    event = _event(1)
+    repository.save_canonical_event(event)
+    repository.save_market_reaction_check(_market_reaction(event))
+    _save_event_candles(repository, event)
+
+
 def test_decision_blocker_research_plan_prioritizes_event_edge_command(tmp_path):
     repository = JsonFileRepository(tmp_path)
     now = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
@@ -56,6 +153,7 @@ def test_decision_blocker_research_plan_prioritizes_event_edge_command(tmp_path)
     repository.save_research_agenda(old_agenda)
     repository.save_research_agenda(latest_agenda)
     repository.save_research_agenda(eth_agenda)
+    _seed_event_edge_prerequisites(repository)
 
     plan = build_decision_blocker_research_task_plan(
         repository=repository,
@@ -85,6 +183,78 @@ def test_decision_blocker_research_plan_prioritizes_event_edge_command(tmp_path)
     ]
     assert "event edge 缺失" in next_task.worker_prompt
     assert "walk-forward overfit risk" in next_task.worker_prompt
+
+
+def test_decision_blocker_research_plan_blocks_event_edge_when_inputs_are_missing(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
+    repository.save_research_agenda(_agenda(agenda_id="research-agenda:missing-inputs", created_at=now))
+
+    plan = build_decision_blocker_research_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=now + timedelta(minutes=30),
+    )
+
+    assert plan.next_task_id == "build_event_edge_evaluation"
+    task = plan.task_by_id("build_event_edge_evaluation")
+    assert task.status == "blocked"
+    assert task.command_args is None
+    assert task.blocked_reason == "missing_event_edge_inputs"
+    assert task.missing_inputs == ["canonical_events", "market_reaction_checks", "market_candles"]
+
+
+def test_decision_blocker_research_plan_blocks_event_edge_when_latest_reaction_failed(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
+    repository.save_research_agenda(_agenda(agenda_id="research-agenda:failed-reaction", created_at=now))
+    event = _event(1)
+    old_passed = _market_reaction(event, passed=True)
+    old_passed.check_id = "market-reaction:old-passed"
+    newer_failed = _market_reaction(event, passed=False)
+    newer_failed.check_id = "market-reaction:newer-failed"
+    newer_failed.created_at = old_passed.created_at + timedelta(hours=1)
+    repository.save_canonical_event(event)
+    repository.save_market_reaction_check(old_passed)
+    repository.save_market_reaction_check(newer_failed)
+    _save_event_candles(repository, event)
+
+    plan = build_decision_blocker_research_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=now + timedelta(minutes=30),
+    )
+
+    task = plan.task_by_id("build_event_edge_evaluation")
+    assert task.status == "blocked"
+    assert task.command_args is None
+    assert task.blocked_reason == "missing_event_edge_inputs"
+    assert task.missing_inputs == ["market_reaction_checks"]
+
+
+def test_decision_blocker_research_plan_blocks_event_edge_without_exact_horizon_candles(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
+    repository.save_research_agenda(_agenda(agenda_id="research-agenda:bad-candles", created_at=now))
+    event = _event(1)
+    repository.save_canonical_event(event)
+    repository.save_market_reaction_check(_market_reaction(event))
+    _save_single_candle(repository, timestamp=(event.available_at or event.fetched_at) + timedelta(hours=1))
+
+    plan = build_decision_blocker_research_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=now + timedelta(minutes=30),
+    )
+
+    task = plan.task_by_id("build_event_edge_evaluation")
+    assert task.status == "blocked"
+    assert task.command_args is None
+    assert task.blocked_reason == "missing_event_edge_inputs"
+    assert task.missing_inputs == ["market_candles"]
 
 
 def test_decision_blocker_research_plan_blocks_walk_forward_without_window(tmp_path):
@@ -117,6 +287,7 @@ def test_decision_blocker_research_plan_cli_outputs_json(tmp_path, capsys):
     repository = JsonFileRepository(tmp_path)
     now = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
     repository.save_research_agenda(_agenda(agenda_id="research-agenda:cli", created_at=now))
+    _seed_event_edge_prerequisites(repository)
 
     assert (
         main(

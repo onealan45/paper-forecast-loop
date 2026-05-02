@@ -467,6 +467,8 @@ def test_decision_blocker_research_plan_emits_walk_forward_command_when_candles_
         "2026-05-01T11:00:00+00:00",
         "--created-at",
         "2026-05-02T09:00:00+00:00",
+        "--as-of",
+        "2026-05-02T09:00:00+00:00",
         "--train-size",
         "4",
         "--validation-size",

@@ -389,6 +389,8 @@ def _walk_forward_task(
         end.isoformat(),
         "--created-at",
         now.isoformat(),
+        "--as-of",
+        now.isoformat(),
         "--train-size",
         "4",
         "--validation-size",

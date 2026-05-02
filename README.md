@@ -1569,9 +1569,9 @@ reaction checks, and exact event/horizon market candles that can produce at
 least one event-edge sample. If those inputs are missing, the task is blocked
 with explicit missing inputs instead of pretending it can execute. Walk-forward
 blockers emit conservative commands when stored same-symbol candles cover the
-minimum evidence window. Backtest blockers detect the same candle coverage but
-remain blocked with `backtest_asof_replay` until the backtest CLI can pin the
-plan-time candle as-of set.
+minimum evidence window. Backtest blockers emit conservative commands with
+`--as-of` so the backtest runtime pins the plan-time candle set instead of
+reading later-imported revisions.
 
 Create market-derived event inputs from stored candles:
 

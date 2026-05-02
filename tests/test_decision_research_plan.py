@@ -332,7 +332,7 @@ def test_decision_blocker_research_plan_blocks_backtest_without_window(tmp_path)
     assert task.missing_inputs == ["market_candles"]
 
 
-def test_decision_blocker_research_plan_blocks_backtest_until_asof_replay_exists(tmp_path):
+def test_decision_blocker_research_plan_emits_asof_backtest_command_when_candles_cover_window(tmp_path):
     repository = JsonFileRepository(tmp_path)
     now = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
     candle_start = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
@@ -354,10 +354,26 @@ def test_decision_blocker_research_plan_blocks_backtest_until_asof_replay_exists
 
     assert plan.next_task_id == "run_backtest"
     task = plan.task_by_id("run_backtest")
-    assert task.status == "blocked"
-    assert task.command_args is None
-    assert task.blocked_reason == "missing_backtest_asof_replay"
-    assert task.missing_inputs == ["backtest_asof_replay"]
+    assert task.status == "ready"
+    assert task.blocked_reason is None
+    assert task.missing_inputs == []
+    assert task.command_args == [
+        "python",
+        "run_forecast_loop.py",
+        "backtest",
+        "--storage-dir",
+        str(tmp_path),
+        "--symbol",
+        "BTC-USD",
+        "--start",
+        "2026-05-01T00:00:00+00:00",
+        "--end",
+        "2026-05-01T11:00:00+00:00",
+        "--created-at",
+        "2026-05-02T09:00:00+00:00",
+        "--as-of",
+        "2026-05-02T09:00:00+00:00",
+    ]
 
 
 def test_decision_blocker_research_plan_marks_backtest_complete_when_recent_result_exists(tmp_path):

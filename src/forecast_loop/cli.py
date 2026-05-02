@@ -403,6 +403,7 @@ def main(argv: list[str] | None = None) -> int:
     backtest_cmd.add_argument("--start", required=True)
     backtest_cmd.add_argument("--end", required=True)
     backtest_cmd.add_argument("--created-at")
+    backtest_cmd.add_argument("--as-of")
     backtest_cmd.add_argument("--initial-cash", type=float, default=10_000.0)
     backtest_cmd.add_argument("--fee-bps", type=float, default=5.0)
     backtest_cmd.add_argument("--slippage-bps", type=float, default=10.0)
@@ -1964,6 +1965,7 @@ def _research_report(args) -> int:
 
 def _backtest(args) -> int:
     created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
+    as_of = _parse_datetime(args.as_of) if args.as_of else None
     result = run_backtest(
         storage_dir=args.storage_dir,
         symbol=args.symbol,
@@ -1974,6 +1976,7 @@ def _backtest(args) -> int:
         fee_bps=args.fee_bps,
         slippage_bps=args.slippage_bps,
         moving_average_window=args.moving_average_window,
+        as_of=as_of,
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False))
     return 0

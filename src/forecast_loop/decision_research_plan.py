@@ -302,18 +302,33 @@ def _backtest_task(
             rationale="Backtest evidence needs at least 10 same-symbol candles imported by plan time.",
             missing_inputs=["market_candles"],
         )
-    _start, _end = window
-    return _window_blocked_task(
+    start, end = window
+    command = _base_command() + [
+        "backtest",
+        "--storage-dir",
+        str(storage),
+        "--symbol",
+        symbol,
+        "--start",
+        start.isoformat(),
+        "--end",
+        end.isoformat(),
+        "--created-at",
+        now.isoformat(),
+        "--as-of",
+        now.isoformat(),
+    ]
+    return DecisionBlockerResearchTask(
         task_id="run_backtest",
         title="Run blocker-focused backtest",
+        status="ready",
         required_artifact="backtest_result",
-        blocked_reason="missing_backtest_asof_replay",
+        artifact_id=None,
+        command_args=command,
         worker_prompt=_worker_prompt("backtest", blockers),
-        rationale=(
-            "Stored candles cover a backtest window, but the current backtest CLI cannot pin the "
-            "plan-time candle as-of set, so emitting a replay command would not be reproducible."
-        ),
-        missing_inputs=["backtest_asof_replay"],
+        blocked_reason=None,
+        missing_inputs=[],
+        rationale="Stored candles cover a conservative backtest window and the command pins the plan-time as-of set.",
     )
 
 

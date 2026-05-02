@@ -68,7 +68,7 @@ from forecast_loop.stock_data import (
     market_calendar_payload,
     run_stock_candle_health,
 )
-from forecast_loop.strategy_evolution import propose_strategy_revision
+from forecast_loop.strategy_evolution import propose_strategy_revision, refresh_replacement_strategy_hypothesis
 from forecast_loop.strategy_lineage import build_strategy_lineage_summary
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.strategy_research_digest import record_strategy_research_digest
@@ -516,6 +516,12 @@ def main(argv: list[str] | None = None) -> int:
     strategy_revision_cmd.add_argument("--revision-version")
     strategy_revision_cmd.add_argument("--created-at")
 
+    replacement_refresh_cmd = subparsers.add_parser("refresh-replacement-strategy-card")
+    replacement_refresh_cmd.add_argument("--storage-dir", required=True)
+    replacement_refresh_cmd.add_argument("--replacement-card-id", required=True)
+    replacement_refresh_cmd.add_argument("--author", default="codex-strategy-evolution")
+    replacement_refresh_cmd.add_argument("--created-at")
+
     revision_retest_cmd = subparsers.add_parser("create-revision-retest-scaffold")
     revision_retest_cmd.add_argument("--storage-dir", required=True)
     revision_retest_cmd.add_argument("--revision-card-id")
@@ -679,6 +685,8 @@ def main(argv: list[str] | None = None) -> int:
             return _record_research_autopilot_run(args)
         if args.command == "propose-strategy-revision":
             return _propose_strategy_revision(args)
+        if args.command == "refresh-replacement-strategy-card":
+            return _refresh_replacement_strategy_card(args)
         if args.command == "create-revision-retest-scaffold":
             return _create_revision_retest_scaffold(args)
         if args.command == "revision-retest-plan":
@@ -2116,6 +2124,25 @@ def _propose_strategy_revision(args) -> int:
             {
                 "revision_strategy_card": result.strategy_card.to_dict(),
                 "revision_research_agenda": result.research_agenda.to_dict(),
+            },
+            ensure_ascii=False,
+        )
+    )
+    return 0
+
+
+def _refresh_replacement_strategy_card(args) -> int:
+    created_at = _parse_datetime(args.created_at) if args.created_at else datetime.now(tz=UTC)
+    result = refresh_replacement_strategy_hypothesis(
+        repository=JsonFileRepository(args.storage_dir),
+        created_at=created_at,
+        replacement_card_id=args.replacement_card_id,
+        author=args.author,
+    )
+    print(
+        json.dumps(
+            {
+                "replacement_strategy_card": result.strategy_card.to_dict(),
             },
             ensure_ascii=False,
         )

@@ -31,6 +31,74 @@ def _seed_candles(repository: JsonFileRepository, closes: list[float]) -> None:
         repository.save_market_candle(_candle(index, close))
 
 
+def test_cli_backtest_asof_uses_plan_time_candles_and_ignores_later_revisions(tmp_path, capsys):
+    repository = JsonFileRepository(tmp_path)
+    plan_time = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    for index, close in enumerate([100, 102, 104]):
+        repository.save_market_candle(_candle(index, close))
+    later_revision = _candle(1, 999)
+    later_revision.candle_id = "market-candle:bt:late-revision"
+    later_revision.imported_at = plan_time + timedelta(hours=1)
+    repository.save_market_candle(later_revision)
+
+    exit_code = main(
+        [
+            "backtest",
+            "--storage-dir",
+            str(tmp_path),
+            "--symbol",
+            "BTC-USD",
+            "--start",
+            "2026-04-01T00:00:00+00:00",
+            "--end",
+            "2026-04-03T00:00:00+00:00",
+            "--created-at",
+            "2026-04-24T12:30:00+00:00",
+            "--as-of",
+            "2026-04-24T12:00:00+00:00",
+            "--moving-average-window",
+            "2",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["run"]["candle_ids"] == [
+        "market-candle:bt:0",
+        "market-candle:bt:1",
+        "market-candle:bt:2",
+    ]
+    assert payload["run"]["decision_basis"].endswith("; as_of=2026-04-24T12:00:00+00:00")
+    assert abs(payload["result"]["benchmark_return"] - 0.04) < 1e-12
+
+
+def test_cli_backtest_asof_rejects_window_after_asof(tmp_path, capsys):
+    repository = JsonFileRepository(tmp_path)
+    _seed_candles(repository, [100, 102, 104])
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "backtest",
+                "--storage-dir",
+                str(tmp_path),
+                "--symbol",
+                "BTC-USD",
+                "--start",
+                "2026-04-01T00:00:00+00:00",
+                "--end",
+                "2026-04-03T00:00:00+00:00",
+                "--as-of",
+                "2026-04-02T00:00:00+00:00",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 2
+    assert "backtest end must be <= as_of" in captured.err
+    assert "Traceback" not in captured.err
+
+
 def test_cli_backtest_writes_metrics_and_artifacts(tmp_path, capsys):
     repository = JsonFileRepository(tmp_path)
     _seed_candles(repository, [100, 102, 104, 101, 103, 106])

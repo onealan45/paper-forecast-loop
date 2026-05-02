@@ -994,8 +994,8 @@ V1 MVP should include:
   prioritized read-only task plan with command arguments for safe evidence
   builders such as event-edge evaluation and conservative walk-forward
   validation when same-symbol stored candles cover the minimum evidence window;
-  backtest blockers detect candle coverage but remain blocked until the backtest
-  CLI can replay the plan-time candle as-of set
+  backtest blockers emit `--as-of` commands so the backtest runtime can replay
+  the plan-time candle set without later-imported revisions
 - decision-blocker research task execution for the first supported task, so a
   ready event-edge evaluation plan can become evidence plus an automation-run
   audit trail while unsupported backtest and walk-forward execution remain

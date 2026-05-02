@@ -194,7 +194,7 @@ def test_execute_decision_blocker_research_next_task_rejects_blocked_walk_forwar
         )
 
 
-def test_execute_decision_blocker_research_next_task_rejects_blocked_backtest_without_asof_replay(tmp_path):
+def test_execute_decision_blocker_research_next_task_rejects_ready_but_unsupported_backtest(tmp_path):
     repository = JsonFileRepository(tmp_path)
     created_at = datetime(2026, 5, 2, 10, 0, tzinfo=UTC)
     repository.save_research_agenda(
@@ -206,10 +206,7 @@ def test_execute_decision_blocker_research_next_task_rejects_blocked_backtest_wi
     )
     _save_walk_forward_candles(repository, start=datetime(2026, 5, 1, 0, 0, tzinfo=UTC), count=12)
 
-    with pytest.raises(
-        ValueError,
-        match="decision_blocker_research_next_task_not_ready:run_backtest:missing_backtest_asof_replay",
-    ):
+    with pytest.raises(ValueError, match="unsupported_decision_blocker_research_task_execution:run_backtest"):
         execute_decision_blocker_research_next_task(
             repository=repository,
             storage_dir=tmp_path,

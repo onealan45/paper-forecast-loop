@@ -35,6 +35,7 @@ def run_backtest(
     fee_bps: float = 5.0,
     slippage_bps: float = 10.0,
     moving_average_window: int = 3,
+    as_of: datetime | None = None,
     id_context: str | None = None,
 ) -> BacktestEngineResult:
     _validate_inputs(
@@ -46,14 +47,11 @@ def run_backtest(
         fee_bps=fee_bps,
         slippage_bps=slippage_bps,
         moving_average_window=moving_average_window,
+        as_of=as_of,
     )
     storage_path = Path(storage_dir)
     repository = JsonFileRepository(storage_path)
-    candles = [
-        record
-        for record in repository.load_market_candles()
-        if record.symbol == symbol and start <= record.timestamp <= end
-    ]
+    candles = _select_candles(repository.load_market_candles(), symbol=symbol, start=start, end=end, as_of=as_of)
     candles.sort(key=lambda item: item.timestamp)
     if len(candles) < 2:
         raise ValueError(f"backtest requires at least 2 candles for {symbol}")
@@ -70,7 +68,7 @@ def run_backtest(
             slippage_bps=slippage_bps,
             moving_average_window=moving_average_window,
             candle_ids=[candle.candle_id for candle in candles],
-            id_context=id_context,
+            id_context=_combined_id_context(id_context=id_context, as_of=as_of),
         ),
         created_at=created_at,
         symbol=symbol,
@@ -85,6 +83,7 @@ def run_backtest(
         decision_basis=(
             "paper-only moving-average trend backtest using stored candles; "
             "target is 100% long when the prior candle close is above its prior moving average, otherwise cash"
+            + (f"; as_of={as_of.isoformat()}" if as_of else "")
             + (f"; id_context={id_context}" if id_context else "")
         ),
     )
@@ -218,6 +217,7 @@ def _validate_inputs(
     fee_bps: float,
     slippage_bps: float,
     moving_average_window: int,
+    as_of: datetime | None,
 ) -> None:
     storage_path = Path(storage_dir)
     if not storage_path.exists() or not storage_path.is_dir():
@@ -225,8 +225,12 @@ def _validate_inputs(
     for label, value in (("start", start), ("end", end), ("created_at", created_at)):
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError(f"{label} must be timezone-aware")
+    if as_of is not None and (as_of.tzinfo is None or as_of.utcoffset() is None):
+        raise ValueError("as_of must be timezone-aware")
     if start > end:
         raise ValueError("backtest start must be <= end")
+    if as_of is not None and end > as_of:
+        raise ValueError("backtest end must be <= as_of")
     if initial_cash <= 0:
         raise ValueError("initial_cash must be positive")
     if fee_bps < 0:
@@ -235,6 +239,41 @@ def _validate_inputs(
         raise ValueError("slippage_bps must be non-negative")
     if moving_average_window <= 0:
         raise ValueError("moving_average_window must be positive")
+
+
+def _select_candles(
+    candles: list[MarketCandleRecord],
+    *,
+    symbol: str,
+    start: datetime,
+    end: datetime,
+    as_of: datetime | None,
+) -> list[MarketCandleRecord]:
+    if as_of is None:
+        return [record for record in candles if record.symbol == symbol and start <= record.timestamp <= end]
+    by_time: dict[datetime, MarketCandleRecord] = {}
+    for record in candles:
+        if record.symbol != symbol or not (start <= record.timestamp <= end):
+            continue
+        if record.imported_at > as_of:
+            continue
+        existing = by_time.get(record.timestamp)
+        if existing is None or (record.imported_at, record.source, record.candle_id) > (
+            existing.imported_at,
+            existing.source,
+            existing.candle_id,
+        ):
+            by_time[record.timestamp] = record
+    return [by_time[timestamp] for timestamp in sorted(by_time)]
+
+
+def _combined_id_context(*, id_context: str | None, as_of: datetime | None) -> str | None:
+    parts = []
+    if id_context:
+        parts.append(id_context)
+    if as_of:
+        parts.append(f"as_of={as_of.isoformat()}")
+    return ";".join(parts) or None
 
 
 def _validate_strictly_increasing_timestamps(candles: list[MarketCandleRecord]) -> None:

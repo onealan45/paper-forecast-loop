@@ -370,6 +370,94 @@ def test_strategy_research_digest_prefers_newer_retest_leaderboard_over_stale_au
     ]
 
 
+def test_strategy_research_digest_compacts_long_rule_summary_text(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 8, 0, tzinfo=UTC)
+    repository.save_strategy_card(
+        StrategyCard(
+            card_id="strategy-card:long-summary",
+            created_at=now,
+            strategy_name="BTC long summary strategy",
+            strategy_family="breakout_reversal",
+            version="v1",
+            status="DRAFT",
+            symbols=["BTC-USD"],
+            hypothesis=(
+                "First concise research hypothesis should own the digest summary. "
+                "Do not force the digest panel to display every failure key such as "
+                "leaderboard_entry_not_rankable, baseline_edge_not_positive, "
+                "walk_forward_excess_not_positive, locked_evaluation_not_rankable, "
+                "and turnover_limit_exceeded."
+            ),
+            signal_description="Use independent confirmation instead of repeating the failed trigger.",
+            entry_rules=["Enter only after independent confirmation and positive baseline edge."],
+            exit_rules=["Exit when baseline edge turns negative."],
+            risk_rules=["Keep max exposure capped while the replacement stays in DRAFT."],
+            parameters={},
+            data_requirements=["market_candles:BTC-USD:1h"],
+            feature_snapshot_ids=[],
+            backtest_result_ids=[],
+            walk_forward_validation_ids=[],
+            event_edge_evaluation_ids=[],
+            parent_card_id=None,
+            author="codex",
+            decision_basis="test",
+        )
+    )
+
+    digest = record_strategy_research_digest(
+        repository=repository,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=1),
+    )
+
+    assert digest.strategy_rule_summary[0] == (
+        "假說: First concise research hypothesis should own the digest summary."
+    )
+    assert "leaderboard_entry_not_rankable" not in digest.strategy_rule_summary[0]
+    assert all(len(item) <= 180 for item in digest.strategy_rule_summary)
+
+
+def test_strategy_research_digest_truncates_long_rule_text_without_sentence_boundary(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
+    repository.save_strategy_card(
+        StrategyCard(
+            card_id="strategy-card:no-boundary-summary",
+            created_at=now,
+            strategy_name="BTC no boundary summary strategy",
+            strategy_family="breakout_reversal",
+            version="v1",
+            status="DRAFT",
+            symbols=["BTC-USD"],
+            hypothesis="NoBoundaryHypothesis" * 20,
+            signal_description="Use compact deterministic fallback truncation.",
+            entry_rules=["Enter only after deterministic fallback stays readable."],
+            exit_rules=["Exit when deterministic fallback fails readability."],
+            risk_rules=["Keep the rule summary bounded."],
+            parameters={},
+            data_requirements=["market_candles:BTC-USD:1h"],
+            feature_snapshot_ids=[],
+            backtest_result_ids=[],
+            walk_forward_validation_ids=[],
+            event_edge_evaluation_ids=[],
+            parent_card_id=None,
+            author="codex",
+            decision_basis="test",
+        )
+    )
+
+    digest = record_strategy_research_digest(
+        repository=repository,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=1),
+    )
+
+    assert digest.strategy_rule_summary[0].startswith("假說: NoBoundaryHypothesis")
+    assert digest.strategy_rule_summary[0].endswith("...")
+    assert len(digest.strategy_rule_summary[0]) <= 180
+
+
 def test_strategy_research_digest_cli_writes_digest_artifact(tmp_path, capsys):
     repository = JsonFileRepository(tmp_path)
     now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)

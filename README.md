@@ -435,6 +435,9 @@ factory:
 - PR131 localizes the strategy research digest panel labels in the dashboard
   and operator console, so the current strategy handoff reads as a Traditional
   Chinese operator surface instead of mixed English metadata.
+- PR132 compacts overly long digest rule-summary text by keeping short rules
+  unchanged, preferring the first sentence for long hypotheses, and truncating
+  only when no sentence boundary is available.
 - Later M7+ should improve strategy generation, data-source breadth, canonical
   market data, validation depth, leaderboard governance, deeper autopilot
   learning, and self-evolving research skills.

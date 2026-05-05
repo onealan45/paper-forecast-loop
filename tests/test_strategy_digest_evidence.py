@@ -198,6 +198,34 @@ def test_resolve_strategy_digest_evidence_falls_back_to_latest_same_symbol_as_of
     assert evidence.walk_forward.validation_id == "walk-forward:latest"
 
 
+def test_resolve_strategy_digest_evidence_does_not_fallback_when_digest_ids_are_unresolved() -> None:
+    now = datetime(2026, 5, 2, 10, 0, tzinfo=UTC)
+
+    evidence = resolve_strategy_digest_evidence(
+        digest=_digest(
+            now,
+            evidence_ids=[
+                "event-edge:missing",
+                "backtest-result:missing",
+                "walk-forward:missing",
+            ],
+        ),
+        event_edges=[
+            _event_edge(now - timedelta(minutes=1), evaluation_id="event-edge:latest"),
+        ],
+        backtests=[
+            _backtest(now - timedelta(minutes=1), result_id="backtest-result:latest"),
+        ],
+        walk_forwards=[
+            _walk_forward(now - timedelta(minutes=1), validation_id="walk-forward:latest"),
+        ],
+    )
+
+    assert evidence.event_edge is None
+    assert evidence.backtest is None
+    assert evidence.walk_forward is None
+
+
 def test_resolve_strategy_digest_evidence_fallback_prefers_decision_blocker_backtest() -> None:
     now = datetime(2026, 5, 6, 8, 0, tzinfo=UTC)
     standalone = _backtest(now - timedelta(minutes=5), result_id="backtest-result:blocker")

@@ -1227,6 +1227,155 @@ def test_research_page_uses_autopilot_linked_chain_instead_of_latest_symbol_arti
     assert "distractor_shadow" not in html
 
 
+def test_operator_console_current_strategy_prefers_latest_digest_card(tmp_path):
+    now = datetime(2026, 5, 6, 9, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_visible_strategy_research(repository, now)
+    digest_card = StrategyCard(
+        card_id="strategy-card:digest-current",
+        created_at=now + timedelta(minutes=10),
+        strategy_name="Digest current replacement",
+        strategy_family="replacement",
+        version="v1",
+        status="DRAFT",
+        symbols=["BTC-USD"],
+        hypothesis="The latest strategy digest should own the current strategy slot.",
+        signal_description="Digest-selected replacement signal.",
+        entry_rules=["digest entry"],
+        exit_rules=["digest exit"],
+        risk_rules=["digest risk"],
+        parameters={
+            "replacement_source_outcome_id": "paper-shadow-outcome:visible",
+            "replacement_source_lineage_root_card_id": "strategy-card:visible",
+        },
+        data_requirements=[],
+        feature_snapshot_ids=[],
+        backtest_result_ids=[],
+        walk_forward_validation_ids=[],
+        event_edge_evaluation_ids=[],
+        parent_card_id=None,
+        author="codex",
+        decision_basis="lineage_replacement_strategy_hypothesis",
+    )
+    repository.save_strategy_card(digest_card)
+    repository.save_strategy_research_digest(
+        StrategyResearchDigest(
+            digest_id="strategy-research-digest:digest-current",
+            created_at=now + timedelta(minutes=11),
+            symbol="BTC-USD",
+            strategy_card_id=digest_card.card_id,
+            strategy_name=digest_card.strategy_name,
+            strategy_status=digest_card.status,
+            hypothesis=digest_card.hypothesis,
+            paper_shadow_outcome_id=None,
+            outcome_grade=None,
+            excess_return_after_costs=None,
+            recommended_strategy_action="WAIT_FOR_PAPER_SHADOW_OUTCOME",
+            top_failure_attributions=[],
+            lineage_root_card_id="strategy-card:visible",
+            lineage_revision_count=0,
+            lineage_outcome_count=1,
+            lineage_primary_failure_attribution=None,
+            lineage_next_research_focus="Wait for the digest-selected replacement shadow window.",
+            next_research_action="WAIT_FOR_PAPER_SHADOW_OUTCOME",
+            autopilot_run_id=None,
+            evidence_artifact_ids=[digest_card.card_id],
+            research_summary="Latest digest selected a new replacement strategy.",
+            next_step_rationale="Wait for the digest-selected replacement to mature.",
+            decision_basis="test",
+        )
+    )
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    html = render_operator_console_page(snapshot, page="research")
+    next_action_section = html.split("<h3>下一步研究動作</h3>", 1)[1].split("</article>", 1)[0]
+
+    assert snapshot.latest_strategy_card is not None
+    assert snapshot.latest_strategy_card.card_id == digest_card.card_id
+    assert "Digest current replacement" in html
+    assert "The latest strategy digest should own the current strategy slot." in html
+    assert "等待 paper-shadow 視窗 (WAIT_FOR_PAPER_SHADOW_OUTCOME)" in next_action_section
+    assert "strategy-research-digest:digest-current" in next_action_section
+    assert "修訂策略 (REVISE_STRATEGY)" not in next_action_section
+
+
+def test_operator_console_hides_stale_revision_candidate_when_digest_replacement_is_current(tmp_path):
+    now = datetime(2026, 5, 6, 9, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    _seed_visible_strategy_research(repository, now)
+    _seed_visible_revision_candidate(repository, now + timedelta(minutes=5))
+    digest_card = StrategyCard(
+        card_id="strategy-card:digest-replacement",
+        created_at=now + timedelta(minutes=10),
+        strategy_name="Digest replacement owns current action",
+        strategy_family="replacement",
+        version="v1",
+        status="DRAFT",
+        symbols=["BTC-USD"],
+        hypothesis="A newer digest-selected replacement should suppress stale revision task panels.",
+        signal_description="Digest replacement signal.",
+        entry_rules=["digest replacement entry"],
+        exit_rules=["digest replacement exit"],
+        risk_rules=["digest replacement risk"],
+        parameters={
+            "replacement_source_outcome_id": "paper-shadow-outcome:visible",
+            "replacement_source_lineage_root_card_id": "strategy-card:visible",
+        },
+        data_requirements=[],
+        feature_snapshot_ids=[],
+        backtest_result_ids=[],
+        walk_forward_validation_ids=[],
+        event_edge_evaluation_ids=[],
+        parent_card_id=None,
+        author="codex",
+        decision_basis="lineage_replacement_strategy_hypothesis",
+    )
+    repository.save_strategy_card(digest_card)
+    repository.save_strategy_research_digest(
+        StrategyResearchDigest(
+            digest_id="strategy-research-digest:digest-replacement",
+            created_at=now + timedelta(minutes=11),
+            symbol="BTC-USD",
+            strategy_card_id=digest_card.card_id,
+            strategy_name=digest_card.strategy_name,
+            strategy_status=digest_card.status,
+            hypothesis=digest_card.hypothesis,
+            paper_shadow_outcome_id=None,
+            outcome_grade=None,
+            excess_return_after_costs=None,
+            recommended_strategy_action="WAIT_FOR_PAPER_SHADOW_OUTCOME",
+            top_failure_attributions=[],
+            lineage_root_card_id="strategy-card:visible",
+            lineage_revision_count=1,
+            lineage_outcome_count=1,
+            lineage_primary_failure_attribution="negative_excess_return",
+            lineage_next_research_focus="Wait for the replacement shadow window.",
+            next_research_action="WAIT_FOR_PAPER_SHADOW_OUTCOME",
+            autopilot_run_id=None,
+            evidence_artifact_ids=[digest_card.card_id],
+            research_summary="Latest digest selected a replacement after the old revision candidate.",
+            next_step_rationale="Do not show old revision retest as the active next task.",
+            decision_basis="test",
+        )
+    )
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+    html = render_operator_console_page(snapshot, page="research")
+    overview_html = render_operator_console_page(snapshot, page="overview")
+
+    assert snapshot.latest_strategy_revision_card is None
+    assert "策略修正候選" not in html
+    assert (
+        "<p>下一步：等待 paper-shadow 視窗 (WAIT_FOR_PAPER_SHADOW_OUTCOME) "
+        "/ Run <code>strategy-research-digest:digest-replacement</code></p>"
+        in overview_html
+    )
+    assert (
+        "<p>下一步：修訂策略 (REVISE_STRATEGY) / Run <code>research-autopilot-run:visible</code></p>"
+        not in overview_html
+    )
+
+
 def test_operator_console_shows_strategy_revision_candidate(tmp_path):
     now = datetime(2026, 4, 29, 9, 0, tzinfo=UTC)
     repository = JsonFileRepository(tmp_path)
@@ -1473,6 +1622,111 @@ def test_operator_console_lineage_replacement_retest_panel_shows_shadow_readines
     assert "第一個 K 線對齊開始" in html
     assert "下一個需要的結束 K 線" in html
     assert "候選視窗尚未完整" in html
+
+
+def test_operator_console_prefers_new_replacement_for_latest_failed_replacement_outcome():
+    from forecast_loop.lineage_research_plan import LineageResearchTaskPlan
+    from forecast_loop.operator_console import _latest_lineage_replacement_strategy_card
+
+    now = datetime(2026, 5, 6, 9, 0, tzinfo=UTC)
+    root_card_id = "strategy-card:root"
+    failed_replacement = StrategyCard(
+        card_id="strategy-card:failed-replacement",
+        created_at=now,
+        strategy_name="Failed replacement",
+        strategy_family="replacement",
+        version="v1",
+        status="DRAFT",
+        symbols=["BTC-USD"],
+        hypothesis="This replacement already failed its latest shadow outcome.",
+        signal_description="Old replacement signal.",
+        entry_rules=["old entry"],
+        exit_rules=["old exit"],
+        risk_rules=["old risk"],
+        parameters={
+            "replacement_source_outcome_id": "paper-shadow-outcome:source",
+            "replacement_source_lineage_root_card_id": root_card_id,
+            "replacement_failure_attributions": ["drawdown_breach"],
+        },
+        data_requirements=[],
+        feature_snapshot_ids=[],
+        backtest_result_ids=[],
+        walk_forward_validation_ids=[],
+        event_edge_evaluation_ids=[],
+        parent_card_id=None,
+        author="codex",
+        decision_basis="lineage_replacement_strategy_hypothesis",
+    )
+    failed_outcome = PaperShadowOutcome(
+        outcome_id="paper-shadow-outcome:failed-replacement",
+        created_at=now + timedelta(minutes=5),
+        leaderboard_entry_id="leaderboard-entry:failed-replacement",
+        evaluation_id="locked-evaluation:failed-replacement",
+        strategy_card_id=failed_replacement.card_id,
+        trial_id="experiment-trial:failed-replacement",
+        symbol="BTC-USD",
+        window_start=now - timedelta(hours=24),
+        window_end=now,
+        observed_return=-0.03,
+        benchmark_return=0.01,
+        excess_return_after_costs=-0.05,
+        max_adverse_excursion=0.08,
+        turnover=1.6,
+        outcome_grade="FAIL",
+        failure_attributions=["drawdown_breach"],
+        recommended_promotion_stage="PAPER_SHADOW_FAILED",
+        recommended_strategy_action="QUARANTINE_STRATEGY",
+        blocked_reasons=["paper_shadow_failed"],
+        notes=["Failed replacement outcome should trigger a new replacement candidate."],
+        decision_basis="test",
+    )
+    next_replacement = StrategyCard(
+        card_id="strategy-card:next-replacement",
+        created_at=now + timedelta(minutes=10),
+        strategy_name="Next replacement",
+        strategy_family="replacement",
+        version="v2",
+        status="DRAFT",
+        symbols=["BTC-USD"],
+        hypothesis="This is the replacement generated from the latest failed replacement outcome.",
+        signal_description="New replacement signal.",
+        entry_rules=["new entry"],
+        exit_rules=["new exit"],
+        risk_rules=["new risk"],
+        parameters={
+            "replacement_source_outcome_id": failed_outcome.outcome_id,
+            "replacement_source_lineage_root_card_id": root_card_id,
+            "replacement_failure_attributions": ["drawdown_breach"],
+        },
+        data_requirements=[],
+        feature_snapshot_ids=[],
+        backtest_result_ids=[],
+        walk_forward_validation_ids=[],
+        event_edge_evaluation_ids=[],
+        parent_card_id=None,
+        author="codex",
+        decision_basis="lineage_replacement_strategy_hypothesis",
+    )
+    task_plan = LineageResearchTaskPlan(
+        symbol="BTC-USD",
+        agenda_id="research-agenda:lineage",
+        root_card_id=root_card_id,
+        latest_outcome_id=failed_outcome.outcome_id,
+        performance_verdict="惡化",
+        latest_recommended_strategy_action="QUARANTINE_STRATEGY",
+        next_research_focus="Replace the failed replacement.",
+        next_task_id=None,
+        tasks=[],
+    )
+
+    selected = _latest_lineage_replacement_strategy_card(
+        [failed_replacement, next_replacement],
+        [failed_outcome],
+        task_plan,
+    )
+
+    assert selected is not None
+    assert selected.card_id == next_replacement.card_id
 
 
 def test_operator_console_shows_revision_retest_task_run_log(tmp_path):

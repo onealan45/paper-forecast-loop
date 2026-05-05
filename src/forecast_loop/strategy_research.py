@@ -208,8 +208,23 @@ def resolve_latest_strategy_research_chain(
     if kind == "agenda":
         agenda = anchor
         assert isinstance(agenda, ResearchAgenda)
-        card = _latest([card_by_id[item] for item in agenda.strategy_card_ids if item in card_by_id])
-        return StrategyResearchChain(card, None, None, None, None, agenda, None, revision_candidate)
+        chain = _chain_from_agenda_anchor(
+            symbol=symbol,
+            agenda=agenda,
+            card_by_id=card_by_id,
+            trial_by_id=trial_by_id,
+            evaluation_by_id=evaluation_by_id,
+            entry_by_id=entry_by_id,
+            outcome_by_id=outcome_by_id,
+            trials=trials,
+            evaluations=evaluations,
+            entries=entries,
+            outcomes=outcomes,
+            agenda_by_id=agenda_by_id,
+            agendas=agendas,
+        )
+        chain.revision_candidate = revision_candidate
+        return chain
 
     card = anchor
     assert isinstance(card, StrategyCard)
@@ -269,6 +284,161 @@ def _chain_from_ids(
     if agenda is None:
         agenda = _latest_agenda_for_card(agendas, strategy_card_id)
     return StrategyResearchChain(card, trial, evaluation, entry, outcome, agenda, research_autopilot_run, None)
+
+
+def _chain_from_agenda_anchor(
+    *,
+    symbol: str,
+    agenda: ResearchAgenda,
+    card_by_id: dict[str, StrategyCard],
+    trial_by_id: dict[str, ExperimentTrial],
+    evaluation_by_id: dict[str, LockedEvaluationResult],
+    entry_by_id: dict[str, LeaderboardEntry],
+    outcome_by_id: dict[str, PaperShadowOutcome],
+    trials: list[ExperimentTrial],
+    evaluations: list[LockedEvaluationResult],
+    entries: list[LeaderboardEntry],
+    outcomes: list[PaperShadowOutcome],
+    agenda_by_id: dict[str, ResearchAgenda],
+    agendas: list[ResearchAgenda],
+) -> StrategyResearchChain:
+    card = _latest([card_by_id[item] for item in agenda.strategy_card_ids if item in card_by_id])
+    if card is None:
+        return StrategyResearchChain(None, None, None, None, None, agenda, None, None)
+    evidence_anchor = _latest_card_evidence_anchor(
+        symbol=symbol,
+        card_id=card.card_id,
+        trials=trials,
+        evaluations=evaluations,
+        entries=entries,
+        outcomes=outcomes,
+    )
+    if evidence_anchor is None:
+        return StrategyResearchChain(card, None, None, None, None, agenda, None, None)
+
+    kind, anchor = evidence_anchor
+    if kind == "outcome":
+        outcome = anchor
+        assert isinstance(outcome, PaperShadowOutcome)
+        return _chain_from_ids(
+            symbol=symbol,
+            strategy_card_id=outcome.strategy_card_id,
+            experiment_trial_id=outcome.trial_id,
+            locked_evaluation_id=outcome.evaluation_id,
+            leaderboard_entry_id=outcome.leaderboard_entry_id,
+            paper_shadow_outcome_id=outcome.outcome_id,
+            agenda_id=agenda.agenda_id,
+            research_autopilot_run=None,
+            card_by_id=card_by_id,
+            trial_by_id=trial_by_id,
+            evaluation_by_id=evaluation_by_id,
+            entry_by_id=entry_by_id,
+            outcome_by_id=outcome_by_id,
+            agenda_by_id=agenda_by_id,
+            agendas=agendas,
+        )
+    if kind == "entry":
+        entry = anchor
+        assert isinstance(entry, LeaderboardEntry)
+        return _chain_from_ids(
+            symbol=symbol,
+            strategy_card_id=entry.strategy_card_id,
+            experiment_trial_id=entry.trial_id,
+            locked_evaluation_id=entry.evaluation_id,
+            leaderboard_entry_id=entry.entry_id,
+            paper_shadow_outcome_id=None,
+            agenda_id=agenda.agenda_id,
+            research_autopilot_run=None,
+            card_by_id=card_by_id,
+            trial_by_id=trial_by_id,
+            evaluation_by_id=evaluation_by_id,
+            entry_by_id=entry_by_id,
+            outcome_by_id=outcome_by_id,
+            agenda_by_id=agenda_by_id,
+            agendas=agendas,
+        )
+    if kind == "evaluation":
+        evaluation = anchor
+        assert isinstance(evaluation, LockedEvaluationResult)
+        return _chain_from_ids(
+            symbol=symbol,
+            strategy_card_id=evaluation.strategy_card_id,
+            experiment_trial_id=evaluation.trial_id,
+            locked_evaluation_id=evaluation.evaluation_id,
+            leaderboard_entry_id=None,
+            paper_shadow_outcome_id=None,
+            agenda_id=agenda.agenda_id,
+            research_autopilot_run=None,
+            card_by_id=card_by_id,
+            trial_by_id=trial_by_id,
+            evaluation_by_id=evaluation_by_id,
+            entry_by_id=entry_by_id,
+            outcome_by_id=outcome_by_id,
+            agenda_by_id=agenda_by_id,
+            agendas=agendas,
+        )
+
+    trial = anchor
+    assert isinstance(trial, ExperimentTrial)
+    return _chain_from_ids(
+        symbol=symbol,
+        strategy_card_id=trial.strategy_card_id,
+        experiment_trial_id=trial.trial_id,
+        locked_evaluation_id=None,
+        leaderboard_entry_id=None,
+        paper_shadow_outcome_id=None,
+        agenda_id=agenda.agenda_id,
+        research_autopilot_run=None,
+        card_by_id=card_by_id,
+        trial_by_id=trial_by_id,
+        evaluation_by_id=evaluation_by_id,
+        entry_by_id=entry_by_id,
+        outcome_by_id=outcome_by_id,
+        agenda_by_id=agenda_by_id,
+        agendas=agendas,
+    )
+
+
+def _latest_card_evidence_anchor(
+    *,
+    symbol: str,
+    card_id: str,
+    trials: list[ExperimentTrial],
+    evaluations: list[LockedEvaluationResult],
+    entries: list[LeaderboardEntry],
+    outcomes: list[PaperShadowOutcome],
+) -> tuple[str, object] | None:
+    priority_by_kind = {
+        "trial": 2,
+        "evaluation": 3,
+        "entry": 4,
+        "outcome": 5,
+    }
+    anchors: list[tuple[datetime, int, str, object]] = []
+    anchors.extend(
+        (item.created_at, priority_by_kind["trial"], "trial", item)
+        for item in trials
+        if item.strategy_card_id == card_id and item.symbol == symbol
+    )
+    anchors.extend(
+        (item.created_at, priority_by_kind["evaluation"], "evaluation", item)
+        for item in evaluations
+        if item.strategy_card_id == card_id
+    )
+    anchors.extend(
+        (item.created_at, priority_by_kind["entry"], "entry", item)
+        for item in entries
+        if item.strategy_card_id == card_id and item.symbol == symbol
+    )
+    anchors.extend(
+        (item.created_at, priority_by_kind["outcome"], "outcome", item)
+        for item in outcomes
+        if item.strategy_card_id == card_id and item.symbol == symbol
+    )
+    if not anchors:
+        return None
+    _, _, kind, item = max(anchors, key=lambda value: (value[0], value[1]))
+    return kind, item
 
 
 def _latest_revision_candidate(

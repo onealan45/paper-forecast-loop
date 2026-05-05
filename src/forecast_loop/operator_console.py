@@ -48,6 +48,7 @@ from forecast_loop.research_ux_selectors import (
     strategy_card_by_id as _strategy_card_by_id,
 )
 from forecast_loop.lineage_research_run_log import automation_run_matches_lineage_research_plan
+from forecast_loop.research_artifact_selection import latest_backtest_for_research
 from forecast_loop.revision_retest_plan import RevisionRetestTaskPlan, build_revision_retest_task_plan
 from forecast_loop.revision_retest_run_log import automation_run_matches_revision_retest_plan
 from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
@@ -147,6 +148,7 @@ def build_operator_console_snapshot(
     portfolios = _safe_load(repository.load_portfolio_snapshots)
     risks = [item for item in _safe_load(repository.load_risk_snapshots) if item.symbol == symbol]
     baselines = [item for item in _safe_load(repository.load_baseline_evaluations) if item.symbol == symbol]
+    backtest_runs = [item for item in _safe_load(repository.load_backtest_runs) if item.symbol == symbol]
     backtests = [item for item in _safe_load(repository.load_backtest_results) if item.symbol == symbol]
     walk_forwards = [item for item in _safe_load(repository.load_walk_forward_validations) if item.symbol == symbol]
     event_edges = [item for item in _safe_load(repository.load_event_edge_evaluations) if item.symbol == symbol]
@@ -265,7 +267,11 @@ def build_operator_console_snapshot(
         latest_portfolio=_latest(portfolios),
         latest_risk=_latest(risks),
         latest_baseline=_latest(baselines),
-        latest_backtest=_latest(backtests),
+        latest_backtest=latest_backtest_for_research(
+            backtests=backtests,
+            backtest_runs=backtest_runs,
+            symbol=symbol,
+        ),
         latest_walk_forward=_latest(walk_forwards),
         latest_strategy_card=research_chain.strategy_card,
         latest_experiment_trial=research_chain.experiment_trial,

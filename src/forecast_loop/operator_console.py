@@ -61,7 +61,7 @@ from forecast_loop.strategy_research_display import (
     format_research_action,
     format_strategy_card_status,
 )
-from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
+from forecast_loop.strategy_research import StrategyRevisionCandidate, resolve_latest_strategy_research_chain
 from forecast_loop.strategy_digest_evidence import StrategyDigestEvidence, resolve_strategy_digest_evidence
 from forecast_loop.storage import JsonFileRepository
 
@@ -121,6 +121,14 @@ class OperatorConsoleSnapshot:
     counts: dict[str, int]
 
 
+@dataclass(frozen=True, slots=True)
+class _CurrentResearchAction:
+    action: str | None
+    source_id: str | None
+    status: str
+    blocked_reasons: list[str]
+
+
 def build_operator_console_snapshot(
     storage_dir: Path | str,
     *,
@@ -170,6 +178,11 @@ def build_operator_console_snapshot(
     strategy_research_digests = [
         item for item in _safe_load(repository.load_strategy_research_digests) if item.symbol == symbol
     ]
+    latest_digest = _latest(strategy_research_digests)
+    latest_digest_card = _strategy_card_by_id(
+        strategy_cards,
+        latest_digest.strategy_card_id if latest_digest else None,
+    )
     research_chain = resolve_latest_strategy_research_chain(
         symbol=symbol,
         strategy_cards=strategy_cards,
@@ -181,12 +194,17 @@ def build_operator_console_snapshot(
         research_agendas=research_agendas,
         research_autopilot_runs=research_autopilot_runs,
     )
+    current_strategy_card = latest_digest_card or research_chain.strategy_card
     repair_requests = _safe_load(repository.load_repair_requests)
     control_events = _safe_load(repository.load_control_events)
     control_state = current_control_state(control_events, symbol=symbol)
     automation_runs = [item for item in _safe_load(repository.load_automation_runs) if item.symbol == symbol]
     notifications = [item for item in _safe_load(repository.load_notification_artifacts) if item.symbol == symbol]
-    revision_card = research_chain.revision_candidate.strategy_card if research_chain.revision_candidate else None
+    active_revision_candidate = _active_strategy_revision_candidate(
+        research_chain.revision_candidate,
+        current_strategy_card,
+    )
+    revision_card = active_revision_candidate.strategy_card if active_revision_candidate else None
     revision_task_plan = _safe_revision_retest_task_plan(
         repository=repository,
         storage_dir=storage_path,
@@ -255,8 +273,6 @@ def build_operator_console_snapshot(
         revision_card=lineage_replacement_card,
     )
 
-    latest_digest = _latest(strategy_research_digests)
-
     return OperatorConsoleSnapshot(
         storage_dir=storage_path,
         generated_at=generated_at,
@@ -273,7 +289,7 @@ def build_operator_console_snapshot(
             symbol=symbol,
         ),
         latest_walk_forward=_latest(walk_forwards),
-        latest_strategy_card=research_chain.strategy_card,
+        latest_strategy_card=current_strategy_card,
         latest_experiment_trial=research_chain.experiment_trial,
         latest_locked_evaluation=research_chain.locked_evaluation,
         latest_leaderboard_entry=research_chain.leaderboard_entry,
@@ -281,10 +297,7 @@ def build_operator_console_snapshot(
         latest_research_agenda=research_chain.research_agenda,
         latest_research_autopilot_run=research_chain.research_autopilot_run,
         latest_strategy_research_digest=latest_digest,
-        latest_strategy_research_digest_card=_strategy_card_by_id(
-            strategy_cards,
-            latest_digest.strategy_card_id if latest_digest else None,
-        ),
+        latest_strategy_research_digest_card=latest_digest_card,
         latest_strategy_research_digest_evidence=resolve_strategy_digest_evidence(
             digest=latest_digest,
             event_edges=event_edges,
@@ -314,20 +327,20 @@ def build_operator_console_snapshot(
         ),
         latest_strategy_revision_card=revision_card,
         latest_strategy_revision_agenda=(
-            research_chain.revision_candidate.research_agenda if research_chain.revision_candidate else None
+            active_revision_candidate.research_agenda if active_revision_candidate else None
         ),
         latest_strategy_revision_source_outcome=(
-            research_chain.revision_candidate.source_outcome if research_chain.revision_candidate else None
+            active_revision_candidate.source_outcome if active_revision_candidate else None
         ),
         latest_strategy_revision_retest_trial=(
-            research_chain.revision_candidate.retest_trial if research_chain.revision_candidate else None
+            active_revision_candidate.retest_trial if active_revision_candidate else None
         ),
         latest_strategy_revision_split_manifest=(
-            research_chain.revision_candidate.retest_split_manifest if research_chain.revision_candidate else None
+            active_revision_candidate.retest_split_manifest if active_revision_candidate else None
         ),
         latest_strategy_revision_next_required_artifacts=(
-            research_chain.revision_candidate.retest_next_required_artifacts
-            if research_chain.revision_candidate
+            active_revision_candidate.retest_next_required_artifacts
+            if active_revision_candidate
             else []
         ),
         latest_strategy_revision_retest_task_plan=revision_task_plan,
@@ -383,6 +396,46 @@ def _safe_revision_retest_task_plan(
         )
     except ValueError:
         return None
+
+
+def _active_strategy_revision_candidate(
+    candidate: StrategyRevisionCandidate | None,
+    current_strategy_card: StrategyCard | None,
+) -> StrategyRevisionCandidate | None:
+    if candidate is None or current_strategy_card is None:
+        return candidate
+    if candidate.strategy_card.card_id == current_strategy_card.card_id:
+        return candidate
+    if current_strategy_card.created_at > candidate.strategy_card.created_at:
+        return None
+    return candidate
+
+
+def _current_research_action(snapshot: OperatorConsoleSnapshot) -> _CurrentResearchAction:
+    digest = snapshot.latest_strategy_research_digest
+    digest_card = snapshot.latest_strategy_research_digest_card
+    current_card = snapshot.latest_strategy_card
+    if (
+        digest is not None
+        and digest_card is not None
+        and current_card is not None
+        and digest_card.card_id == current_card.card_id
+    ):
+        return _CurrentResearchAction(
+            action=digest.next_research_action,
+            source_id=digest.digest_id,
+            status="strategy_digest",
+            blocked_reasons=list(digest.decision_research_blockers or digest.top_failure_attributions),
+        )
+    autopilot = snapshot.latest_research_autopilot_run
+    if autopilot is None:
+        return _CurrentResearchAction(None, None, "n/a", [])
+    return _CurrentResearchAction(
+        action=autopilot.next_research_action,
+        source_id=autopilot.run_id,
+        status=autopilot.loop_status,
+        blocked_reasons=list(autopilot.blocked_reasons),
+    )
 
 
 def _safe_lineage_research_task_plan(
@@ -452,6 +505,15 @@ def _latest_lineage_replacement_strategy_card(
         (outcome for outcome in paper_shadow_outcomes if outcome.outcome_id == task_plan.latest_outcome_id),
         None,
     )
+    matches = [
+        card
+        for card in cards
+        if card.decision_basis == REPLACEMENT_DECISION_BASIS
+        and card.parameters.get("replacement_source_outcome_id") == task_plan.latest_outcome_id
+        and card.parameters.get("replacement_source_lineage_root_card_id") == task_plan.root_card_id
+    ]
+    if matches:
+        return max(matches, key=lambda card: card.created_at)
     if latest_outcome is not None:
         outcome_card = cards_by_id.get(latest_outcome.strategy_card_id)
         if (
@@ -460,14 +522,7 @@ def _latest_lineage_replacement_strategy_card(
             and outcome_card.parameters.get("replacement_source_lineage_root_card_id") == task_plan.root_card_id
         ):
             return outcome_card
-    matches = [
-        card
-        for card in cards
-        if card.decision_basis == REPLACEMENT_DECISION_BASIS
-        and card.parameters.get("replacement_source_outcome_id") == task_plan.latest_outcome_id
-        and card.parameters.get("replacement_source_lineage_root_card_id") == task_plan.root_card_id
-    ]
-    return max(matches, key=lambda card: card.created_at) if matches else None
+    return None
 
 
 def _latest_revision_retest_task_run(
@@ -1025,6 +1080,7 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
     agenda = snapshot.latest_research_agenda
     autopilot = snapshot.latest_research_autopilot_run
     lineage = snapshot.latest_strategy_lineage_summary
+    current_action = _current_research_action(snapshot)
     cross_sample_panel = _lineage_cross_sample_agenda_panel(
         snapshot.latest_lineage_cross_sample_agenda,
         snapshot.latest_lineage_cross_sample_autopilot_run,
@@ -1058,11 +1114,11 @@ def _render_research(snapshot: OperatorConsoleSnapshot) -> str:
   {_strategy_research_digest_panel(snapshot.latest_strategy_research_digest, snapshot.latest_strategy_research_digest_card, snapshot.latest_strategy_research_digest_evidence)}
   <article class="panel">
     <h3>下一步研究動作</h3>
-    <div class="metric">{escape(_display_research_action(autopilot.next_research_action if autopilot else None))}</div>
-    <p>Run：{_artifact_id(autopilot, "run_id")}</p>
-    <p>Status：{escape(autopilot.loop_status if autopilot else "n/a")}</p>
+    <div class="metric">{escape(_display_research_action(current_action.action))}</div>
+    <p>Run：<code>{escape(current_action.source_id or "none")}</code></p>
+    <p>Status：{escape(current_action.status)}</p>
     <p>Blocked：</p>
-    {_plain_list(autopilot.blocked_reasons if autopilot else [])}
+    {_plain_list(current_action.blocked_reasons)}
   </article>
   {_revision_candidate_panel(snapshot, wide=False)}
   {_strategy_lineage_panel(lineage)}
@@ -2048,6 +2104,7 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
     retest_split = snapshot.latest_strategy_revision_split_manifest
     lineage = snapshot.latest_strategy_lineage_summary
     digest = snapshot.latest_strategy_research_digest
+    current_action = _current_research_action(snapshot)
     return f"""
 <p>策略卡：{_artifact_id(card, "card_id")} / {escape(card.strategy_name if card else "n/a")}</p>
 <p>假設：{escape(card.hypothesis if card else "目前沒有 strategy_cards artifact。")}</p>
@@ -2056,7 +2113,7 @@ def _strategy_research_preview(snapshot: OperatorConsoleSnapshot) -> str:
 {_strategy_research_digest_preview(digest, snapshot.latest_strategy_research_digest_card, snapshot.latest_strategy_research_digest_evidence)}
 <p>Leaderboard：{_artifact_id(leaderboard, "entry_id")} / alpha_score={_format_number(leaderboard.alpha_score if leaderboard else None)}</p>
 <p>Paper-shadow：{escape(_display_research_action(outcome.recommended_strategy_action if outcome else None))} / {escape(_display_outcome_grade(outcome.outcome_grade if outcome else None))}</p>
-<p>下一步：{escape(_display_research_action(autopilot.next_research_action if autopilot else None))} / Run {_artifact_id(autopilot, "run_id")}</p>
+<p>下一步：{escape(_display_research_action(current_action.action))} / Run <code>{escape(current_action.source_id or "none")}</code></p>
 <p>策略修正候選：{_artifact_id(revision, "card_id")} / 來源 {_artifact_id(revision_source, "outcome_id")} / Agenda {_artifact_id(revision_agenda, "agenda_id")}</p>
 <p>Revision Retest Scaffold：{_artifact_id(retest_trial, "trial_id")} / Dataset <code>{escape(retest_trial.dataset_id if retest_trial and retest_trial.dataset_id else "n/a")}</code> / Split {_artifact_id(retest_split, "manifest_id")}</p>
 <p>策略 lineage：Root <code>{escape(lineage.root_card_id if lineage else "n/a")}</code> / Revisions {lineage.revision_count if lineage else "n/a"} / Outcomes {lineage.outcome_count if lineage else "n/a"}</p>

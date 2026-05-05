@@ -30,27 +30,53 @@ def resolve_strategy_digest_evidence(
     if digest is None:
         return StrategyDigestEvidence(None, None, None)
 
-    evidence_ids = set(digest.evidence_artifact_ids)
-    event_edge = _by_id(event_edges, "evaluation_id", evidence_ids)
-    backtest = _by_id(backtests, "result_id", evidence_ids)
-    walk_forward = _by_id(walk_forwards, "validation_id", evidence_ids)
-
     return StrategyDigestEvidence(
-        event_edge=event_edge or _latest_same_symbol_as_of(event_edges, digest),
-        backtest=backtest
-        or latest_backtest_for_research(
-            backtests=backtests,
-            backtest_runs=backtest_runs or [],
-            symbol=digest.symbol,
-            as_of=digest.created_at,
+        event_edge=_evidence_by_id_or_fallback(
+            digest=digest,
+            items=event_edges,
+            id_field="evaluation_id",
+            prefix="event-edge:",
+            fallback=lambda: _latest_same_symbol_as_of(event_edges, digest),
         ),
-        walk_forward=walk_forward or _latest_same_symbol_as_of(walk_forwards, digest),
+        backtest=_evidence_by_id_or_fallback(
+            digest=digest,
+            items=backtests,
+            id_field="result_id",
+            prefix="backtest-result:",
+            fallback=lambda: latest_backtest_for_research(
+                backtests=backtests,
+                backtest_runs=backtest_runs or [],
+                symbol=digest.symbol,
+                as_of=digest.created_at,
+            ),
+        ),
+        walk_forward=_evidence_by_id_or_fallback(
+            digest=digest,
+            items=walk_forwards,
+            id_field="validation_id",
+            prefix="walk-forward:",
+            fallback=lambda: _latest_same_symbol_as_of(walk_forwards, digest),
+        ),
     )
 
 
-def _by_id(items: list, id_field: str, evidence_ids: set[str]):
+def _evidence_by_id_or_fallback(
+    *,
+    digest: StrategyResearchDigest,
+    items: list,
+    id_field: str,
+    prefix: str,
+    fallback,
+):
+    evidence_ids = [item for item in digest.evidence_artifact_ids if item.startswith(prefix)]
+    if evidence_ids:
+        return _by_id(items, id_field, set(evidence_ids), digest.symbol)
+    return fallback()
+
+
+def _by_id(items: list, id_field: str, evidence_ids: set[str], symbol: str):
     for item in items:
-        if getattr(item, id_field, None) in evidence_ids:
+        if getattr(item, id_field, None) in evidence_ids and getattr(item, "symbol", None) == symbol:
             return item
     return None
 

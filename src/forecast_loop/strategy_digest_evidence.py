@@ -4,10 +4,12 @@ from dataclasses import dataclass
 
 from forecast_loop.models import (
     BacktestResult,
+    BacktestRun,
     EventEdgeEvaluation,
     StrategyResearchDigest,
     WalkForwardValidation,
 )
+from forecast_loop.research_artifact_selection import latest_backtest_for_research
 
 
 @dataclass(slots=True)
@@ -23,6 +25,7 @@ def resolve_strategy_digest_evidence(
     event_edges: list[EventEdgeEvaluation],
     backtests: list[BacktestResult],
     walk_forwards: list[WalkForwardValidation],
+    backtest_runs: list[BacktestRun] | None = None,
 ) -> StrategyDigestEvidence:
     if digest is None:
         return StrategyDigestEvidence(None, None, None)
@@ -34,7 +37,13 @@ def resolve_strategy_digest_evidence(
 
     return StrategyDigestEvidence(
         event_edge=event_edge or _latest_same_symbol_as_of(event_edges, digest),
-        backtest=backtest or _latest_same_symbol_as_of(backtests, digest),
+        backtest=backtest
+        or latest_backtest_for_research(
+            backtests=backtests,
+            backtest_runs=backtest_runs or [],
+            symbol=digest.symbol,
+            as_of=digest.created_at,
+        ),
         walk_forward=walk_forward or _latest_same_symbol_as_of(walk_forwards, digest),
     )
 

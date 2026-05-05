@@ -289,6 +289,7 @@ def build_operator_console_snapshot(
             digest=latest_digest,
             event_edges=event_edges,
             backtests=backtests,
+            backtest_runs=backtest_runs,
             walk_forwards=walk_forwards,
         ),
         latest_strategy_lineage_summary=lineage_summary,

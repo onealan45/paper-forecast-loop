@@ -507,6 +507,147 @@ def test_strategy_research_digest_is_point_in_time_for_chain_decision_and_eviden
     assert "event-edge:future" not in digest.evidence_artifact_ids
 
 
+def test_strategy_research_digest_keeps_card_shadow_outcome_when_decision_agenda_is_newer(
+    tmp_path,
+):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+    artifacts = _seed_strategy_research_chain(repository, now)
+    repository.save_research_agenda(
+        ResearchAgenda(
+            agenda_id="research-agenda:newer-decision-blocker",
+            created_at=now + timedelta(minutes=20),
+            symbol="BTC-USD",
+            title="Decision blocker research: BTC-USD HOLD",
+            hypothesis="Latest decision is blocked by research metrics; keep visible strategy outcome context.",
+            priority="HIGH",
+            status="OPEN",
+            target_strategy_family="breakout_reversal",
+            strategy_card_ids=[artifacts["revision"].card_id],
+            expected_artifacts=[
+                "strategy_decision",
+                "event_edge_evaluation",
+                "backtest_result",
+                "walk_forward_validation",
+            ],
+            acceptance_criteria=["Remove BUY/SELL blockers before directionality is usable."],
+            blocked_actions=["directional_buy_sell_without_research_evidence"],
+            decision_basis="decision_blocker_research_agenda",
+        )
+    )
+
+    digest = record_strategy_research_digest(
+        repository=repository,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=21),
+    )
+
+    assert digest.strategy_card_id == artifacts["revision"].card_id
+    assert digest.paper_shadow_outcome_id == artifacts["revision_outcome"].outcome_id
+    assert digest.outcome_grade == artifacts["revision_outcome"].outcome_grade
+    assert digest.recommended_strategy_action == (
+        artifacts["revision_outcome"].recommended_strategy_action
+    )
+    assert artifacts["revision_outcome"].outcome_id in digest.evidence_artifact_ids
+    assert "尚未有 paper-shadow 結果" not in digest.research_summary
+
+
+def test_strategy_research_digest_does_not_mask_newer_same_card_retest_waiting_for_shadow(
+    tmp_path,
+):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+    artifacts = _seed_strategy_research_chain(repository, now)
+    revision = artifacts["revision"]
+    trial = ExperimentTrial(
+        trial_id="experiment-trial:same-card-newer-retest",
+        created_at=now + timedelta(minutes=21),
+        strategy_card_id=revision.card_id,
+        trial_index=2,
+        status="PASSED",
+        symbol="BTC-USD",
+        seed=13,
+        dataset_id="research-dataset:same-card-newer-retest",
+        backtest_result_id="backtest-result:same-card-newer-retest",
+        walk_forward_validation_id="walk-forward:same-card-newer-retest",
+        event_edge_evaluation_id=None,
+        prompt_hash="prompt-same-card-newer-retest",
+        code_hash="code-same-card-newer-retest",
+        parameters={"revision_retest_protocol": "pr14-v1"},
+        metric_summary={"alpha_score": None},
+        failure_reason=None,
+        started_at=now + timedelta(minutes=20),
+        completed_at=now + timedelta(minutes=21),
+        decision_basis="test",
+    )
+    evaluation = LockedEvaluationResult(
+        evaluation_id="locked-evaluation:same-card-newer-retest",
+        created_at=now + timedelta(minutes=22),
+        strategy_card_id=revision.card_id,
+        trial_id=trial.trial_id,
+        split_manifest_id="split-manifest:same-card-newer-retest",
+        cost_model_id="cost-model:same-card-newer-retest",
+        baseline_id="baseline:same-card-newer-retest",
+        backtest_result_id="backtest-result:same-card-newer-retest",
+        walk_forward_validation_id="walk-forward:same-card-newer-retest",
+        event_edge_evaluation_id=None,
+        passed=False,
+        rankable=False,
+        alpha_score=None,
+        blocked_reasons=["leaderboard_entry_not_rankable"],
+        gate_metrics={"holdout_excess_return": -0.01},
+        decision_basis="test",
+    )
+    leaderboard = LeaderboardEntry(
+        entry_id="leaderboard-entry:same-card-newer-retest",
+        created_at=now + timedelta(minutes=23),
+        strategy_card_id=revision.card_id,
+        evaluation_id=evaluation.evaluation_id,
+        trial_id=trial.trial_id,
+        symbol="BTC-USD",
+        rankable=False,
+        alpha_score=None,
+        promotion_stage="BLOCKED",
+        blocked_reasons=["leaderboard_entry_not_rankable"],
+        leaderboard_rules_version="pr7-v1",
+        decision_basis="test",
+    )
+    repository.save_experiment_trial(trial)
+    repository.save_locked_evaluation_result(evaluation)
+    repository.save_leaderboard_entry(leaderboard)
+    repository.save_research_agenda(
+        ResearchAgenda(
+            agenda_id="research-agenda:newer-decision-blocker-after-retest",
+            created_at=now + timedelta(minutes=24),
+            symbol="BTC-USD",
+            title="Decision blocker research after newer retest",
+            hypothesis="A newer same-card retest is waiting for shadow outcome.",
+            priority="HIGH",
+            status="OPEN",
+            target_strategy_family="breakout_reversal",
+            strategy_card_ids=[revision.card_id],
+            expected_artifacts=["strategy_decision", "paper_shadow_outcome"],
+            acceptance_criteria=["Wait for the new retest shadow result."],
+            blocked_actions=["promote_without_retest_shadow"],
+            decision_basis="decision_blocker_research_agenda",
+        )
+    )
+
+    digest = record_strategy_research_digest(
+        repository=repository,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=25),
+    )
+
+    assert digest.strategy_card_id == revision.card_id
+    assert digest.paper_shadow_outcome_id is None
+    assert leaderboard.entry_id in digest.evidence_artifact_ids
+    assert artifacts["revision_outcome"].outcome_id not in digest.evidence_artifact_ids[:5]
+    assert digest.next_research_action == "WAIT_FOR_PAPER_SHADOW_OUTCOME"
+    assert "等待 paper-shadow 視窗" in digest.research_summary
+    assert "尚未有 paper-shadow 結果" in digest.research_summary
+
+
 def test_strategy_research_digest_prefers_newer_retest_leaderboard_over_stale_autopilot_run(
     tmp_path,
 ):

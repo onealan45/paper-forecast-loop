@@ -226,6 +226,37 @@ def test_resolve_strategy_digest_evidence_does_not_fallback_when_digest_ids_are_
     assert evidence.walk_forward is None
 
 
+def test_resolve_strategy_digest_evidence_does_not_resolve_future_digest_ids() -> None:
+    now = datetime(2026, 5, 2, 10, 0, tzinfo=UTC)
+
+    evidence = resolve_strategy_digest_evidence(
+        digest=_digest(
+            now,
+            evidence_ids=[
+                "event-edge:chosen",
+                "backtest-result:chosen",
+                "walk-forward:chosen",
+            ],
+        ),
+        event_edges=[
+            _event_edge(now + timedelta(minutes=1), evaluation_id="event-edge:chosen"),
+            _event_edge(now - timedelta(minutes=1), evaluation_id="event-edge:latest"),
+        ],
+        backtests=[
+            _backtest(now + timedelta(minutes=1), result_id="backtest-result:chosen"),
+            _backtest(now - timedelta(minutes=1), result_id="backtest-result:latest"),
+        ],
+        walk_forwards=[
+            _walk_forward(now + timedelta(minutes=1), validation_id="walk-forward:chosen"),
+            _walk_forward(now - timedelta(minutes=1), validation_id="walk-forward:latest"),
+        ],
+    )
+
+    assert evidence.event_edge is None
+    assert evidence.backtest is None
+    assert evidence.walk_forward is None
+
+
 def test_resolve_strategy_digest_evidence_fallback_prefers_decision_blocker_backtest() -> None:
     now = datetime(2026, 5, 6, 8, 0, tzinfo=UTC)
     standalone = _backtest(now - timedelta(minutes=5), result_id="backtest-result:blocker")

@@ -10,6 +10,7 @@ from forecast_loop.decision_research_agenda import (
 )
 from forecast_loop.models import (
     BacktestResult,
+    BacktestRun,
     CanonicalEvent,
     EventEdgeEvaluation,
     MarketCandleRecord,
@@ -19,6 +20,9 @@ from forecast_loop.models import (
     WalkForwardValidation,
 )
 from forecast_loop.storage import ArtifactRepository
+
+
+DECISION_BLOCKER_BACKTEST_ID_CONTEXT = "id_context=decision_blocker_research:run_backtest:backtest_result"
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +107,7 @@ def build_decision_blocker_research_task_plan(
             repository.load_canonical_events(),
             repository.load_market_reaction_checks(),
             repository.load_market_candles(),
+            repository.load_backtest_runs(),
             repository.load_backtest_results(),
             repository.load_walk_forward_validations(),
         )
@@ -171,6 +176,7 @@ def _evidence_tasks(
     events: list[CanonicalEvent],
     reactions: list[MarketReactionCheck],
     candles: list[MarketCandleRecord],
+    backtest_runs: list[BacktestRun],
     backtests: list[BacktestResult],
     walk_forwards: list[WalkForwardValidation],
 ) -> list[DecisionBlockerResearchTask]:
@@ -179,7 +185,7 @@ def _evidence_tasks(
     if "event_edge_evaluation" in expected:
         tasks.append(_event_edge_task(agenda, storage, symbol, now, blockers, event_edges, events, reactions, candles))
     if "backtest_result" in expected:
-        tasks.append(_backtest_task(agenda, storage, symbol, now, blockers, candles, backtests))
+        tasks.append(_backtest_task(agenda, storage, symbol, now, blockers, candles, backtest_runs, backtests))
     if "walk_forward_validation" in expected:
         tasks.append(_walk_forward_task(agenda, storage, symbol, now, blockers, candles, walk_forwards))
     if "baseline_evaluation" in expected:
@@ -265,9 +271,10 @@ def _backtest_task(
     now: datetime,
     blockers: list[str],
     candles: list[MarketCandleRecord],
+    backtest_runs: list[BacktestRun],
     backtests: list[BacktestResult],
 ) -> DecisionBlockerResearchTask:
-    latest_backtest = _latest_backtest_after_agenda(backtests, agenda)
+    latest_backtest = _latest_backtest_after_agenda(backtests, backtest_runs, agenda)
     if latest_backtest is not None:
         return DecisionBlockerResearchTask(
             task_id="run_backtest",
@@ -474,12 +481,21 @@ def _latest_event_edge_after_agenda(
 
 def _latest_backtest_after_agenda(
     backtests: list[BacktestResult],
+    backtest_runs: list[BacktestRun],
     agenda: ResearchAgenda,
 ) -> BacktestResult | None:
     candidates = [
         result for result in backtests if result.symbol == agenda.symbol and result.created_at >= agenda.created_at
     ]
-    return max(candidates, key=lambda item: (item.created_at, item.result_id)) if candidates else None
+    run_by_id = {run.backtest_id: run for run in backtest_runs}
+    preferred = [
+        result
+        for result in candidates
+        if DECISION_BLOCKER_BACKTEST_ID_CONTEXT
+        in run_by_id.get(result.backtest_id, result).decision_basis
+    ]
+    selected = preferred if preferred else candidates
+    return max(selected, key=lambda item: (item.created_at, item.result_id)) if selected else None
 
 
 def _latest_walk_forward_after_agenda(

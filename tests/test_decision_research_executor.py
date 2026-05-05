@@ -194,7 +194,7 @@ def test_execute_decision_blocker_research_next_task_rejects_blocked_walk_forwar
         )
 
 
-def test_execute_decision_blocker_research_next_task_rejects_ready_but_unsupported_backtest(tmp_path):
+def test_execute_decision_blocker_research_next_task_runs_backtest_and_records_run(tmp_path):
     repository = JsonFileRepository(tmp_path)
     created_at = datetime(2026, 5, 2, 10, 0, tzinfo=UTC)
     repository.save_research_agenda(
@@ -206,18 +206,30 @@ def test_execute_decision_blocker_research_next_task_rejects_ready_but_unsupport
     )
     _save_walk_forward_candles(repository, start=datetime(2026, 5, 1, 0, 0, tzinfo=UTC), count=12)
 
-    with pytest.raises(ValueError, match="unsupported_decision_blocker_research_task_execution:run_backtest"):
-        execute_decision_blocker_research_next_task(
-            repository=repository,
-            storage_dir=tmp_path,
-            symbol="BTC-USD",
-            created_at=created_at,
-        )
+    result = execute_decision_blocker_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=created_at,
+    )
 
-    assert repository.load_automation_runs() == []
+    assert result.executed_task_id == "run_backtest"
+    assert result.before_plan.next_task_id == "run_backtest"
+    assert len(result.created_artifact_ids) == 1
+    assert result.created_artifact_ids[0].startswith("backtest-result:")
+    backtest_task = result.after_plan.task_by_id("run_backtest")
+    assert backtest_task.status == "completed"
+    assert backtest_task.artifact_id == result.created_artifact_ids[0]
+    assert result.after_plan.next_task_id is None
+    assert result.automation_run.steps[-1] == {
+        "name": "run_backtest",
+        "status": "executed",
+        "artifact_id": result.created_artifact_ids[0],
+    }
+    assert repository.load_automation_runs()[-1].automation_run_id == result.automation_run.automation_run_id
 
 
-def test_execute_decision_blocker_research_next_task_rejects_ready_but_unsupported_walk_forward(tmp_path):
+def test_execute_decision_blocker_research_next_task_runs_walk_forward_and_records_run(tmp_path):
     repository = JsonFileRepository(tmp_path)
     created_at = datetime(2026, 5, 2, 10, 0, tzinfo=UTC)
     repository.save_research_agenda(
@@ -229,15 +241,68 @@ def test_execute_decision_blocker_research_next_task_rejects_ready_but_unsupport
     )
     _save_walk_forward_candles(repository, start=datetime(2026, 5, 1, 0, 0, tzinfo=UTC), count=12)
 
-    with pytest.raises(ValueError, match="unsupported_decision_blocker_research_task_execution:run_walk_forward_validation"):
-        execute_decision_blocker_research_next_task(
-            repository=repository,
-            storage_dir=tmp_path,
-            symbol="BTC-USD",
-            created_at=created_at,
-        )
+    result = execute_decision_blocker_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=created_at,
+    )
 
-    assert repository.load_automation_runs() == []
+    assert result.executed_task_id == "run_walk_forward_validation"
+    assert result.before_plan.next_task_id == "run_walk_forward_validation"
+    assert len(result.created_artifact_ids) == 1
+    assert result.created_artifact_ids[0].startswith("walk-forward:")
+    walk_forward_task = result.after_plan.task_by_id("run_walk_forward_validation")
+    assert walk_forward_task.status == "completed"
+    assert walk_forward_task.artifact_id == result.created_artifact_ids[0]
+    assert result.after_plan.next_task_id is None
+    assert result.automation_run.steps[-1] == {
+        "name": "run_walk_forward_validation",
+        "status": "executed",
+        "artifact_id": result.created_artifact_ids[0],
+    }
+    assert repository.load_automation_runs()[-1].automation_run_id == result.automation_run.automation_run_id
+
+
+def test_execute_decision_blocker_research_keeps_backtest_task_artifact_after_walk_forward(
+    tmp_path,
+):
+    repository = JsonFileRepository(tmp_path)
+    created_at = datetime(2026, 5, 2, 10, 0, tzinfo=UTC)
+    repository.save_research_agenda(
+        _agenda(
+            created_at=created_at,
+            expected_artifacts=["strategy_decision", "backtest_result", "walk_forward_validation"],
+            hypothesis=(
+                "Latest decision decision:blocker is HOLD because backtest 未打贏 benchmark "
+                "and walk-forward overfit risk."
+            ),
+        )
+    )
+    _save_walk_forward_candles(repository, start=datetime(2026, 5, 1, 0, 0, tzinfo=UTC), count=12)
+
+    backtest_result = execute_decision_blocker_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=created_at,
+    )
+    walk_forward_result = execute_decision_blocker_research_next_task(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        created_at=created_at + timedelta(minutes=1),
+    )
+
+    assert backtest_result.executed_task_id == "run_backtest"
+    assert walk_forward_result.executed_task_id == "run_walk_forward_validation"
+    assert walk_forward_result.after_plan.next_task_id is None
+    assert walk_forward_result.after_plan.task_by_id("run_backtest").artifact_id == (
+        backtest_result.created_artifact_ids[0]
+    )
+    assert walk_forward_result.after_plan.task_by_id("run_walk_forward_validation").artifact_id == (
+        walk_forward_result.created_artifact_ids[0]
+    )
 
 
 def test_execute_decision_blocker_research_next_task_rejects_execution_before_agenda(tmp_path):

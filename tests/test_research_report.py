@@ -6,6 +6,7 @@ import pytest
 from forecast_loop.cli import main
 from forecast_loop.models import (
     BaselineEvaluation,
+    BacktestRun,
     BacktestResult,
     Forecast,
     ForecastScore,
@@ -221,6 +222,108 @@ def test_cli_research_report_writes_markdown_summary(tmp_path, capsys):
     assert "## Decision Gate Result" in markdown
     assert "model_not_beating_baseline" in markdown
     assert "paper-only research report" in markdown
+
+
+def test_research_report_prefers_decision_blocker_backtest_over_newer_internal_walk_forward_backtest(
+    tmp_path,
+    capsys,
+):
+    now = datetime(2026, 5, 6, 8, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path / "storage")
+    standalone_run = BacktestRun(
+        backtest_id="backtest-run:blocker",
+        created_at=now - timedelta(minutes=5),
+        symbol="BTC-USD",
+        start=now - timedelta(days=10),
+        end=now - timedelta(hours=1),
+        strategy_name="moving_average_trend",
+        initial_cash=10_000,
+        fee_bps=5,
+        slippage_bps=10,
+        moving_average_window=24,
+        candle_ids=["candle:blocker"],
+        decision_basis="id_context=decision_blocker_research:run_backtest:backtest_result",
+    )
+    internal_run = BacktestRun(
+        backtest_id="backtest-run:walk-forward-internal",
+        created_at=now,
+        symbol="BTC-USD",
+        start=now - timedelta(days=10),
+        end=now - timedelta(hours=1),
+        strategy_name="moving_average_trend",
+        initial_cash=10_000,
+        fee_bps=5,
+        slippage_bps=10,
+        moving_average_window=24,
+        candle_ids=["candle:internal"],
+        decision_basis="walk_forward_internal_backtest",
+    )
+    repository.save_backtest_run(standalone_run)
+    repository.save_backtest_run(internal_run)
+    repository.save_backtest_result(
+        BacktestResult(
+            result_id="backtest-result:blocker",
+            backtest_id=standalone_run.backtest_id,
+            created_at=standalone_run.created_at,
+            symbol="BTC-USD",
+            start=standalone_run.start,
+            end=standalone_run.end,
+            initial_cash=10_000,
+            final_equity=9_500,
+            strategy_return=-0.05,
+            benchmark_return=0.01,
+            max_drawdown=0.07,
+            sharpe=-1.0,
+            turnover=0.5,
+            win_rate=0.25,
+            trade_count=4,
+            equity_curve=[],
+            decision_basis="standalone blocker evidence",
+        )
+    )
+    repository.save_backtest_result(
+        BacktestResult(
+            result_id="backtest-result:walk-forward-internal",
+            backtest_id=internal_run.backtest_id,
+            created_at=internal_run.created_at,
+            symbol="BTC-USD",
+            start=internal_run.start,
+            end=internal_run.end,
+            initial_cash=10_000,
+            final_equity=10_100,
+            strategy_return=0.01,
+            benchmark_return=0.0,
+            max_drawdown=0.02,
+            sharpe=0.4,
+            turnover=0.9,
+            win_rate=0.55,
+            trade_count=8,
+            equity_curve=[],
+            decision_basis="walk-forward internal result",
+        )
+    )
+    output_dir = tmp_path / "reports" / "research"
+
+    exit_code = main(
+        [
+            "research-report",
+            "--storage-dir",
+            str(tmp_path / "storage"),
+            "--symbol",
+            "BTC-USD",
+            "--created-at",
+            now.isoformat(),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    report_path = output_dir / f"2026-05-06-{payload['report_id']}.md"
+    markdown = report_path.read_text(encoding="utf-8")
+
+    assert exit_code == 0
+    assert "- Result ID: `backtest-result:blocker`" in markdown
+    assert "- Result ID: `backtest-result:walk-forward-internal`" not in markdown
 
 
 def test_cli_research_report_missing_storage_is_operator_friendly(tmp_path, capsys):

@@ -14,6 +14,7 @@ from forecast_loop.models import (
     StrategyDecision,
     WalkForwardValidation,
 )
+from forecast_loop.research_artifact_selection import latest_backtest_for_research
 from forecast_loop.storage import JsonFileRepository
 
 
@@ -55,13 +56,18 @@ def generate_research_report(
     scores = [score for score in repository.load_scores() if score.forecast_id in forecast_ids]
     baselines = [baseline for baseline in repository.load_baseline_evaluations() if baseline.symbol == symbol]
     decisions = [decision for decision in repository.load_strategy_decisions() if decision.symbol == symbol]
+    backtest_runs = [run for run in repository.load_backtest_runs() if run.symbol == symbol]
     backtests = [result for result in repository.load_backtest_results() if result.symbol == symbol]
     walk_forwards = [
         validation for validation in repository.load_walk_forward_validations() if validation.symbol == symbol
     ]
     latest_baseline = _latest(baselines, "created_at")
     latest_decision = _latest(decisions, "created_at")
-    latest_backtest = _latest(backtests, "created_at")
+    latest_backtest = latest_backtest_for_research(
+        backtests=backtests,
+        backtest_runs=backtest_runs,
+        symbol=symbol,
+    )
     latest_walk_forward = _latest(walk_forwards, "created_at")
     report_id = _report_id(
         symbol=symbol,

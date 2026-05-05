@@ -12,6 +12,7 @@ from forecast_loop.models import (
 )
 from forecast_loop.storage import ArtifactRepository
 from forecast_loop.decision_research_agenda import extract_decision_research_blockers
+from forecast_loop.research_artifact_selection import latest_backtest_for_research
 from forecast_loop.strategy_lineage import build_strategy_lineage_summary
 from forecast_loop.strategy_research import resolve_latest_strategy_research_chain
 from forecast_loop.strategy_research_display import (
@@ -98,8 +99,9 @@ def build_strategy_research_digest(
         symbol=symbol,
         as_of=created_at,
     )
-    latest_backtest = _latest_symbol_artifact(
-        repository.load_backtest_results(),
+    latest_backtest = latest_backtest_for_research(
+        backtests=repository.load_backtest_results(),
+        backtest_runs=repository.load_backtest_runs(),
         symbol=symbol,
         as_of=created_at,
     )

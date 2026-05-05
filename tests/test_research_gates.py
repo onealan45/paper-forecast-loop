@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from forecast_loop.decision import generate_strategy_decision
-from forecast_loop.models import BacktestResult, EventEdgeEvaluation, WalkForwardValidation, WalkForwardWindow
+from forecast_loop.models import BacktestResult, BacktestRun, EventEdgeEvaluation, WalkForwardValidation, WalkForwardWindow
 from forecast_loop.storage import JsonFileRepository
 from tests.test_m1_strategy import _forecast, _ok_risk, _seed_scores
 
@@ -25,6 +25,31 @@ def _backtest(now: datetime, *, result_id: str = "backtest-result:gate", drawdow
         trade_count=3,
         equity_curve=[],
         decision_basis="test",
+    )
+
+
+def _backtest_run(
+    now: datetime,
+    *,
+    backtest_id: str,
+    id_context: str,
+) -> BacktestRun:
+    return BacktestRun(
+        backtest_id=backtest_id,
+        created_at=now,
+        symbol="BTC-USD",
+        start=now - timedelta(days=10),
+        end=now,
+        strategy_name="moving_average_trend",
+        initial_cash=10_000,
+        fee_bps=5,
+        slippage_bps=10,
+        moving_average_window=3,
+        candle_ids=["market-candle:gate"],
+        decision_basis=(
+            "paper-only moving-average trend backtest using stored candles; "
+            f"id_context={id_context}"
+        ),
     )
 
 
@@ -274,3 +299,50 @@ def test_research_gate_uses_latest_research_artifacts_by_created_at(tmp_path):
 
     assert decision.action == "BUY"
     assert "backtest_result=backtest-result:newer" in decision.decision_basis
+
+
+def test_research_gate_prefers_decision_blocker_backtest_over_newer_walk_forward_internal_backtest(
+    tmp_path,
+):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    _seed_strong_directional_context(repository, now)
+    standalone = _backtest(
+        now,
+        result_id="backtest-result:blocker-standalone",
+        drawdown=0.05,
+    )
+    internal = _backtest(
+        now + timedelta(minutes=1),
+        result_id="backtest-result:walk-forward-internal",
+        drawdown=0.05,
+    )
+    repository.save_backtest_run(
+        _backtest_run(
+            now,
+            backtest_id=standalone.backtest_id,
+            id_context="decision_blocker_research:run_backtest:backtest_result",
+        )
+    )
+    repository.save_backtest_run(
+        _backtest_run(
+            now + timedelta(minutes=1),
+            backtest_id=internal.backtest_id,
+            id_context="decision_blocker_research:run_walk_forward_validation:walk_forward_validation",
+        )
+    )
+    repository.save_backtest_result(standalone)
+    repository.save_backtest_result(internal)
+    repository.save_walk_forward_validation(_walk_forward(now + timedelta(minutes=1)))
+    repository.save_event_edge_evaluation(_event_edge(now))
+
+    decision = generate_strategy_decision(
+        repository=repository,
+        symbol="BTC-USD",
+        horizon_hours=24,
+        now=now + timedelta(minutes=2),
+        risk_snapshot=_ok_risk(now + timedelta(minutes=2)),
+    )
+
+    assert "backtest_result=backtest-result:blocker-standalone" in decision.decision_basis
+    assert "backtest_result=backtest-result:walk-forward-internal" not in decision.decision_basis

@@ -4,6 +4,7 @@ import json
 from forecast_loop.cli import main
 from forecast_loop.models import (
     BacktestResult,
+    BacktestRun,
     EventEdgeEvaluation,
     ExperimentTrial,
     LeaderboardEntry,
@@ -251,6 +252,32 @@ def _digest_backtest(
     )
 
 
+def _digest_backtest_run(
+    now: datetime,
+    *,
+    backtest_id: str,
+    id_context: str,
+    symbol: str = "BTC-USD",
+) -> BacktestRun:
+    return BacktestRun(
+        backtest_id=backtest_id,
+        created_at=now,
+        symbol=symbol,
+        start=now - timedelta(days=30),
+        end=now,
+        strategy_name="moving_average_trend",
+        initial_cash=10_000,
+        fee_bps=5,
+        slippage_bps=10,
+        moving_average_window=3,
+        candle_ids=["market-candle:digest"],
+        decision_basis=(
+            "paper-only moving-average trend backtest using stored candles; "
+            f"id_context={id_context}"
+        ),
+    )
+
+
 def _digest_walk_forward(
     now: datetime,
     *,
@@ -455,6 +482,54 @@ def test_strategy_research_digest_surfaces_latest_blocker_evidence_metrics(tmp_p
     assert "Backtest：策略 -8.72%，benchmark +1.02%" in digest.research_summary
     assert "Walk-forward：excess -0.09%，windows 176" in digest.research_summary
     assert "aggregate_underperforms_benchmark" in digest.research_summary
+
+
+def test_strategy_research_digest_prefers_decision_blocker_backtest_over_newer_walk_forward_internal_backtest(
+    tmp_path,
+):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+    _seed_strategy_research_chain(repository, now)
+    standalone = _digest_backtest(
+        now + timedelta(minutes=30),
+        result_id="backtest-result:digest-blocker-standalone",
+        strategy_return=0.02,
+        benchmark_return=0.01,
+    )
+    internal = _digest_backtest(
+        now + timedelta(minutes=31),
+        result_id="backtest-result:digest-walk-forward-internal",
+        strategy_return=-0.03,
+        benchmark_return=0.01,
+    )
+    repository.save_backtest_run(
+        _digest_backtest_run(
+            now + timedelta(minutes=30),
+            backtest_id=standalone.backtest_id,
+            id_context="decision_blocker_research:run_backtest:backtest_result",
+        )
+    )
+    repository.save_backtest_run(
+        _digest_backtest_run(
+            now + timedelta(minutes=31),
+            backtest_id=internal.backtest_id,
+            id_context="decision_blocker_research:run_walk_forward_validation:walk_forward_validation",
+        )
+    )
+    repository.save_backtest_result(standalone)
+    repository.save_backtest_result(internal)
+    repository.save_walk_forward_validation(_digest_walk_forward(now + timedelta(minutes=31)))
+
+    digest = record_strategy_research_digest(
+        repository=repository,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=32),
+    )
+
+    assert "backtest-result:digest-blocker-standalone" in digest.evidence_artifact_ids
+    assert "backtest-result:digest-walk-forward-internal" not in digest.evidence_artifact_ids
+    assert "Backtest：策略 +2.00%，benchmark +1.00%" in digest.research_summary
+    assert "Backtest：策略 -3.00%" not in digest.research_summary
 
 
 def test_strategy_research_digest_is_point_in_time_for_chain_decision_and_evidence(tmp_path):

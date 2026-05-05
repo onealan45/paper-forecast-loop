@@ -94,21 +94,41 @@ def build_strategy_research_digest(
     )
     if latest_decision is not None:
         _append_id(evidence_artifact_ids, latest_decision.decision_id)
-    latest_event_edge = _latest_symbol_artifact(
-        repository.load_event_edge_evaluations(),
+    event_edges = _artifacts_as_of(repository.load_event_edge_evaluations(), created_at)
+    backtests = _artifacts_as_of(repository.load_backtest_results(), created_at)
+    backtest_runs = _artifacts_as_of(repository.load_backtest_runs(), created_at)
+    walk_forwards = _artifacts_as_of(repository.load_walk_forward_validations(), created_at)
+    latest_event_edge = _chain_artifact_or_fallback(
+        chain,
+        items=event_edges,
         symbol=symbol,
-        as_of=created_at,
+        single_attr="event_edge_evaluation_id",
+        card_list_attr="event_edge_evaluation_ids",
+        id_field="evaluation_id",
+        fallback=lambda: _latest_symbol_artifact(event_edges, symbol=symbol, as_of=created_at),
     )
-    latest_backtest = latest_backtest_for_research(
-        backtests=repository.load_backtest_results(),
-        backtest_runs=repository.load_backtest_runs(),
+    latest_backtest = _chain_artifact_or_fallback(
+        chain,
+        items=backtests,
         symbol=symbol,
-        as_of=created_at,
+        single_attr="backtest_result_id",
+        card_list_attr="backtest_result_ids",
+        id_field="result_id",
+        fallback=lambda: latest_backtest_for_research(
+            backtests=backtests,
+            backtest_runs=backtest_runs,
+            symbol=symbol,
+            as_of=created_at,
+        ),
     )
-    latest_walk_forward = _latest_symbol_artifact(
-        repository.load_walk_forward_validations(),
+    latest_walk_forward = _chain_artifact_or_fallback(
+        chain,
+        items=walk_forwards,
         symbol=symbol,
-        as_of=created_at,
+        single_attr="walk_forward_validation_id",
+        card_list_attr="walk_forward_validation_ids",
+        id_field="validation_id",
+        fallback=lambda: _latest_symbol_artifact(walk_forwards, symbol=symbol, as_of=created_at),
     )
     _append_id(
         evidence_artifact_ids,
@@ -288,6 +308,68 @@ def _latest_symbol_artifact(items: list, *, symbol: str, as_of: datetime):
         if getattr(item, "symbol", None) == symbol and getattr(item, "created_at", as_of) <= as_of
     ]
     return max(matches, key=lambda item: item.created_at) if matches else None
+
+
+def _chain_artifact_or_fallback(
+    chain,
+    *,
+    items: list,
+    symbol: str,
+    single_attr: str,
+    card_list_attr: str,
+    id_field: str,
+    fallback,
+):
+    candidate_ids = _ordered_chain_evidence_ids(
+        chain,
+        single_attr,
+        card_list_attr,
+    )
+    if candidate_ids:
+        return _first_symbol_artifact_by_id(
+            items,
+            id_field=id_field,
+            candidate_ids=candidate_ids,
+            symbol=symbol,
+        )
+    return fallback()
+
+
+def _ordered_chain_evidence_ids(
+    chain,
+    single_attr: str,
+    card_list_attr: str,
+) -> list[str]:
+    ids: list[str] = []
+    for owner in (chain.locked_evaluation, chain.experiment_trial):
+        value = getattr(owner, single_attr, None)
+        if isinstance(value, str):
+            _append_id(ids, value)
+    card_values = getattr(chain.strategy_card, card_list_attr, None)
+    if isinstance(card_values, list):
+        for value in reversed(card_values):
+            if isinstance(value, str):
+                _append_id(ids, value)
+    return ids
+
+
+def _first_symbol_artifact_by_id(
+    items: list,
+    *,
+    id_field: str,
+    candidate_ids: list[str],
+    symbol: str,
+):
+    item_by_id = {
+        getattr(item, id_field, None): item
+        for item in items
+        if getattr(item, "symbol", None) == symbol
+    }
+    for candidate_id in candidate_ids:
+        item = item_by_id.get(candidate_id)
+        if item is not None:
+            return item
+    return None
 
 
 def _research_evidence_summary(

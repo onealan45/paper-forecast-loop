@@ -838,6 +838,255 @@ def test_strategy_research_digest_prefers_newer_retest_leaderboard_over_stale_au
     ]
 
 
+def test_strategy_research_digest_prefers_active_retest_evidence_over_newer_symbol_artifacts(
+    tmp_path,
+):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+    _seed_strategy_research_chain(repository, now)
+    revision = StrategyCard(
+        card_id="strategy-card:digest-active-retest-evidence",
+        created_at=now + timedelta(minutes=20),
+        strategy_name="BTC active retest evidence strategy",
+        strategy_family="breakout_reversal",
+        version="v2",
+        status="DRAFT",
+        symbols=["BTC-USD"],
+        hypothesis="Digest evidence must follow the active retest chain.",
+        signal_description="Replacement retest signal.",
+        entry_rules=["Enter only after active retest evidence passes."],
+        exit_rules=["Exit when active retest invalidates."],
+        risk_rules=["Wait for active retest paper-shadow outcome."],
+        parameters={"revision_source_outcome_id": "paper-shadow-outcome:digest-revision"},
+        data_requirements=["market_candles:BTC-USD:1h"],
+        feature_snapshot_ids=[],
+        backtest_result_ids=["backtest-result:active-retest-evidence"],
+        walk_forward_validation_ids=["walk-forward:active-retest-evidence"],
+        event_edge_evaluation_ids=[],
+        parent_card_id="strategy-card:digest-revision",
+        author="codex-runtime",
+        decision_basis="paper_shadow_strategy_revision_candidate",
+    )
+    trial = ExperimentTrial(
+        trial_id="experiment-trial:active-retest-evidence",
+        created_at=now + timedelta(minutes=21),
+        strategy_card_id=revision.card_id,
+        trial_index=1,
+        status="PASSED",
+        symbol="BTC-USD",
+        seed=11,
+        dataset_id="research-dataset:active-retest-evidence",
+        backtest_result_id="backtest-result:active-retest-evidence",
+        walk_forward_validation_id="walk-forward:active-retest-evidence",
+        event_edge_evaluation_id=None,
+        prompt_hash="prompt-active-retest-evidence",
+        code_hash="code-active-retest-evidence",
+        parameters={"revision_retest_protocol": "pr14-v1"},
+        metric_summary={"alpha_score": None},
+        failure_reason=None,
+        started_at=now + timedelta(minutes=20),
+        completed_at=now + timedelta(minutes=21),
+        decision_basis="test",
+    )
+    evaluation = LockedEvaluationResult(
+        evaluation_id="locked-evaluation:active-retest-evidence",
+        created_at=now + timedelta(minutes=22),
+        strategy_card_id=revision.card_id,
+        trial_id=trial.trial_id,
+        split_manifest_id="split-manifest:active-retest-evidence",
+        cost_model_id="cost-model:active-retest-evidence",
+        baseline_id="baseline:active-retest-evidence",
+        backtest_result_id="backtest-result:active-retest-evidence",
+        walk_forward_validation_id="walk-forward:active-retest-evidence",
+        event_edge_evaluation_id=None,
+        passed=False,
+        rankable=False,
+        alpha_score=None,
+        blocked_reasons=["leaderboard_entry_not_rankable"],
+        gate_metrics={"holdout_excess_return": -0.01},
+        decision_basis="test",
+    )
+    leaderboard = LeaderboardEntry(
+        entry_id="leaderboard-entry:active-retest-evidence",
+        created_at=now + timedelta(minutes=22),
+        strategy_card_id=revision.card_id,
+        evaluation_id=evaluation.evaluation_id,
+        trial_id=trial.trial_id,
+        symbol="BTC-USD",
+        rankable=False,
+        alpha_score=None,
+        promotion_stage="BLOCKED",
+        blocked_reasons=["leaderboard_entry_not_rankable"],
+        leaderboard_rules_version="pr7-v1",
+        decision_basis="test",
+    )
+    repository.save_strategy_card(revision)
+    repository.save_experiment_trial(trial)
+    repository.save_locked_evaluation_result(evaluation)
+    repository.save_leaderboard_entry(leaderboard)
+    repository.save_backtest_result(
+        _digest_backtest(
+            now + timedelta(minutes=22),
+            result_id="backtest-result:active-retest-evidence",
+            strategy_return=-0.02,
+            benchmark_return=-0.01,
+        )
+    )
+    repository.save_walk_forward_validation(
+        _digest_walk_forward(
+            now + timedelta(minutes=22),
+            validation_id="walk-forward:active-retest-evidence",
+            average_excess_return=-0.0025,
+        )
+    )
+    repository.save_backtest_result(
+        _digest_backtest(
+            now + timedelta(minutes=23),
+            result_id="backtest-result:newer-unrelated",
+            strategy_return=0.09,
+            benchmark_return=0.01,
+        )
+    )
+    repository.save_walk_forward_validation(
+        _digest_walk_forward(
+            now + timedelta(minutes=23),
+            validation_id="walk-forward:newer-unrelated",
+            average_excess_return=0.0123,
+        )
+    )
+
+    digest = record_strategy_research_digest(
+        repository=repository,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=24),
+    )
+
+    assert digest.strategy_card_id == revision.card_id
+    assert "backtest-result:active-retest-evidence" in digest.evidence_artifact_ids
+    assert "walk-forward:active-retest-evidence" in digest.evidence_artifact_ids
+    assert "backtest-result:newer-unrelated" not in digest.evidence_artifact_ids
+    assert "walk-forward:newer-unrelated" not in digest.evidence_artifact_ids
+    assert "Backtest：策略 -2.00%，benchmark -1.00%" in digest.research_summary
+    assert "Walk-forward：excess -0.25%" in digest.research_summary
+    assert "Backtest：策略 +9.00%" not in digest.research_summary
+    assert "Walk-forward：excess +1.23%" not in digest.research_summary
+
+
+def test_strategy_research_digest_does_not_fallback_when_active_retest_evidence_ids_are_unresolved(
+    tmp_path,
+):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+    _seed_strategy_research_chain(repository, now)
+    revision = StrategyCard(
+        card_id="strategy-card:digest-unresolved-retest-evidence",
+        created_at=now + timedelta(minutes=20),
+        strategy_name="BTC unresolved retest evidence strategy",
+        strategy_family="breakout_reversal",
+        version="v2",
+        status="DRAFT",
+        symbols=["BTC-USD"],
+        hypothesis="Unresolved active retest evidence must not borrow newer same-symbol metrics.",
+        signal_description="Replacement retest signal.",
+        entry_rules=["Enter only after active retest evidence resolves."],
+        exit_rules=["Exit when active retest invalidates."],
+        risk_rules=["Treat unresolved linked evidence as missing evidence."],
+        parameters={"revision_source_outcome_id": "paper-shadow-outcome:digest-revision"},
+        data_requirements=["market_candles:BTC-USD:1h"],
+        feature_snapshot_ids=[],
+        backtest_result_ids=["backtest-result:unresolved-retest-evidence"],
+        walk_forward_validation_ids=["walk-forward:unresolved-retest-evidence"],
+        event_edge_evaluation_ids=[],
+        parent_card_id="strategy-card:digest-revision",
+        author="codex-runtime",
+        decision_basis="paper_shadow_strategy_revision_candidate",
+    )
+    trial = ExperimentTrial(
+        trial_id="experiment-trial:unresolved-retest-evidence",
+        created_at=now + timedelta(minutes=21),
+        strategy_card_id=revision.card_id,
+        trial_index=1,
+        status="PASSED",
+        symbol="BTC-USD",
+        seed=11,
+        dataset_id="research-dataset:unresolved-retest-evidence",
+        backtest_result_id="backtest-result:unresolved-retest-evidence",
+        walk_forward_validation_id="walk-forward:unresolved-retest-evidence",
+        event_edge_evaluation_id=None,
+        prompt_hash="prompt-unresolved-retest-evidence",
+        code_hash="code-unresolved-retest-evidence",
+        parameters={"revision_retest_protocol": "pr14-v1"},
+        metric_summary={"alpha_score": None},
+        failure_reason=None,
+        started_at=now + timedelta(minutes=20),
+        completed_at=now + timedelta(minutes=21),
+        decision_basis="test",
+    )
+    evaluation = LockedEvaluationResult(
+        evaluation_id="locked-evaluation:unresolved-retest-evidence",
+        created_at=now + timedelta(minutes=22),
+        strategy_card_id=revision.card_id,
+        trial_id=trial.trial_id,
+        split_manifest_id="split-manifest:unresolved-retest-evidence",
+        cost_model_id="cost-model:unresolved-retest-evidence",
+        baseline_id="baseline:unresolved-retest-evidence",
+        backtest_result_id="backtest-result:unresolved-retest-evidence",
+        walk_forward_validation_id="walk-forward:unresolved-retest-evidence",
+        event_edge_evaluation_id=None,
+        passed=False,
+        rankable=False,
+        alpha_score=None,
+        blocked_reasons=["leaderboard_entry_not_rankable"],
+        gate_metrics={"holdout_excess_return": -0.01},
+        decision_basis="test",
+    )
+    leaderboard = LeaderboardEntry(
+        entry_id="leaderboard-entry:unresolved-retest-evidence",
+        created_at=now + timedelta(minutes=22),
+        strategy_card_id=revision.card_id,
+        evaluation_id=evaluation.evaluation_id,
+        trial_id=trial.trial_id,
+        symbol="BTC-USD",
+        rankable=False,
+        alpha_score=None,
+        promotion_stage="BLOCKED",
+        blocked_reasons=["leaderboard_entry_not_rankable"],
+        leaderboard_rules_version="pr7-v1",
+        decision_basis="test",
+    )
+    repository.save_strategy_card(revision)
+    repository.save_experiment_trial(trial)
+    repository.save_locked_evaluation_result(evaluation)
+    repository.save_leaderboard_entry(leaderboard)
+    repository.save_backtest_result(
+        _digest_backtest(
+            now + timedelta(minutes=23),
+            result_id="backtest-result:newer-unrelated",
+            strategy_return=0.09,
+            benchmark_return=0.01,
+        )
+    )
+    repository.save_walk_forward_validation(
+        _digest_walk_forward(
+            now + timedelta(minutes=23),
+            validation_id="walk-forward:newer-unrelated",
+            average_excess_return=0.0123,
+        )
+    )
+
+    digest = record_strategy_research_digest(
+        repository=repository,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=24),
+    )
+
+    assert digest.strategy_card_id == revision.card_id
+    assert "backtest-result:newer-unrelated" not in digest.evidence_artifact_ids
+    assert "walk-forward:newer-unrelated" not in digest.evidence_artifact_ids
+    assert "Backtest：" not in digest.research_summary
+    assert "Walk-forward：" not in digest.research_summary
+
+
 def test_strategy_research_digest_compacts_long_rule_summary_text(tmp_path):
     repository = JsonFileRepository(tmp_path)
     now = datetime(2026, 5, 2, 8, 0, tzinfo=UTC)

@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from forecast_loop.models import (
+    BacktestRun,
     BacktestResult,
     EventEdgeEvaluation,
     StrategyResearchDigest,
@@ -84,6 +85,23 @@ def _backtest(now: datetime, *, result_id: str, symbol: str = "BTC-USD") -> Back
         trade_count=4,
         equity_curve=[],
         decision_basis="test",
+    )
+
+
+def _backtest_run(backtest: BacktestResult, *, decision_basis: str) -> BacktestRun:
+    return BacktestRun(
+        backtest_id=backtest.backtest_id,
+        created_at=backtest.created_at,
+        symbol=backtest.symbol,
+        start=backtest.start,
+        end=backtest.end,
+        strategy_name="moving_average_trend",
+        initial_cash=backtest.initial_cash,
+        fee_bps=5,
+        slippage_bps=10,
+        moving_average_window=24,
+        candle_ids=[f"candle:{backtest.result_id}"],
+        decision_basis=decision_basis,
     )
 
 
@@ -178,3 +196,26 @@ def test_resolve_strategy_digest_evidence_falls_back_to_latest_same_symbol_as_of
     assert evidence.backtest.result_id == "backtest-result:latest"
     assert evidence.walk_forward is not None
     assert evidence.walk_forward.validation_id == "walk-forward:latest"
+
+
+def test_resolve_strategy_digest_evidence_fallback_prefers_decision_blocker_backtest() -> None:
+    now = datetime(2026, 5, 6, 8, 0, tzinfo=UTC)
+    standalone = _backtest(now - timedelta(minutes=5), result_id="backtest-result:blocker")
+    internal = _backtest(now - timedelta(minutes=1), result_id="backtest-result:internal")
+
+    evidence = resolve_strategy_digest_evidence(
+        digest=_digest(now),
+        event_edges=[],
+        backtests=[standalone, internal],
+        backtest_runs=[
+            _backtest_run(
+                standalone,
+                decision_basis="id_context=decision_blocker_research:run_backtest:backtest_result",
+            ),
+            _backtest_run(internal, decision_basis="walk_forward_internal_backtest"),
+        ],
+        walk_forwards=[],
+    )
+
+    assert evidence.backtest is not None
+    assert evidence.backtest.result_id == "backtest-result:blocker"

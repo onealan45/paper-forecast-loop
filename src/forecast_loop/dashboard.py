@@ -183,6 +183,9 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
     backtest_results = [
         item for item in repository.load_backtest_results() if item.symbol == dashboard_symbol
     ]
+    backtest_runs = [
+        item for item in repository.load_backtest_runs() if item.symbol == dashboard_symbol
+    ]
     walk_forward_validations = [
         item for item in repository.load_walk_forward_validations() if item.symbol == dashboard_symbol
     ]
@@ -314,6 +317,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
             digest=latest_digest,
             event_edges=event_edge_evaluations,
             backtests=backtest_results,
+            backtest_runs=backtest_runs,
             walk_forwards=walk_forward_validations,
         ),
         latest_strategy_lineage_summary=lineage_summary,

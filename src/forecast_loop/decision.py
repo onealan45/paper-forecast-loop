@@ -12,6 +12,7 @@ from forecast_loop.models import (
     StrategyDecision,
 )
 from forecast_loop.research_gates import ResearchGateResult, evaluate_research_gates
+from forecast_loop.research_artifact_selection import latest_backtest_for_research
 
 
 BULLISH_REGIMES = {"trend_up", "volatile_bull"}
@@ -56,7 +57,11 @@ def generate_strategy_decision(
         scores=scores,
     )
     repository.save_baseline_evaluation(baseline)
-    latest_backtest = _latest_for_symbol(repository.load_backtest_results(), symbol)
+    latest_backtest = latest_backtest_for_research(
+        backtests=repository.load_backtest_results(),
+        backtest_runs=repository.load_backtest_runs(),
+        symbol=symbol,
+    )
     latest_walk_forward = _latest_for_symbol(repository.load_walk_forward_validations(), symbol)
     latest_event_edge = _latest_for_symbol(repository.load_event_edge_evaluations(), symbol)
     research_gate = evaluate_research_gates(

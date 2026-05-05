@@ -19,10 +19,8 @@ from forecast_loop.models import (
     StrategyDecision,
     WalkForwardValidation,
 )
+from forecast_loop.research_artifact_selection import latest_backtest_for_research
 from forecast_loop.storage import ArtifactRepository
-
-
-DECISION_BLOCKER_BACKTEST_ID_CONTEXT = "id_context=decision_blocker_research:run_backtest:backtest_result"
 
 
 @dataclass(frozen=True, slots=True)
@@ -484,18 +482,12 @@ def _latest_backtest_after_agenda(
     backtest_runs: list[BacktestRun],
     agenda: ResearchAgenda,
 ) -> BacktestResult | None:
-    candidates = [
-        result for result in backtests if result.symbol == agenda.symbol and result.created_at >= agenda.created_at
-    ]
-    run_by_id = {run.backtest_id: run for run in backtest_runs}
-    preferred = [
-        result
-        for result in candidates
-        if DECISION_BLOCKER_BACKTEST_ID_CONTEXT
-        in run_by_id.get(result.backtest_id, result).decision_basis
-    ]
-    selected = preferred if preferred else candidates
-    return max(selected, key=lambda item: (item.created_at, item.result_id)) if selected else None
+    return latest_backtest_for_research(
+        backtests=backtests,
+        backtest_runs=backtest_runs,
+        symbol=agenda.symbol,
+        created_at_min=agenda.created_at,
+    )
 
 
 def _latest_walk_forward_after_agenda(

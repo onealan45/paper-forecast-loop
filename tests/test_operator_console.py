@@ -11,6 +11,7 @@ from forecast_loop.lineage_research_executor import execute_lineage_research_nex
 from forecast_loop.lineage_research_run_log import record_lineage_research_task_run
 from forecast_loop.models import (
     AutomationRun,
+    BacktestRun,
     BacktestResult,
     EventEdgeEvaluation,
     ExperimentTrial,
@@ -1127,6 +1128,81 @@ def test_operator_console_surfaces_strategy_research_digest_in_research_and_over
         assert "Digest-only operator entry rule." in rules_section
         assert "Digest-only operator risk control." in rules_section
         assert "single-trial max position 10%" not in rules_section
+
+
+def test_operator_console_prefers_decision_blocker_backtest_over_newer_internal_walk_forward_backtest(tmp_path):
+    now = datetime(2026, 5, 6, 8, 0, tzinfo=UTC)
+    repository = JsonFileRepository(tmp_path)
+    standalone_run = BacktestRun(
+        backtest_id="backtest-run:blocker",
+        created_at=now - timedelta(minutes=5),
+        symbol="BTC-USD",
+        start=now - timedelta(days=10),
+        end=now - timedelta(hours=1),
+        strategy_name="moving_average_trend",
+        initial_cash=10_000,
+        fee_bps=5,
+        slippage_bps=10,
+        moving_average_window=24,
+        candle_ids=["candle:blocker"],
+        decision_basis="id_context=decision_blocker_research:run_backtest:backtest_result",
+    )
+    internal_run = replace(
+        standalone_run,
+        backtest_id="backtest-run:walk-forward-internal",
+        created_at=now,
+        candle_ids=["candle:internal"],
+        decision_basis="walk_forward_internal_backtest",
+    )
+    repository.save_backtest_run(standalone_run)
+    repository.save_backtest_run(internal_run)
+    repository.save_backtest_result(
+        BacktestResult(
+            result_id="backtest-result:blocker",
+            backtest_id=standalone_run.backtest_id,
+            created_at=standalone_run.created_at,
+            symbol="BTC-USD",
+            start=standalone_run.start,
+            end=standalone_run.end,
+            initial_cash=10_000,
+            final_equity=9_500,
+            strategy_return=-0.05,
+            benchmark_return=0.01,
+            max_drawdown=0.07,
+            sharpe=-1.0,
+            turnover=0.5,
+            win_rate=0.25,
+            trade_count=4,
+            equity_curve=[],
+            decision_basis="standalone blocker evidence",
+        )
+    )
+    repository.save_backtest_result(
+        BacktestResult(
+            result_id="backtest-result:walk-forward-internal",
+            backtest_id=internal_run.backtest_id,
+            created_at=internal_run.created_at,
+            symbol="BTC-USD",
+            start=internal_run.start,
+            end=internal_run.end,
+            initial_cash=10_000,
+            final_equity=10_100,
+            strategy_return=0.01,
+            benchmark_return=0.0,
+            max_drawdown=0.02,
+            sharpe=0.4,
+            turnover=0.9,
+            win_rate=0.55,
+            trade_count=8,
+            equity_curve=[],
+            decision_basis="walk-forward internal result",
+        )
+    )
+
+    snapshot = build_operator_console_snapshot(tmp_path, symbol="BTC-USD", now=now)
+
+    assert snapshot.latest_backtest is not None
+    assert snapshot.latest_backtest.result_id == "backtest-result:blocker"
 
 
 def test_research_page_uses_autopilot_linked_chain_instead_of_latest_symbol_artifacts(tmp_path):

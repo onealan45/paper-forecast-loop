@@ -70,13 +70,22 @@ def _evidence_by_id_or_fallback(
 ):
     evidence_ids = [item for item in digest.evidence_artifact_ids if item.startswith(prefix)]
     if evidence_ids:
-        return _by_id(items, id_field, set(evidence_ids), digest.symbol)
+        return _by_id(items, id_field, set(evidence_ids), digest)
     return fallback()
 
 
-def _by_id(items: list, id_field: str, evidence_ids: set[str], symbol: str):
+def _by_id(
+    items: list,
+    id_field: str,
+    evidence_ids: set[str],
+    digest: StrategyResearchDigest,
+):
     for item in items:
-        if getattr(item, id_field, None) in evidence_ids and getattr(item, "symbol", None) == symbol:
+        if (
+            getattr(item, id_field, None) in evidence_ids
+            and getattr(item, "symbol", None) == digest.symbol
+            and getattr(item, "created_at", digest.created_at) <= digest.created_at
+        ):
             return item
     return None
 

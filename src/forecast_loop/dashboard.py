@@ -186,6 +186,21 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
     dashboard_strategy_decisions = [item for item in strategy_decisions if item.symbol == dashboard_symbol]
     dashboard_baseline_evaluations = [item for item in baseline_evaluations if item.symbol == dashboard_symbol]
     dashboard_risk_snapshots = [item for item in risk_snapshots if item.symbol == dashboard_symbol]
+    dashboard_provider_runs = [item for item in provider_runs if item.symbol == dashboard_symbol]
+    if dashboard_forecast_ids:
+        dashboard_replay_summaries = [
+            item
+            for item in replay_summaries
+            if set(item.forecast_ids).intersection(dashboard_forecast_ids)
+            or set(item.scored_forecast_ids).intersection(dashboard_forecast_ids)
+        ]
+        replay_summary_forced_historical = False
+        if not dashboard_replay_summaries:
+            dashboard_replay_summaries = replay_summaries
+            replay_summary_forced_historical = bool(replay_summaries)
+    else:
+        dashboard_replay_summaries = replay_summaries
+        replay_summary_forced_historical = False
     strategy_cards = [item for item in repository.load_strategy_cards() if dashboard_symbol in item.symbols]
     experiment_trials = [item for item in repository.load_experiment_trials() if item.symbol == dashboard_symbol]
     all_locked_evaluations = repository.load_locked_evaluation_results()
@@ -223,13 +238,14 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
     )
     latest_review = _latest(dashboard_reviews)
     latest_proposal = _latest_proposal_for_review(proposals, latest_review)
-    latest_replay_summary = replay_summaries[-1] if replay_summaries else None
+    latest_replay_summary = _latest(dashboard_replay_summaries, field="generated_at")
     hourly_state = _load_automation_state("hourly-paper-forecast")
     building_state = _load_automation_state("loop-building-heartbeat")
     current_mode, mode_reason = _derive_mode(hourly_state.status, building_state.status)
     replay_freshness_label, replay_generated_at, replay_is_stale = _derive_replay_freshness(
         latest_replay_summary,
         latest_forecast,
+        forced_historical=replay_summary_forced_historical,
     )
     health_result = run_health_check(
         storage_dir=storage_dir,
@@ -386,7 +402,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         paper_fills=paper_fills,
         latest_broker_reconciliation=broker_reconciliations[-1] if broker_reconciliations else None,
         latest_execution_safety_gate=execution_safety_gates[-1] if execution_safety_gates else None,
-        latest_provider_run=provider_runs[-1] if provider_runs else None,
+        latest_provider_run=_latest(dashboard_provider_runs),
         latest_replay_summary=latest_replay_summary,
         forecast_count=len(forecasts),
         score_count=len(scores),
@@ -2360,9 +2376,13 @@ def _derive_mode(hourly_status: str, building_status: str) -> tuple[str, str]:
 def _derive_replay_freshness(
     summary: EvaluationSummary | None,
     latest_forecast: Forecast | None,
+    *,
+    forced_historical: bool = False,
 ) -> tuple[str, datetime | None, bool]:
     if summary is None:
         return "No replay summary yet", None, False
+    if forced_historical:
+        return "Replay is historical (fallback outside active forecast evidence)", summary.generated_at, True
     if latest_forecast is None or summary.anchor_time_end is None:
         return "Historical replay available", summary.generated_at, False
     delta = latest_forecast.anchor_time - summary.anchor_time_end
@@ -2684,6 +2704,8 @@ def _display_replay_freshness(label: str) -> str:
         if detail.endswith("h behind latest forecast"):
             hours = detail.removesuffix("h behind latest forecast").strip()
             detail = f"落後最新預測 {hours} 小時"
+        elif detail == "fallback outside active forecast evidence":
+            detail = "未連到目前 active forecast evidence"
         return f"replay 僅供歷史脈絡參考（{detail}）"
     return label
 

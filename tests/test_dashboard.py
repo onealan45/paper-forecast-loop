@@ -15,8 +15,8 @@ from forecast_loop.models import (
     BaselineEvaluation,
     BrokerOrder,
     BrokerReconciliation,
+    EvaluationSummary,
     EventEdgeEvaluation,
-    SplitManifest,
     ExecutionSafetyGate,
     ExperimentTrial,
     Forecast,
@@ -28,12 +28,14 @@ from forecast_loop.models import (
     PaperPortfolioSnapshot,
     PaperPosition,
     PaperShadowOutcome,
+    ProviderRun,
     Proposal,
     ResearchAgenda,
     ResearchAutopilotRun,
     ResearchDataset,
     Review,
     RiskSnapshot,
+    SplitManifest,
     StrategyCard,
     StrategyDecision,
     StrategyResearchDigest,
@@ -1348,6 +1350,7 @@ def test_render_dashboard_marks_stale_replay_context(tmp_path):
         observed_candle_count=2,
     )
     repository.save_forecast(latest_forecast)
+    repository.save_forecast(replay_forecast)
     summary = build_evaluation_summary(
         replay_id="replay:btc",
         generated_at=datetime(2026, 4, 22, 18, 40, tzinfo=UTC),
@@ -1797,6 +1800,224 @@ def test_dashboard_symbol_fallback_uses_latest_decision_created_at_not_file_tail
     assert snapshot.latest_forecast is None
     assert snapshot.latest_strategy_decision is not None
     assert snapshot.latest_strategy_decision.decision_id == "decision:spy-current-time"
+
+
+def test_dashboard_replay_summary_is_scoped_to_active_forecast_and_generated_at(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 4, 0, tzinfo=UTC)
+    spy_forecast = Forecast(
+        forecast_id="forecast:replay-spy",
+        symbol="SPY",
+        created_at=now,
+        anchor_time=now,
+        target_window_start=now,
+        target_window_end=now + timedelta(hours=24),
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        status="resolved",
+        status_reason="scored",
+        predicted_regime="trend_down",
+        confidence=0.62,
+        provider_data_through=now + timedelta(hours=24),
+        observed_candle_count=25,
+    )
+    spy_current_summary = EvaluationSummary(
+        summary_id="summary:spy-current",
+        replay_id="replay:spy-current",
+        generated_at=now + timedelta(minutes=5),
+        forecast_ids=[spy_forecast.forecast_id],
+        scored_forecast_ids=[spy_forecast.forecast_id],
+        replay_window_start=now,
+        replay_window_end=now + timedelta(hours=24),
+        anchor_time_start=now,
+        anchor_time_end=now,
+        forecast_count=1,
+        resolved_count=1,
+        waiting_for_data_count=0,
+        unscorable_count=0,
+        average_score=1.0,
+        score_ids=["score:spy"],
+        review_ids=["review:spy"],
+        proposal_ids=[],
+    )
+    spy_old_tail_summary = EvaluationSummary(
+        summary_id="summary:spy-old-tail",
+        replay_id="replay:spy-old-tail",
+        generated_at=now - timedelta(hours=2),
+        forecast_ids=[spy_forecast.forecast_id],
+        scored_forecast_ids=[spy_forecast.forecast_id],
+        replay_window_start=now,
+        replay_window_end=now + timedelta(hours=24),
+        anchor_time_start=now,
+        anchor_time_end=now,
+        forecast_count=1,
+        resolved_count=1,
+        waiting_for_data_count=0,
+        unscorable_count=0,
+        average_score=0.0,
+        score_ids=["score:spy-old"],
+        review_ids=["review:spy-old"],
+        proposal_ids=[],
+    )
+    btc_newer_tail_summary = EvaluationSummary(
+        summary_id="summary:btc-newer-tail",
+        replay_id="replay:btc-newer-tail",
+        generated_at=now + timedelta(minutes=10),
+        forecast_ids=["forecast:btc-other"],
+        scored_forecast_ids=["forecast:btc-other"],
+        replay_window_start=now,
+        replay_window_end=now + timedelta(hours=24),
+        anchor_time_start=now,
+        anchor_time_end=now,
+        forecast_count=1,
+        resolved_count=1,
+        waiting_for_data_count=0,
+        unscorable_count=0,
+        average_score=0.0,
+        score_ids=["score:btc"],
+        review_ids=["review:btc"],
+        proposal_ids=[],
+    )
+    repository.save_forecast(spy_forecast)
+    repository.save_evaluation_summary(spy_current_summary)
+    repository.save_evaluation_summary(spy_old_tail_summary)
+    repository.save_evaluation_summary(btc_newer_tail_summary)
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+
+    assert snapshot.latest_replay_summary is not None
+    assert snapshot.latest_replay_summary.replay_id == "replay:spy-current"
+
+
+def test_dashboard_provider_run_is_scoped_to_symbol_and_created_at(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 4, 0, tzinfo=UTC)
+    spy_forecast = Forecast(
+        forecast_id="forecast:provider-spy",
+        symbol="SPY",
+        created_at=now,
+        anchor_time=now,
+        target_window_start=now,
+        target_window_end=now + timedelta(hours=24),
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        status="pending",
+        status_reason="awaiting_horizon_end",
+        predicted_regime="trend_down",
+        confidence=0.62,
+        provider_data_through=now,
+        observed_candle_count=1,
+    )
+    spy_current_run = ProviderRun(
+        provider_run_id="provider-run:spy-current",
+        created_at=now,
+        provider="sample",
+        symbol="SPY",
+        operation="get_recent_candles",
+        status="success",
+        started_at=now,
+        completed_at=now + timedelta(seconds=1),
+        candle_count=25,
+        data_start=now - timedelta(hours=24),
+        data_end=now,
+        schema_version="test-v1",
+    )
+    btc_newer_run = ProviderRun(
+        provider_run_id="provider-run:btc-newer",
+        created_at=now + timedelta(minutes=10),
+        provider="sample",
+        symbol="BTC-USD",
+        operation="get_recent_candles",
+        status="error",
+        started_at=now + timedelta(minutes=10),
+        completed_at=now + timedelta(minutes=10, seconds=1),
+        candle_count=0,
+        data_start=None,
+        data_end=None,
+        schema_version="test-v1",
+        error_type="cross_symbol",
+        error_message="BTC provider run should not appear on SPY dashboard.",
+    )
+    spy_old_tail_run = ProviderRun(
+        provider_run_id="provider-run:spy-old-tail",
+        created_at=now - timedelta(hours=2),
+        provider="sample",
+        symbol="SPY",
+        operation="get_recent_candles",
+        status="empty",
+        started_at=now - timedelta(hours=2),
+        completed_at=now - timedelta(hours=2, seconds=-1),
+        candle_count=0,
+        data_start=None,
+        data_end=None,
+        schema_version="test-v1",
+        error_type="old_tail",
+        error_message="Old SPY provider run should not win by file order.",
+    )
+    repository.save_forecast(spy_forecast)
+    repository.save_provider_run(spy_current_run)
+    repository.save_provider_run(btc_newer_run)
+    repository.save_provider_run(spy_old_tail_run)
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+
+    assert snapshot.latest_provider_run is not None
+    assert snapshot.latest_provider_run.provider_run_id == "provider-run:spy-current"
+
+
+def test_dashboard_unmatched_replay_fallback_is_marked_historical(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 4, 0, tzinfo=UTC)
+    spy_forecast = Forecast(
+        forecast_id="forecast:replay-unmatched-spy",
+        symbol="SPY",
+        created_at=now,
+        anchor_time=now,
+        target_window_start=now,
+        target_window_end=now + timedelta(hours=24),
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        status="pending",
+        status_reason="awaiting_horizon_end",
+        predicted_regime="trend_down",
+        confidence=0.62,
+        provider_data_through=now,
+        observed_candle_count=1,
+    )
+    unmatched_summary = EvaluationSummary(
+        summary_id="summary:unmatched-btc",
+        replay_id="replay:unmatched-btc",
+        generated_at=now,
+        forecast_ids=["forecast:btc-unmatched"],
+        scored_forecast_ids=["forecast:btc-unmatched"],
+        replay_window_start=now,
+        replay_window_end=now + timedelta(hours=24),
+        anchor_time_start=now,
+        anchor_time_end=now,
+        forecast_count=1,
+        resolved_count=1,
+        waiting_for_data_count=0,
+        unscorable_count=0,
+        average_score=1.0,
+        score_ids=["score:btc-unmatched"],
+        review_ids=[],
+        proposal_ids=[],
+    )
+    repository.save_forecast(spy_forecast)
+    repository.save_evaluation_summary(unmatched_summary)
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+
+    assert snapshot.latest_replay_summary is not None
+    assert snapshot.latest_replay_summary.replay_id == "replay:unmatched-btc"
+    assert snapshot.replay_is_stale is True
+    assert snapshot.replay_freshness_label == "Replay is historical (fallback outside active forecast evidence)"
 
 
 def test_dashboard_baseline_evaluation_uses_latest_created_at_not_file_tail(tmp_path):

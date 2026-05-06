@@ -13,12 +13,18 @@ from forecast_loop.models import (
     BacktestResult,
     EventEdgeEvaluation,
     EvaluationSummary,
+    ExperimentTrial,
     Forecast,
     ForecastScore,
+    LeaderboardEntry,
     PaperPosition,
     PaperPortfolioSnapshot,
+    PaperShadowOutcome,
+    ResearchAgenda,
+    ResearchAutopilotRun,
     Review,
     RiskSnapshot,
+    StrategyCard,
     StrategyDecision,
     StrategyResearchDigest,
     WalkForwardValidation,
@@ -236,6 +242,165 @@ def _strategy_research_digest(
         decision_research_blockers=["missing research evidence"] if decision_research_artifact_ids else [],
         decision_research_artifact_ids=decision_research_artifact_ids or [],
         decision_reason_summary="test decision reason" if decision_id else None,
+    )
+
+
+def _strategy_card(card_id: str, *, now: datetime, symbols: list[str]) -> StrategyCard:
+    return StrategyCard(
+        card_id=card_id,
+        created_at=now,
+        strategy_name="test strategy",
+        strategy_family="test",
+        version="v1",
+        status="DRAFT",
+        symbols=symbols,
+        hypothesis="test hypothesis",
+        signal_description="test signal",
+        entry_rules=[],
+        exit_rules=[],
+        risk_rules=[],
+        parameters={},
+        data_requirements=[],
+        feature_snapshot_ids=[],
+        backtest_result_ids=[],
+        walk_forward_validation_ids=[],
+        event_edge_evaluation_ids=[],
+        parent_card_id=None,
+        author="codex",
+        decision_basis="test",
+    )
+
+
+def _experiment_trial(trial_id: str, *, now: datetime, symbol: str, strategy_card_id: str) -> ExperimentTrial:
+    return ExperimentTrial(
+        trial_id=trial_id,
+        created_at=now,
+        strategy_card_id=strategy_card_id,
+        trial_index=1,
+        status="PENDING",
+        symbol=symbol,
+        seed=None,
+        dataset_id=None,
+        backtest_result_id=None,
+        walk_forward_validation_id=None,
+        event_edge_evaluation_id=None,
+        prompt_hash=None,
+        code_hash=None,
+        parameters={},
+        metric_summary={},
+        failure_reason=None,
+        started_at=now,
+        completed_at=None,
+        decision_basis="test",
+    )
+
+
+def _leaderboard_entry(
+    entry_id: str,
+    *,
+    now: datetime,
+    symbol: str,
+    strategy_card_id: str,
+    trial_id: str,
+    evaluation_id: str = "locked-evaluation:missing",
+) -> LeaderboardEntry:
+    return LeaderboardEntry(
+        entry_id=entry_id,
+        created_at=now,
+        strategy_card_id=strategy_card_id,
+        evaluation_id=evaluation_id,
+        trial_id=trial_id,
+        symbol=symbol,
+        rankable=False,
+        alpha_score=None,
+        promotion_stage="BLOCKED",
+        blocked_reasons=[],
+        leaderboard_rules_version="test",
+        decision_basis="test",
+    )
+
+
+def _paper_shadow_outcome(
+    outcome_id: str,
+    *,
+    now: datetime,
+    symbol: str,
+    strategy_card_id: str,
+    trial_id: str,
+    leaderboard_entry_id: str,
+    evaluation_id: str = "locked-evaluation:missing",
+) -> PaperShadowOutcome:
+    return PaperShadowOutcome(
+        outcome_id=outcome_id,
+        created_at=now,
+        leaderboard_entry_id=leaderboard_entry_id,
+        evaluation_id=evaluation_id,
+        strategy_card_id=strategy_card_id,
+        trial_id=trial_id,
+        symbol=symbol,
+        window_start=now,
+        window_end=now + timedelta(hours=1),
+        observed_return=None,
+        benchmark_return=None,
+        excess_return_after_costs=None,
+        max_adverse_excursion=None,
+        turnover=None,
+        outcome_grade="INSUFFICIENT",
+        failure_attributions=[],
+        recommended_promotion_stage="PAPER_SHADOW_PENDING",
+        recommended_strategy_action="CONTINUE_SHADOW",
+        blocked_reasons=[],
+        notes=[],
+        decision_basis="test",
+    )
+
+
+def _research_agenda(agenda_id: str, *, now: datetime, symbol: str) -> ResearchAgenda:
+    return ResearchAgenda(
+        agenda_id=agenda_id,
+        created_at=now,
+        symbol=symbol,
+        title="test agenda",
+        hypothesis="test hypothesis",
+        priority="MEDIUM",
+        status="OPEN",
+        target_strategy_family="test",
+        strategy_card_ids=[],
+        expected_artifacts=[],
+        acceptance_criteria=[],
+        blocked_actions=[],
+        decision_basis="test",
+    )
+
+
+def _research_autopilot_run(
+    run_id: str,
+    *,
+    now: datetime,
+    symbol: str,
+    agenda_id: str,
+    strategy_card_id: str,
+    trial_id: str,
+    leaderboard_entry_id: str,
+    paper_shadow_outcome_id: str,
+    locked_evaluation_id: str = "locked-evaluation:missing",
+) -> ResearchAutopilotRun:
+    return ResearchAutopilotRun(
+        run_id=run_id,
+        created_at=now,
+        symbol=symbol,
+        agenda_id=agenda_id,
+        strategy_card_id=strategy_card_id,
+        experiment_trial_id=trial_id,
+        locked_evaluation_id=locked_evaluation_id,
+        leaderboard_entry_id=leaderboard_entry_id,
+        strategy_decision_id=None,
+        paper_shadow_outcome_id=paper_shadow_outcome_id,
+        steps=[],
+        loop_status="BLOCKED",
+        next_research_action="REPAIR_EVIDENCE_CHAIN",
+        blocked_reasons=[],
+        decision_basis="test",
     )
 
 
@@ -855,6 +1020,10 @@ def test_health_check_allows_strategy_research_digest_persisted_research_evidenc
         "strategy_research_digest_missing_backtest_result",
         "strategy_research_digest_missing_walk_forward",
         "strategy_research_digest_missing_event_edge",
+        "strategy_research_digest_symbol_mismatch_decision",
+        "strategy_research_digest_symbol_mismatch_backtest_result",
+        "strategy_research_digest_symbol_mismatch_walk_forward",
+        "strategy_research_digest_symbol_mismatch_event_edge",
     }
 
 
@@ -890,6 +1059,106 @@ def test_health_check_scopes_strategy_research_digest_link_gate_to_latest_symbol
         "strategy_research_digest_missing_experiment_trial",
         "strategy_research_digest_missing_research_autopilot_run",
     }
+
+
+def test_health_check_detects_latest_strategy_research_digest_symbol_mismatches(tmp_path):
+    storage = tmp_path / "storage"
+    repository = JsonFileRepository(storage)
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    forecast = _forecast("forecast:valid", anchor_time=now, status="pending")
+    repository.save_forecast(forecast)
+
+    eth_decision = _decision("decision:eth", now=now, forecast_id=forecast.forecast_id, decision_basis="test")
+    eth_decision.symbol = "ETH-USD"
+    eth_backtest = _backtest_result(now, result_id="backtest-result:eth")
+    eth_backtest.symbol = "ETH-USD"
+    eth_walk_forward = _walk_forward_validation(now, validation_id="walk-forward:eth")
+    eth_walk_forward.symbol = "ETH-USD"
+    eth_event_edge = _event_edge_evaluation(now, evaluation_id="event-edge:eth")
+    eth_event_edge.symbol = "ETH-USD"
+
+    repository.save_strategy_decision(eth_decision)
+    repository.save_backtest_result(eth_backtest)
+    repository.save_walk_forward_validation(eth_walk_forward)
+    repository.save_event_edge_evaluation(eth_event_edge)
+    repository.save_strategy_card(_strategy_card("strategy-card:eth", now=now, symbols=["ETH-USD"]))
+    repository.save_experiment_trial(
+        _experiment_trial("experiment-trial:eth", now=now, symbol="ETH-USD", strategy_card_id="strategy-card:eth")
+    )
+    repository.save_leaderboard_entry(
+        _leaderboard_entry(
+            "leaderboard-entry:eth",
+            now=now,
+            symbol="ETH-USD",
+            strategy_card_id="strategy-card:eth",
+            trial_id="experiment-trial:eth",
+        )
+    )
+    repository.save_paper_shadow_outcome(
+        _paper_shadow_outcome(
+            "paper-shadow-outcome:eth",
+            now=now,
+            symbol="ETH-USD",
+            strategy_card_id="strategy-card:eth",
+            trial_id="experiment-trial:eth",
+            leaderboard_entry_id="leaderboard-entry:eth",
+        )
+    )
+    repository.save_research_agenda(_research_agenda("research-agenda:eth", now=now, symbol="ETH-USD"))
+    repository.save_research_autopilot_run(
+        _research_autopilot_run(
+            "research-autopilot-run:eth",
+            now=now,
+            symbol="ETH-USD",
+            agenda_id="research-agenda:eth",
+            strategy_card_id="strategy-card:eth",
+            trial_id="experiment-trial:eth",
+            leaderboard_entry_id="leaderboard-entry:eth",
+            paper_shadow_outcome_id="paper-shadow-outcome:eth",
+        )
+    )
+    repository.save_strategy_research_digest(
+        _strategy_research_digest(
+            now,
+            digest_id="strategy-research-digest:btc-links-eth",
+            strategy_card_id="strategy-card:eth",
+            paper_shadow_outcome_id="paper-shadow-outcome:eth",
+            autopilot_run_id="research-autopilot-run:eth",
+            evidence_artifact_ids=[
+                "decision:eth",
+                "strategy-card:eth",
+                "paper-shadow-outcome:eth",
+                "research-autopilot-run:eth",
+                "backtest-result:eth",
+                "walk-forward:eth",
+                "event-edge:eth",
+                "leaderboard-entry:eth",
+                "experiment-trial:eth",
+                "research-agenda:eth",
+            ],
+            decision_id="decision:eth",
+            decision_research_artifact_ids=[
+                "backtest-result:eth",
+                "walk-forward:eth",
+                "event-edge:eth",
+            ],
+        )
+    )
+
+    result = run_health_check(storage_dir=storage, symbol="BTC-USD", now=now, create_repair_request=False)
+    codes = {finding.code for finding in result.findings}
+
+    assert "strategy_research_digest_symbol_mismatch_strategy_card" in codes
+    assert "strategy_research_digest_symbol_mismatch_paper_shadow_outcome" in codes
+    assert "strategy_research_digest_symbol_mismatch_research_autopilot_run" in codes
+    assert "strategy_research_digest_symbol_mismatch_decision" in codes
+    assert "strategy_research_digest_symbol_mismatch_backtest_result" in codes
+    assert "strategy_research_digest_symbol_mismatch_walk_forward" in codes
+    assert "strategy_research_digest_symbol_mismatch_event_edge" in codes
+    assert "strategy_research_digest_symbol_mismatch_leaderboard_entry" in codes
+    assert "strategy_research_digest_symbol_mismatch_experiment_trial" in codes
+    assert "strategy_research_digest_symbol_mismatch_research_agenda" in codes
+    assert result.repair_required is True
 
 
 def test_health_check_detects_non_replay_evaluation_summary_broken_links(tmp_path, monkeypatch):

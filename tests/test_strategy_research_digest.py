@@ -488,6 +488,10 @@ def test_strategy_research_digest_records_decision_blocker_research_artifact_ids
         "walk-forward:blocker-current",
     ]
     assert "decision:digest-blocker-evidence" in digest.evidence_artifact_ids
+    assert "決策阻擋研究仍未通過" in digest.next_step_rationale
+    assert "event edge 未通過、backtest 未打贏 benchmark" in digest.next_step_rationale
+    assert "已連結 3 個 blocker evidence" in digest.next_step_rationale
+    assert "不是只等待 paper-shadow" in digest.next_step_rationale
 
 
 def test_strategy_research_digest_does_not_use_decision_blocker_event_edge_as_strategy_metric(

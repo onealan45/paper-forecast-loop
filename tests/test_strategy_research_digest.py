@@ -562,6 +562,81 @@ def test_strategy_research_digest_does_not_fallback_to_unlinked_event_edge(tmp_p
     assert "Event edge：" not in digest.research_summary
 
 
+def test_strategy_research_digest_does_not_use_decision_blocker_backtest_or_walk_forward_as_strategy_metric(
+    tmp_path,
+):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+    _seed_strategy_research_chain(repository, now)
+    blocker_backtest = _digest_backtest(
+        now + timedelta(minutes=21),
+        result_id="backtest-result:blocker-current",
+        strategy_return=-0.0777,
+        benchmark_return=0.0111,
+    )
+    repository.save_backtest_run(
+        _digest_backtest_run(
+            now + timedelta(minutes=21),
+            backtest_id=blocker_backtest.backtest_id,
+            id_context="decision_blocker_research:run_backtest:backtest_result",
+        )
+    )
+    repository.save_backtest_result(blocker_backtest)
+    repository.save_walk_forward_validation(
+        _digest_walk_forward(
+            now + timedelta(minutes=22),
+            validation_id="walk-forward:blocker-current",
+            average_excess_return=-0.0066,
+        )
+    )
+    repository.save_strategy_decision(
+        StrategyDecision(
+            decision_id="decision:digest-blocker-metrics",
+            created_at=now + timedelta(minutes=23),
+            symbol="BTC-USD",
+            horizon_hours=24,
+            action="HOLD",
+            confidence=0.51,
+            evidence_grade="D",
+            risk_level="MEDIUM",
+            tradeable=False,
+            blocked_reason="model_not_beating_baseline",
+            recommended_position_pct=0.0,
+            current_position_pct=0.0,
+            max_position_pct=0.15,
+            invalidation_conditions=["補齊 decision-blocker research evidence。"],
+            reason_summary=(
+                "模型證據沒有打贏 baseline。 "
+                "主要研究阻擋：backtest 未打贏 benchmark、walk-forward 超額報酬不為正。"
+            ),
+            forecast_ids=["forecast:digest"],
+            score_ids=["score:digest"],
+            review_ids=["review:digest"],
+            baseline_ids=["baseline:digest"],
+            decision_basis=(
+                "backtest_result=backtest-result:blocker-current; "
+                "walk_forward=walk-forward:blocker-current; "
+                "flags=research_backtest_not_beating_benchmark,research_walk_forward_excess_return_not_positive"
+            ),
+        )
+    )
+
+    digest = record_strategy_research_digest(
+        repository=repository,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=30),
+    )
+
+    assert digest.decision_research_artifact_ids == [
+        "backtest-result:blocker-current",
+        "walk-forward:blocker-current",
+    ]
+    assert "backtest-result:blocker-current" not in digest.evidence_artifact_ids
+    assert "walk-forward:blocker-current" not in digest.evidence_artifact_ids
+    assert "Backtest（背景參考）：策略 -7.77%" not in digest.research_summary
+    assert "Walk-forward（背景參考）：excess -0.66%" not in digest.research_summary
+
+
 def test_strategy_research_digest_does_not_label_tradeable_buy_evidence_as_blocker_research(
     tmp_path,
 ):
@@ -690,13 +765,13 @@ def test_strategy_research_digest_surfaces_latest_backtest_and_walk_forward_metr
     )
 
     assert "event-edge:digest-latest" not in digest.evidence_artifact_ids
-    assert "backtest-result:digest-latest" in digest.evidence_artifact_ids
-    assert "walk-forward:digest-latest" in digest.evidence_artifact_ids
+    assert "backtest-result:digest-latest" not in digest.evidence_artifact_ids
+    assert "walk-forward:digest-latest" not in digest.evidence_artifact_ids
     assert "event-edge:digest-stale" not in digest.evidence_artifact_ids
     assert "event-edge:eth" not in digest.evidence_artifact_ids
     assert "Event edge：" not in digest.research_summary
-    assert "Backtest：策略 -8.72%，benchmark +1.02%" in digest.research_summary
-    assert "Walk-forward：excess -0.09%，windows 176" in digest.research_summary
+    assert "Backtest（背景參考）：策略 -8.72%，benchmark +1.02%" in digest.research_summary
+    assert "Walk-forward（背景參考）：excess -0.09%，windows 176" in digest.research_summary
     assert "aggregate_underperforms_benchmark" in digest.research_summary
 
 
@@ -742,10 +817,10 @@ def test_strategy_research_digest_prefers_decision_blocker_backtest_over_newer_w
         created_at=now + timedelta(minutes=32),
     )
 
-    assert "backtest-result:digest-blocker-standalone" in digest.evidence_artifact_ids
+    assert "backtest-result:digest-blocker-standalone" not in digest.evidence_artifact_ids
     assert "backtest-result:digest-walk-forward-internal" not in digest.evidence_artifact_ids
-    assert "Backtest：策略 +2.00%，benchmark +1.00%" in digest.research_summary
-    assert "Backtest：策略 -3.00%" not in digest.research_summary
+    assert "Backtest（背景參考）：策略 +2.00%，benchmark +1.00%" in digest.research_summary
+    assert "Backtest（背景參考）：策略 -3.00%" not in digest.research_summary
 
 
 def test_strategy_research_digest_is_point_in_time_for_chain_decision_and_evidence(tmp_path):

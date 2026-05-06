@@ -1348,6 +1348,8 @@ def test_dashboard_surfaces_strategy_research_digest_summary(tmp_path):
     assert "<code>event-edge:dashboard-visible</code>" in metric_section
     assert "<code>backtest-result:dashboard-visible</code>" in metric_section
     assert "<code>walk-forward:dashboard-visible</code>" in metric_section
+    assert "來源：直接連結" in metric_section
+    assert "背景參考" not in metric_section
     decision_evidence_section = html[
         html.index("<dt>決策阻擋研究證據</dt>", digest_start) : html.index(
             "<dt>證據</dt>",

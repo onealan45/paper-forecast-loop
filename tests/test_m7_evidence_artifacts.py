@@ -8,6 +8,9 @@ from forecast_loop.models import (
     EventEdgeEvaluation,
     EventReliabilityCheck,
     FeatureSnapshot,
+    Forecast,
+    MarketCandle,
+    MarketCandleRecord,
     MarketReactionCheck,
     SourceDocument,
     SourceIngestionRun,
@@ -66,6 +69,64 @@ def _canonical_event(now: datetime) -> CanonicalEvent:
         official_source_flag=True,
         duplicate_group_id="duplicate-group:cpi",
         status="reliable",
+    )
+
+
+def _forecast(now: datetime) -> Forecast:
+    return Forecast(
+        forecast_id="forecast:latest",
+        symbol="BTC-USD",
+        created_at=now,
+        anchor_time=now,
+        target_window_start=now,
+        target_window_end=now + timedelta(hours=24),
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        status="pending",
+        status_reason="awaiting_horizon_end",
+        predicted_regime="trend_up",
+        confidence=0.55,
+        provider_data_through=now,
+        observed_candle_count=0,
+    )
+
+
+def _market_reaction(event: CanonicalEvent, now: datetime) -> MarketReactionCheck:
+    return MarketReactionCheck(
+        check_id="market-reaction:official-cpi",
+        event_id=event.event_id,
+        symbol=event.symbol,
+        created_at=now,
+        decision_timestamp=now,
+        event_timestamp_used=event.available_at or event.fetched_at,
+        pre_event_ret_1h=0.001,
+        pre_event_ret_4h=0.002,
+        pre_event_ret_24h=0.003,
+        post_event_ret_15m=None,
+        post_event_ret_1h=0.004,
+        pre_event_drift_z=0.2,
+        volume_shock_z=0.1,
+        priced_in_ratio=0.25,
+        already_priced=False,
+        passed=True,
+        blocked_reason=None,
+        flags=[],
+    )
+
+
+def _market_candle(now: datetime) -> MarketCandleRecord:
+    return MarketCandleRecord.from_candle(
+        MarketCandle(
+            timestamp=now - timedelta(hours=1),
+            open=100.0,
+            high=101.0,
+            low=99.0,
+            close=100.5,
+            volume=1_000.0,
+        ),
+        symbol="BTC-USD",
+        source="fixture",
+        imported_at=now,
     )
 
 
@@ -181,6 +242,101 @@ def test_json_repository_round_trips_m7_evidence_artifacts(tmp_path):
     assert repository.load_event_edge_evaluations() == [edge]
     assert repository.load_feature_snapshots() == [feature]
     assert repository.load_source_ingestion_runs() == [ingestion_run]
+
+
+def test_health_check_detects_event_edge_manifest_missing_inputs(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    now = _now()
+    event = _canonical_event(now)
+    reaction = _market_reaction(event, now)
+    candle = _market_candle(now)
+    repository.save_forecast(_forecast(now))
+    repository.save_source_document(_source_document(now))
+    repository.save_canonical_event(event)
+    repository.save_market_reaction_check(reaction)
+    repository.save_market_candle(candle)
+    repository.save_event_edge_evaluation(
+        EventEdgeEvaluation(
+            evaluation_id="event-edge:manifest-corrupt",
+            event_family=event.event_family,
+            event_type=event.event_type,
+            symbol=event.symbol,
+            created_at=now,
+            split="validation",
+            horizon_hours=24,
+            sample_n=3,
+            average_forward_return=0.02,
+            average_benchmark_return=0.01,
+            average_excess_return_after_costs=0.008,
+            hit_rate=0.57,
+            max_adverse_excursion_p50=-0.01,
+            max_adverse_excursion_p90=-0.03,
+            max_drawdown_if_traded=-0.08,
+            turnover=1.2,
+            estimated_cost_bps=10.0,
+            dsr=None,
+            white_rc_p=None,
+            stability_score=0.7,
+            passed=True,
+            blocked_reason=None,
+            flags=[],
+            input_event_ids=[event.event_id, "canonical-event:missing"],
+            input_reaction_check_ids=[reaction.check_id, "market-reaction:missing"],
+            input_candle_ids=[candle.candle_id, "market-candle:missing"],
+            input_watermark=now,
+        )
+    )
+
+    health = run_health_check(storage_dir=tmp_path, symbol="BTC-USD", now=now, create_repair_request=False)
+    codes = {finding.code for finding in health.findings}
+
+    assert "event_edge_missing_event" in codes
+    assert "event_edge_missing_market_reaction" in codes
+    assert "event_edge_missing_candle" in codes
+    assert health.status == "unhealthy"
+    assert health.repair_required is True
+
+
+def test_health_check_allows_legacy_event_edge_without_manifest(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    now = _now()
+    repository.save_forecast(_forecast(now))
+    repository.save_event_edge_evaluation(
+        EventEdgeEvaluation(
+            evaluation_id="event-edge:legacy-no-manifest",
+            event_family="macro_inflation",
+            event_type="CPI",
+            symbol="BTC-USD",
+            created_at=now,
+            split="validation",
+            horizon_hours=24,
+            sample_n=3,
+            average_forward_return=0.02,
+            average_benchmark_return=0.01,
+            average_excess_return_after_costs=0.008,
+            hit_rate=0.57,
+            max_adverse_excursion_p50=-0.01,
+            max_adverse_excursion_p90=-0.03,
+            max_drawdown_if_traded=-0.08,
+            turnover=1.2,
+            estimated_cost_bps=10.0,
+            dsr=None,
+            white_rc_p=None,
+            stability_score=0.7,
+            passed=True,
+            blocked_reason=None,
+            flags=[],
+        )
+    )
+
+    health = run_health_check(storage_dir=tmp_path, symbol="BTC-USD", now=now, create_repair_request=False)
+
+    assert not {finding.code for finding in health.findings} & {
+        "event_edge_missing_event",
+        "event_edge_missing_market_reaction",
+        "event_edge_missing_candle",
+    }
+    assert health.repair_required is False
 
 
 def test_sqlite_migration_preserves_m7_evidence_artifacts(tmp_path, capsys):

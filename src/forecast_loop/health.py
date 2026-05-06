@@ -735,6 +735,7 @@ def _check_links(
     baseline_ids = {baseline.baseline_id for baseline in baselines}
     source_document_ids = {document.document_id for document in source_documents}
     canonical_event_ids = {event.event_id for event in canonical_events}
+    market_reaction_check_ids = {check.check_id for check in market_reaction_checks}
     candle_ids = {candle.candle_id for candle in market_candles}
     backtest_run_ids = {run.backtest_id for run in backtest_runs}
     backtest_result_ids = {result.result_id for result in backtest_results}
@@ -920,6 +921,37 @@ def _check_links(
                 storage_path / "market_reaction_checks.jsonl",
                 check.check_id,
                 check.event_id,
+                findings,
+            )
+
+    for evaluation in event_edge_evaluations:
+        missing_events = [event_id for event_id in evaluation.input_event_ids if event_id not in canonical_event_ids]
+        missing_reactions = [
+            check_id for check_id in evaluation.input_reaction_check_ids if check_id not in market_reaction_check_ids
+        ]
+        missing_candles = [candle_id for candle_id in evaluation.input_candle_ids if candle_id not in candle_ids]
+        if missing_events:
+            _add_link_finding(
+                "event_edge_missing_event",
+                storage_path / "event_edge_evaluations.jsonl",
+                evaluation.evaluation_id,
+                ", ".join(missing_events),
+                findings,
+            )
+        if missing_reactions:
+            _add_link_finding(
+                "event_edge_missing_market_reaction",
+                storage_path / "event_edge_evaluations.jsonl",
+                evaluation.evaluation_id,
+                ", ".join(missing_reactions),
+                findings,
+            )
+        if missing_candles:
+            _add_link_finding(
+                "event_edge_missing_candle",
+                storage_path / "event_edge_evaluations.jsonl",
+                evaluation.evaluation_id,
+                ", ".join(missing_candles),
                 findings,
             )
 

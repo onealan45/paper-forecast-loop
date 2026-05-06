@@ -532,6 +532,14 @@ def _seed_visible_strategy_research_digest(repository: JsonFileRepository, now: 
             passed=False,
             blocked_reason="non_positive_after_cost_edge",
             flags=["non_positive_after_cost_edge", "low_hit_rate"],
+            input_event_ids=["canonical-event:visible-a", "canonical-event:visible-b"],
+            input_reaction_check_ids=["market-reaction:visible-a", "market-reaction:visible-b"],
+            input_candle_ids=[
+                "market-candle:visible-a",
+                "market-candle:visible-b",
+                "market-candle:visible-c",
+            ],
+            input_watermark=now - timedelta(hours=1),
         )
     )
     repository.save_backtest_result(
@@ -1218,6 +1226,8 @@ def test_operator_console_surfaces_strategy_research_digest_in_research_and_over
         assert "<code>backtest-result:visible-blocker</code>" in decision_evidence_section
         assert "<code>walk-forward:visible-blocker</code>" in decision_evidence_section
         assert "樣本 3" in decision_evidence_section
+        assert "輸入：事件 2；反應 2；K線 3" in decision_evidence_section
+        assert "watermark 2026-05-01T07:15:00+00:00" in decision_evidence_section
         assert "after-cost edge -2.20%" in decision_evidence_section
         assert "策略 -22.20%" in decision_evidence_section
         assert "benchmark 4.40%" in decision_evidence_section

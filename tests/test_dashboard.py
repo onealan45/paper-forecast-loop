@@ -336,6 +336,14 @@ def _seed_dashboard_strategy_research_digest(repository: JsonFileRepository, now
             passed=False,
             blocked_reason="non_positive_after_cost_edge",
             flags=["non_positive_after_cost_edge", "low_hit_rate"],
+            input_event_ids=["canonical-event:dashboard-a", "canonical-event:dashboard-b"],
+            input_reaction_check_ids=["market-reaction:dashboard-a", "market-reaction:dashboard-b"],
+            input_candle_ids=[
+                "market-candle:dashboard-a",
+                "market-candle:dashboard-b",
+                "market-candle:dashboard-c",
+            ],
+            input_watermark=now - timedelta(hours=1),
         )
     )
     repository.save_backtest_result(
@@ -1437,6 +1445,8 @@ def test_dashboard_surfaces_strategy_research_digest_summary(tmp_path):
     assert "<code>backtest-result:dashboard-blocker</code>" in decision_evidence_section
     assert "<code>walk-forward:dashboard-blocker</code>" in decision_evidence_section
     assert "樣本 3" in decision_evidence_section
+    assert "輸入：事件 2；反應 2；K線 3" in decision_evidence_section
+    assert "watermark 2026-05-01T07:15:00+00:00" in decision_evidence_section
     assert "after-cost edge -2.20%" in decision_evidence_section
     assert "策略 -22.20%" in decision_evidence_section
     assert "benchmark 4.40%" in decision_evidence_section

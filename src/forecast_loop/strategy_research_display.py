@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from forecast_loop.models import PaperShadowOutcome, ResearchAutopilotRun, StrategyCard
+from forecast_loop.models import EventEdgeEvaluation, PaperShadowOutcome, ResearchAutopilotRun, StrategyCard
 
 
 _FAILURE_ATTRIBUTION_LABELS = {
@@ -114,6 +114,19 @@ def format_strategy_card_status(status: str) -> str:
     if label is None:
         return status
     return f"{label} ({status})"
+
+
+def format_event_edge_input_manifest(edge: EventEdgeEvaluation) -> str:
+    if not (edge.input_event_ids and edge.input_reaction_check_ids and edge.input_candle_ids):
+        return ""
+    parts = [
+        f"事件 {len(edge.input_event_ids)}",
+        f"反應 {len(edge.input_reaction_check_ids)}",
+        f"K線 {len(edge.input_candle_ids)}",
+    ]
+    if edge.input_watermark is not None:
+        parts.append(f"watermark {edge.input_watermark.isoformat()}")
+    return "輸入：" + "；".join(parts)
 
 
 def _format_failure_attribution(attribution: str) -> str:

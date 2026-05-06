@@ -58,6 +58,7 @@ from forecast_loop.strategy_evolution import REPLACEMENT_DECISION_BASIS
 from forecast_loop.strategy_lineage import StrategyLineageSummary, build_strategy_lineage_summary
 from forecast_loop.strategy_research_display import (
     build_strategy_research_conclusion,
+    format_event_edge_input_manifest,
     format_failure_attributions,
     format_outcome_grade,
     format_promotion_stage,
@@ -1435,10 +1436,13 @@ def _render_digest_decision_research_evidence(
     if evidence is not None and evidence.decision_event_edge is not None:
         edge = evidence.decision_event_edge
         resolved_ids.add(edge.evaluation_id)
+        manifest = format_event_edge_input_manifest(edge)
+        manifest_text = f"{escape(manifest)}；" if manifest else ""
         metric_items.append(
             "Event edge "
             f"<code>{escape(edge.evaluation_id)}</code>："
             f"樣本 {edge.sample_n}；"
+            f"{manifest_text}"
             f"after-cost edge {_format_signed_ratio(edge.average_excess_return_after_costs)}；"
             f"hit-rate {_format_optional_ratio(edge.hit_rate)}；"
             f"pass {_display_boolean(edge.passed)}；"

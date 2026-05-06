@@ -169,10 +169,13 @@ def test_resolve_strategy_digest_evidence_prefers_digest_evidence_ids() -> None:
 
     assert evidence.event_edge is not None
     assert evidence.event_edge.evaluation_id == "event-edge:chosen"
+    assert evidence.event_edge_source == "direct"
     assert evidence.backtest is not None
     assert evidence.backtest.result_id == "backtest-result:chosen"
+    assert evidence.backtest_source == "direct"
     assert evidence.walk_forward is not None
     assert evidence.walk_forward.validation_id == "walk-forward:chosen"
+    assert evidence.walk_forward_source == "direct"
 
 
 def test_resolve_strategy_digest_evidence_falls_back_to_latest_same_symbol_as_of() -> None:
@@ -197,10 +200,13 @@ def test_resolve_strategy_digest_evidence_falls_back_to_latest_same_symbol_as_of
     )
 
     assert evidence.event_edge is None
+    assert evidence.event_edge_source is None
     assert evidence.backtest is not None
     assert evidence.backtest.result_id == "backtest-result:latest"
+    assert evidence.backtest_source == "background_fallback"
     assert evidence.walk_forward is not None
     assert evidence.walk_forward.validation_id == "walk-forward:latest"
+    assert evidence.walk_forward_source == "background_fallback"
 
 
 def test_resolve_strategy_digest_evidence_does_not_fallback_when_digest_ids_are_unresolved() -> None:
@@ -262,27 +268,38 @@ def test_resolve_strategy_digest_evidence_does_not_resolve_future_digest_ids() -
     assert evidence.walk_forward is None
 
 
-def test_resolve_strategy_digest_evidence_fallback_prefers_decision_blocker_backtest() -> None:
+def test_resolve_strategy_digest_evidence_fallback_excludes_decision_blocker_ids() -> None:
     now = datetime(2026, 5, 6, 8, 0, tzinfo=UTC)
     standalone = _backtest(now - timedelta(minutes=5), result_id="backtest-result:blocker")
-    internal = _backtest(now - timedelta(minutes=1), result_id="backtest-result:internal")
+    background = _backtest(now - timedelta(minutes=1), result_id="backtest-result:background")
 
     evidence = resolve_strategy_digest_evidence(
-        digest=_digest(now),
+        digest=_digest(
+            now,
+            decision_research_artifact_ids=[
+                "backtest-result:blocker",
+                "walk-forward:blocker",
+            ],
+        ),
         event_edges=[],
-        backtests=[standalone, internal],
+        backtests=[standalone, background],
         backtest_runs=[
             _backtest_run(
                 standalone,
                 decision_basis="id_context=decision_blocker_research:run_backtest:backtest_result",
             ),
-            _backtest_run(internal, decision_basis="walk_forward_internal_backtest"),
+            _backtest_run(background, decision_basis="ordinary_background_research"),
         ],
-        walk_forwards=[],
+        walk_forwards=[
+            _walk_forward(now - timedelta(minutes=1), validation_id="walk-forward:blocker"),
+        ],
     )
 
     assert evidence.backtest is not None
-    assert evidence.backtest.result_id == "backtest-result:blocker"
+    assert evidence.backtest.result_id == "backtest-result:background"
+    assert evidence.backtest_source == "background_fallback"
+    assert evidence.walk_forward is None
+    assert evidence.walk_forward_source is None
 
 
 def test_resolve_strategy_digest_evidence_event_edge_fallback_excludes_decision_blocker_ids() -> None:

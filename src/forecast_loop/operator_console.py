@@ -2051,6 +2051,7 @@ def _digest_evidence_metrics(evidence: StrategyDigestEvidence | None) -> str:
             "Event edge "
             f"<code>{escape(edge.evaluation_id)}</code>："
             f"樣本 {edge.sample_n}；"
+            f"來源：{_digest_evidence_source_label(evidence.event_edge_source)}；"
             f"after-cost edge {_format_signed_pct(edge.average_excess_return_after_costs)}；"
             f"hit-rate {_format_pct(edge.hit_rate)}；"
             f"pass {'是' if edge.passed else '否'}；"
@@ -2061,6 +2062,7 @@ def _digest_evidence_metrics(evidence: StrategyDigestEvidence | None) -> str:
         items.append(
             "Backtest "
             f"<code>{escape(backtest.result_id)}</code>："
+            f"來源：{_digest_evidence_source_label(evidence.backtest_source)}；"
             f"策略 {_format_signed_pct(backtest.strategy_return)}；"
             f"benchmark {_format_pct(backtest.benchmark_return)}；"
             f"max DD {_format_pct(backtest.max_drawdown)}；"
@@ -2072,6 +2074,7 @@ def _digest_evidence_metrics(evidence: StrategyDigestEvidence | None) -> str:
         items.append(
             "Walk-forward "
             f"<code>{escape(walk_forward.validation_id)}</code>："
+            f"來源：{_digest_evidence_source_label(evidence.walk_forward_source)}；"
             f"excess {_format_signed_pct(walk_forward.average_excess_return)}；"
             f"windows {walk_forward.window_count}；"
             f"test win-rate {_format_pct(walk_forward.test_win_rate)}；"
@@ -2079,6 +2082,14 @@ def _digest_evidence_metrics(evidence: StrategyDigestEvidence | None) -> str:
             f"flags {escape(', '.join(walk_forward.overfit_risk_flags[:5]) if walk_forward.overfit_risk_flags else 'none')}"
         )
     return "<ul class=\"conditions\">" + "".join(f"<li>{item}</li>" for item in items) + "</ul>"
+
+
+def _digest_evidence_source_label(source: str | None) -> str:
+    if source == "direct":
+        return "直接連結"
+    if source == "background_fallback":
+        return "背景參考（未由目前策略鏈直接指定）"
+    return "未知"
 
 
 def _digest_decision_research_evidence(digest: StrategyResearchDigest) -> str:

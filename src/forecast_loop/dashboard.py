@@ -1383,6 +1383,7 @@ def _render_digest_evidence_metrics(evidence: StrategyDigestEvidence | None) -> 
             "Event edge "
             f"<code>{escape(edge.evaluation_id)}</code>："
             f"樣本 {edge.sample_n}；"
+            f"來源：{_display_digest_evidence_source(evidence.event_edge_source)}；"
             f"after-cost edge {_format_signed_ratio(edge.average_excess_return_after_costs)}；"
             f"hit-rate {_format_optional_ratio(edge.hit_rate)}；"
             f"pass {_display_boolean(edge.passed)}；"
@@ -1393,6 +1394,7 @@ def _render_digest_evidence_metrics(evidence: StrategyDigestEvidence | None) -> 
         items.append(
             "Backtest "
             f"<code>{escape(backtest.result_id)}</code>："
+            f"來源：{_display_digest_evidence_source(evidence.backtest_source)}；"
             f"策略 {_format_signed_ratio(backtest.strategy_return)}；"
             f"benchmark {_format_optional_ratio(backtest.benchmark_return)}；"
             f"max DD {_format_optional_ratio(backtest.max_drawdown)}；"
@@ -1404,6 +1406,7 @@ def _render_digest_evidence_metrics(evidence: StrategyDigestEvidence | None) -> 
         items.append(
             "Walk-forward "
             f"<code>{escape(walk_forward.validation_id)}</code>："
+            f"來源：{_display_digest_evidence_source(evidence.walk_forward_source)}；"
             f"excess {_format_signed_ratio(walk_forward.average_excess_return)}；"
             f"windows {walk_forward.window_count}；"
             f"test win-rate {_format_optional_ratio(walk_forward.test_win_rate)}；"
@@ -1411,6 +1414,14 @@ def _render_digest_evidence_metrics(evidence: StrategyDigestEvidence | None) -> 
             f"flags {escape(', '.join(walk_forward.overfit_risk_flags[:5]) if walk_forward.overfit_risk_flags else 'none')}"
         )
     return "<ul class=\"digest-rule-list\">" + "".join(f"<li>{item}</li>" for item in items) + "</ul>"
+
+
+def _display_digest_evidence_source(source: str | None) -> str:
+    if source == "direct":
+        return "直接連結"
+    if source == "background_fallback":
+        return "背景參考（未由目前策略鏈直接指定）"
+    return "未知"
 
 
 def _render_digest_decision_research_evidence(digest: StrategyResearchDigest) -> str:

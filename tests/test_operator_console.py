@@ -1129,6 +1129,8 @@ def test_operator_console_surfaces_strategy_research_digest_in_research_and_over
         assert "<code>event-edge:visible</code>" in metric_section
         assert "<code>backtest-result:visible</code>" in metric_section
         assert "<code>walk-forward:visible</code>" in metric_section
+        assert "來源：直接連結" in metric_section
+        assert "背景參考" not in metric_section
         decision_evidence_section = html[
             html.index("決策阻擋研究證據", digest_start) : html.index(
                 "<p>證據",

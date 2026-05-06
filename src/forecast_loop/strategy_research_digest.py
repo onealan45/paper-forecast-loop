@@ -103,7 +103,8 @@ def build_strategy_research_digest(
     backtests = _artifacts_as_of(repository.load_backtest_results(), created_at)
     backtest_runs = _artifacts_as_of(repository.load_backtest_runs(), created_at)
     walk_forwards = _artifacts_as_of(repository.load_walk_forward_validations(), created_at)
-    latest_event_edge = _chain_artifact_or_fallback(
+    excluded_decision_research_ids = set(decision_research_artifact_ids)
+    latest_event_edge, latest_event_edge_source = _chain_artifact_or_fallback(
         chain,
         items=event_edges,
         symbol=symbol,
@@ -112,7 +113,7 @@ def build_strategy_research_digest(
         id_field="evaluation_id",
         fallback=lambda: None,
     )
-    latest_backtest = _chain_artifact_or_fallback(
+    latest_backtest, latest_backtest_source = _chain_artifact_or_fallback(
         chain,
         items=backtests,
         symbol=symbol,
@@ -120,32 +121,48 @@ def build_strategy_research_digest(
         card_list_attr="backtest_result_ids",
         id_field="result_id",
         fallback=lambda: latest_backtest_for_research(
-            backtests=backtests,
+            backtests=[
+                item
+                for item in backtests
+                if item.result_id not in excluded_decision_research_ids
+            ],
             backtest_runs=backtest_runs,
             symbol=symbol,
             as_of=created_at,
         ),
     )
-    latest_walk_forward = _chain_artifact_or_fallback(
+    latest_walk_forward, latest_walk_forward_source = _chain_artifact_or_fallback(
         chain,
         items=walk_forwards,
         symbol=symbol,
         single_attr="walk_forward_validation_id",
         card_list_attr="walk_forward_validation_ids",
         id_field="validation_id",
-        fallback=lambda: _latest_symbol_artifact(walk_forwards, symbol=symbol, as_of=created_at),
+        fallback=lambda: _latest_symbol_artifact(
+            walk_forwards,
+            symbol=symbol,
+            as_of=created_at,
+            id_field="validation_id",
+            excluded_ids=decision_research_artifact_ids,
+        ),
     )
     _append_id(
         evidence_artifact_ids,
-        latest_event_edge.evaluation_id if latest_event_edge else None,
+        latest_event_edge.evaluation_id
+        if latest_event_edge is not None and latest_event_edge_source == "direct"
+        else None,
     )
     _append_id(
         evidence_artifact_ids,
-        latest_backtest.result_id if latest_backtest else None,
+        latest_backtest.result_id
+        if latest_backtest is not None and latest_backtest_source == "direct"
+        else None,
     )
     _append_id(
         evidence_artifact_ids,
-        latest_walk_forward.validation_id if latest_walk_forward else None,
+        latest_walk_forward.validation_id
+        if latest_walk_forward is not None and latest_walk_forward_source == "direct"
+        else None,
     )
     lineage_latest_outcome_id = lineage.latest_outcome_id if lineage else None
     research_summary = build_strategy_research_conclusion(
@@ -156,8 +173,11 @@ def build_strategy_research_digest(
     )
     evidence_summary = _research_evidence_summary(
         latest_event_edge=latest_event_edge,
+        latest_event_edge_source=latest_event_edge_source,
         latest_backtest=latest_backtest,
+        latest_backtest_source=latest_backtest_source,
         latest_walk_forward=latest_walk_forward,
+        latest_walk_forward_source=latest_walk_forward_source,
     )
     if evidence_summary:
         research_summary = f"{research_summary} 研究證據：{evidence_summary}"
@@ -357,8 +377,9 @@ def _chain_artifact_or_fallback(
             id_field=id_field,
             candidate_ids=candidate_ids,
             symbol=symbol,
-        )
-    return fallback()
+        ), "direct"
+    item = fallback()
+    return item, "background_fallback" if item is not None else None
 
 
 def _ordered_chain_evidence_ids(
@@ -401,15 +422,18 @@ def _first_symbol_artifact_by_id(
 def _research_evidence_summary(
     *,
     latest_event_edge: EventEdgeEvaluation | None,
+    latest_event_edge_source: str | None,
     latest_backtest: BacktestResult | None,
+    latest_backtest_source: str | None,
     latest_walk_forward: WalkForwardValidation | None,
+    latest_walk_forward_source: str | None,
 ) -> str:
     parts: list[str] = []
     if latest_event_edge is not None:
         passed = "是" if latest_event_edge.passed else "否"
         flags = _format_flags(latest_event_edge.flags)
         parts.append(
-            "Event edge："
+            f"{_evidence_summary_label('Event edge', latest_event_edge_source)}："
             f"樣本 {latest_event_edge.sample_n}，"
             f"after-cost edge {_format_signed_pct(latest_event_edge.average_excess_return_after_costs)}，"
             f"hit-rate {_format_unsigned_pct(latest_event_edge.hit_rate)}，"
@@ -418,7 +442,7 @@ def _research_evidence_summary(
         )
     if latest_backtest is not None:
         parts.append(
-            "Backtest："
+            f"{_evidence_summary_label('Backtest', latest_backtest_source)}："
             f"策略 {_format_signed_pct(latest_backtest.strategy_return)}，"
             f"benchmark {_format_signed_pct(latest_backtest.benchmark_return)}，"
             f"max DD {_format_unsigned_pct(latest_backtest.max_drawdown)}，"
@@ -428,7 +452,7 @@ def _research_evidence_summary(
     if latest_walk_forward is not None:
         flags = _format_flags(latest_walk_forward.overfit_risk_flags)
         parts.append(
-            "Walk-forward："
+            f"{_evidence_summary_label('Walk-forward', latest_walk_forward_source)}："
             f"excess {_format_signed_pct(latest_walk_forward.average_excess_return)}，"
             f"windows {latest_walk_forward.window_count}，"
             f"test win-rate {_format_unsigned_pct(latest_walk_forward.test_win_rate)}，"
@@ -436,6 +460,12 @@ def _research_evidence_summary(
             f"flags {flags}"
         )
     return "；".join(parts)
+
+
+def _evidence_summary_label(name: str, source: str | None) -> str:
+    if source == "background_fallback":
+        return f"{name}（背景參考）"
+    return name
 
 
 def _format_signed_pct(value: float | None) -> str:

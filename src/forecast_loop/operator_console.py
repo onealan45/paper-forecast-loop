@@ -1991,6 +1991,8 @@ def _strategy_research_digest_panel(
     {_digest_strategy_rules(digest, card)}
     <h4>策略證據指標</h4>
     {_digest_evidence_metrics(evidence)}
+    <h4>決策阻擋研究證據</h4>
+    {_digest_decision_research_evidence(digest)}
     <p>證據：</p>
     {_plain_list(digest.evidence_artifact_ids, empty="目前沒有 digest evidence")}
   </article>
@@ -2016,6 +2018,8 @@ def _strategy_research_digest_preview(
 {_digest_strategy_rules(digest, card)}
 <p>策略證據指標</p>
 {_digest_evidence_metrics(evidence)}
+<p>決策阻擋研究證據</p>
+{_digest_decision_research_evidence(digest)}
 <p>證據：</p>
 {_plain_list(digest.evidence_artifact_ids, empty="目前沒有 digest evidence")}
 """
@@ -2075,6 +2079,26 @@ def _digest_evidence_metrics(evidence: StrategyDigestEvidence | None) -> str:
             f"flags {escape(', '.join(walk_forward.overfit_risk_flags[:5]) if walk_forward.overfit_risk_flags else 'none')}"
         )
     return "<ul class=\"conditions\">" + "".join(f"<li>{item}</li>" for item in items) + "</ul>"
+
+
+def _digest_decision_research_evidence(digest: StrategyResearchDigest) -> str:
+    if not digest.decision_research_artifact_ids:
+        return '<p class="muted">沒有獨立 decision-blocker research evidence</p>'
+    return (
+        "<p class=\"muted\">這些證據用來解釋目前 BUY/SELL 為何被擋住；"
+        "不等同於 active strategy validation。</p>"
+        + _artifact_id_list(digest.decision_research_artifact_ids)
+    )
+
+
+def _artifact_id_list(ids: list[str]) -> str:
+    if not ids:
+        return '<p class="muted">none</p>'
+    return (
+        '<ul class="conditions">'
+        + "".join(f"<li><code>{escape(artifact_id)}</code></li>" for artifact_id in ids)
+        + "</ul>"
+    )
 
 
 def _digest_decision_blockers(digest: StrategyResearchDigest) -> str:

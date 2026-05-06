@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import re
 
 from forecast_loop.models import (
     BacktestResult,
@@ -23,6 +24,9 @@ from forecast_loop.strategy_research_display import (
 
 
 _MAX_RULE_SUMMARY_CHARS = 180
+_DECISION_RESEARCH_ARTIFACT_RE = re.compile(
+    r"\b(?:event-edge|backtest-result|walk-forward):[A-Za-z0-9._:-]+"
+)
 
 
 def record_strategy_research_digest(
@@ -94,6 +98,7 @@ def build_strategy_research_digest(
     )
     if latest_decision is not None:
         _append_id(evidence_artifact_ids, latest_decision.decision_id)
+    decision_research_artifact_ids = _decision_research_artifact_ids(latest_decision)
     event_edges = _artifacts_as_of(repository.load_event_edge_evaluations(), created_at)
     backtests = _artifacts_as_of(repository.load_backtest_results(), created_at)
     backtest_runs = _artifacts_as_of(repository.load_backtest_runs(), created_at)
@@ -207,6 +212,7 @@ def build_strategy_research_digest(
         decision_action=latest_decision.action if latest_decision else None,
         decision_blocked_reason=latest_decision.blocked_reason if latest_decision else None,
         decision_research_blockers=decision_research_blockers,
+        decision_research_artifact_ids=decision_research_artifact_ids,
         decision_reason_summary=latest_decision.reason_summary if latest_decision else None,
     )
 
@@ -299,6 +305,17 @@ def _latest_strategy_decision(
         if decision.symbol == symbol:
             return decision
     return None
+
+
+def _decision_research_artifact_ids(decision: StrategyDecision | None) -> list[str]:
+    if decision is None:
+        return []
+    if not extract_decision_research_blockers(decision):
+        return []
+    ids: list[str] = []
+    for match in _DECISION_RESEARCH_ARTIFACT_RE.finditer(decision.decision_basis):
+        _append_id(ids, match.group(0))
+    return ids
 
 
 def _latest_symbol_artifact(items: list, *, symbol: str, as_of: datetime):

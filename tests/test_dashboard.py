@@ -358,6 +358,11 @@ def _seed_dashboard_strategy_research_digest(repository: JsonFileRepository, now
             decision_action="HOLD",
             decision_blocked_reason="model_not_beating_baseline",
             decision_research_blockers=["event edge 缺失", "walk-forward overfit risk"],
+            decision_research_artifact_ids=[
+                "event-edge:dashboard-blocker",
+                "backtest-result:dashboard-blocker",
+                "walk-forward:dashboard-blocker",
+            ],
             decision_reason_summary=(
                 "模型證據沒有打贏 naive persistence baseline，因此買進/賣出被擋住。 "
                 "主要研究阻擋：event edge 缺失、walk-forward overfit risk。"
@@ -1323,6 +1328,7 @@ def test_dashboard_surfaces_strategy_research_digest_summary(tmp_path):
     assert "<dt>下一步理由</dt>" in digest_section
     assert "<dt>策略規則摘要</dt>" in digest_section
     assert "<dt>策略證據指標</dt>" in digest_section
+    assert "<dt>決策阻擋研究證據</dt>" in digest_section
     assert "Event edge" in digest_section
     assert "樣本 2" in digest_section
     assert "after-cost edge -1.14%" in digest_section
@@ -1332,15 +1338,30 @@ def test_dashboard_surfaces_strategy_research_digest_summary(tmp_path):
     assert "Walk-forward" in digest_section
     assert "excess -0.09%" in digest_section
     assert "windows 176" in digest_section
-    metric_section = html[html.index("<dt>策略證據指標</dt>", digest_start) : html.index("<dt>證據</dt>", digest_start)]
+    metric_section = html[
+        html.index("<dt>策略證據指標</dt>", digest_start) : html.index(
+            "<dt>決策阻擋研究證據</dt>",
+            digest_start,
+        )
+    ]
     assert "&lt;code&gt;" not in metric_section
     assert "<code>event-edge:dashboard-visible</code>" in metric_section
     assert "<code>backtest-result:dashboard-visible</code>" in metric_section
     assert "<code>walk-forward:dashboard-visible</code>" in metric_section
+    decision_evidence_section = html[
+        html.index("<dt>決策阻擋研究證據</dt>", digest_start) : html.index(
+            "<dt>證據</dt>",
+            digest_start,
+        )
+    ]
+    assert "<code>event-edge:dashboard-blocker</code>" in decision_evidence_section
+    assert "<code>backtest-result:dashboard-blocker</code>" in decision_evidence_section
+    assert "<code>walk-forward:dashboard-blocker</code>" in decision_evidence_section
+    assert "event-edge:dashboard-blocker" not in metric_section
     assert "Digest strategy rules" not in digest_section
     assert "Failure concentration" not in digest_section
     rules_start = html.index("策略規則摘要")
-    rules_section = html[rules_start : html.index("<dt>證據</dt>", rules_start)]
+    rules_section = html[rules_start : html.index("<dt>策略證據指標</dt>", rules_start)]
     assert '<ul class="digest-rule-list">' in rules_section
     assert "Digest-only dashboard hypothesis should own the strategy summary." in rules_section
     assert "Digest-only dashboard signal filter." in rules_section

@@ -554,6 +554,11 @@ def _seed_visible_strategy_research_digest(repository: JsonFileRepository, now: 
             decision_action="HOLD",
             decision_blocked_reason="model_not_beating_baseline",
             decision_research_blockers=["event edge 缺失", "walk-forward overfit risk"],
+            decision_research_artifact_ids=[
+                "event-edge:visible-blocker",
+                "backtest-result:visible-blocker",
+                "walk-forward:visible-blocker",
+            ],
             decision_reason_summary=(
                 "模型證據沒有打贏 naive persistence baseline，因此買進/賣出被擋住。 "
                 "主要研究阻擋：event edge 缺失、walk-forward overfit risk。"
@@ -1104,6 +1109,7 @@ def test_operator_console_surfaces_strategy_research_digest_in_research_and_over
         assert "event edge 缺失" in digest_section
         assert "walk-forward overfit risk" in digest_section
         assert "策略證據指標" in digest_section
+        assert "決策阻擋研究證據" in digest_section
         assert "Event edge" in digest_section
         assert "樣本 2" in digest_section
         assert "after-cost edge -1.14%" in digest_section
@@ -1113,11 +1119,26 @@ def test_operator_console_surfaces_strategy_research_digest_in_research_and_over
         assert "Walk-forward" in digest_section
         assert "excess -0.09%" in digest_section
         assert "windows 176" in digest_section
-        metric_section = html[html.index("策略證據指標", digest_start) : html.index("<p>證據", digest_start)]
+        metric_section = html[
+            html.index("策略證據指標", digest_start) : html.index(
+                "決策阻擋研究證據",
+                digest_start,
+            )
+        ]
         assert "&lt;code&gt;" not in metric_section
         assert "<code>event-edge:visible</code>" in metric_section
         assert "<code>backtest-result:visible</code>" in metric_section
         assert "<code>walk-forward:visible</code>" in metric_section
+        decision_evidence_section = html[
+            html.index("決策阻擋研究證據", digest_start) : html.index(
+                "<p>證據",
+                digest_start,
+            )
+        ]
+        assert "<code>event-edge:visible-blocker</code>" in decision_evidence_section
+        assert "<code>backtest-result:visible-blocker</code>" in decision_evidence_section
+        assert "<code>walk-forward:visible-blocker</code>" in decision_evidence_section
+        assert "event-edge:visible-blocker" not in metric_section
         assert "策略規則摘要" in digest_section
         assert "Digest strategy rules" not in digest_section
         assert "Failure concentration" not in digest_section

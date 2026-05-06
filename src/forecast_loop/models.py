@@ -1466,6 +1466,7 @@ class StrategyResearchDigest:
     decision_action: str | None = None
     decision_blocked_reason: str | None = None
     decision_research_blockers: list[str] = field(default_factory=list)
+    decision_research_artifact_ids: list[str] = field(default_factory=list)
     decision_reason_summary: str | None = None
 
     @classmethod
@@ -1527,6 +1528,9 @@ class StrategyResearchDigest:
             decision_action=payload.get("decision_action"),
             decision_blocked_reason=payload.get("decision_blocked_reason"),
             decision_research_blockers=list(payload.get("decision_research_blockers", [])),
+            decision_research_artifact_ids=list(
+                payload.get("decision_research_artifact_ids", [])
+            ),
             decision_reason_summary=payload.get("decision_reason_summary"),
         )
 

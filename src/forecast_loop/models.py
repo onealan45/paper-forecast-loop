@@ -1874,10 +1874,15 @@ class EventEdgeEvaluation:
     passed: bool
     blocked_reason: str | None
     flags: list[str]
+    input_event_ids: list[str] = field(default_factory=list)
+    input_reaction_check_ids: list[str] = field(default_factory=list)
+    input_candle_ids: list[str] = field(default_factory=list)
+    input_watermark: datetime | None = None
 
     def to_dict(self) -> dict:
         payload = asdict(self)
         payload["created_at"] = self.created_at.isoformat()
+        payload["input_watermark"] = _serialize_datetime(self.input_watermark)
         return payload
 
     @classmethod
@@ -1906,6 +1911,10 @@ class EventEdgeEvaluation:
             passed=bool(payload.get("passed", False)),
             blocked_reason=payload.get("blocked_reason"),
             flags=list(payload.get("flags", [])),
+            input_event_ids=list(payload.get("input_event_ids", [])),
+            input_reaction_check_ids=list(payload.get("input_reaction_check_ids", [])),
+            input_candle_ids=list(payload.get("input_candle_ids", [])),
+            input_watermark=_deserialize_datetime(payload.get("input_watermark")),
         )
 
 

@@ -314,6 +314,24 @@ def _event_edge_evaluation(*, evaluation_id: str, created_at: datetime, symbol: 
     )
 
 
+def _event_edge_evaluation_with_manifest(
+    *,
+    evaluation_id: str,
+    created_at: datetime,
+    input_event_ids: list[str],
+    input_reaction_check_ids: list[str],
+    input_candle_ids: list[str],
+    input_watermark: datetime,
+    symbol: str = "BTC-USD",
+) -> EventEdgeEvaluation:
+    evaluation = _event_edge_evaluation(evaluation_id=evaluation_id, created_at=created_at, symbol=symbol)
+    evaluation.input_event_ids = input_event_ids
+    evaluation.input_reaction_check_ids = input_reaction_check_ids
+    evaluation.input_candle_ids = input_candle_ids
+    evaluation.input_watermark = input_watermark
+    return evaluation
+
+
 def _walk_forward_validation(
     *,
     validation_id: str,
@@ -359,6 +377,22 @@ def _seed_event_edge_prerequisites(repository: JsonFileRepository) -> None:
     repository.save_canonical_event(event)
     repository.save_market_reaction_check(_market_reaction(event))
     _save_event_candles(repository, event)
+
+
+def _seeded_event_edge_manifest(repository: JsonFileRepository) -> tuple[list[str], list[str], list[str], datetime]:
+    event = repository.load_canonical_events()[0]
+    reaction = repository.load_market_reaction_checks()[0]
+    candles = repository.load_market_candles()
+    input_watermark = max(
+        [
+            event.available_at,
+            event.fetched_at,
+            event.created_at,
+            reaction.created_at,
+            *[max(candle.timestamp, candle.imported_at) for candle in candles],
+        ]
+    )
+    return [event.event_id], [reaction.check_id], [candle.candle_id for candle in candles], input_watermark
 
 
 def test_decision_blocker_research_plan_prioritizes_event_edge_command(tmp_path):
@@ -522,6 +556,43 @@ def test_decision_blocker_research_plan_reuses_event_edge_when_inputs_are_unchan
     assert plan.next_task_id is None
 
 
+def test_decision_blocker_research_plan_reuses_event_edge_when_manifest_matches(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    agenda_at = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
+    repository.save_research_agenda(
+        _agenda(
+            agenda_id="research-agenda:event-manifest-match",
+            created_at=agenda_at,
+            expected_artifacts=["strategy_decision", "event_edge_evaluation"],
+        )
+    )
+    _seed_event_edge_prerequisites(repository)
+    event_ids, reaction_ids, candle_ids, input_watermark = _seeded_event_edge_manifest(repository)
+    repository.save_event_edge_evaluation(
+        _event_edge_evaluation_with_manifest(
+            evaluation_id="event-edge:matching-manifest",
+            created_at=agenda_at + timedelta(minutes=10),
+            input_event_ids=event_ids,
+            input_reaction_check_ids=reaction_ids,
+            input_candle_ids=candle_ids,
+            input_watermark=input_watermark,
+        )
+    )
+
+    plan = build_decision_blocker_research_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=agenda_at + timedelta(minutes=30),
+    )
+
+    task = plan.task_by_id("build_event_edge_evaluation")
+    assert task.status == "completed"
+    assert task.artifact_id == "event-edge:matching-manifest"
+    assert task.command_args is None
+    assert plan.next_task_id is None
+
+
 def test_decision_blocker_research_plan_rebuilds_event_edge_when_inputs_arrive_after_evaluation(tmp_path):
     repository = JsonFileRepository(tmp_path)
     agenda_at = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
@@ -564,6 +635,80 @@ def test_decision_blocker_research_plan_rebuilds_event_edge_when_inputs_arrive_a
         storage_dir=tmp_path,
         symbol="BTC-USD",
         now=new_input_at + timedelta(minutes=30),
+    )
+
+    task = plan.task_by_id("build_event_edge_evaluation")
+    assert task.status == "ready"
+    assert task.artifact_id is None
+    assert task.command_args is not None
+    assert plan.next_task_id == "build_event_edge_evaluation"
+
+
+def test_decision_blocker_research_plan_does_not_reuse_event_edge_when_manifest_mismatches(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    agenda_at = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
+    repository.save_research_agenda(
+        _agenda(
+            agenda_id="research-agenda:event-manifest-mismatch",
+            created_at=agenda_at,
+            expected_artifacts=["strategy_decision", "event_edge_evaluation"],
+        )
+    )
+    _seed_event_edge_prerequisites(repository)
+    current_candle_ids = [candle.candle_id for candle in repository.load_market_candles()]
+    repository.save_event_edge_evaluation(
+        _event_edge_evaluation_with_manifest(
+            evaluation_id="event-edge:wrong-manifest",
+            created_at=agenda_at + timedelta(minutes=10),
+            input_event_ids=["canonical-event:wrong"],
+            input_reaction_check_ids=["market-reaction:wrong"],
+            input_candle_ids=current_candle_ids,
+            input_watermark=agenda_at,
+        )
+    )
+
+    plan = build_decision_blocker_research_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=agenda_at + timedelta(minutes=30),
+    )
+
+    task = plan.task_by_id("build_event_edge_evaluation")
+    assert task.status == "ready"
+    assert task.artifact_id is None
+    assert task.command_args is not None
+    assert plan.next_task_id == "build_event_edge_evaluation"
+
+
+def test_decision_blocker_research_plan_does_not_reuse_event_edge_when_manifest_watermark_is_stale(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    agenda_at = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
+    repository.save_research_agenda(
+        _agenda(
+            agenda_id="research-agenda:event-manifest-stale-watermark",
+            created_at=agenda_at,
+            expected_artifacts=["strategy_decision", "event_edge_evaluation"],
+        )
+    )
+    _seed_event_edge_prerequisites(repository)
+    event_ids, reaction_ids, candle_ids, input_watermark = _seeded_event_edge_manifest(repository)
+    repository.save_event_edge_evaluation(
+        _event_edge_evaluation_with_manifest(
+            evaluation_id="event-edge:stale-manifest-watermark",
+            created_at=agenda_at + timedelta(minutes=10),
+            input_event_ids=event_ids,
+            input_reaction_check_ids=reaction_ids,
+            input_candle_ids=candle_ids,
+            input_watermark=input_watermark - timedelta(minutes=1),
+        )
+    )
+
+    plan = build_decision_blocker_research_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=agenda_at + timedelta(minutes=30),
     )
 
     task = plan.task_by_id("build_event_edge_evaluation")

@@ -80,6 +80,14 @@ class DecisionBlockerResearchTaskPlan:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class _EventEdgeInputManifest:
+    event_ids: list[str]
+    reaction_check_ids: list[str]
+    candle_ids: list[str]
+    input_watermark: datetime
+
+
 def build_decision_blocker_research_task_plan(
     *,
     repository: ArtifactRepository,
@@ -521,14 +529,103 @@ def _latest_current_event_edge(
     )
     if input_watermark is None:
         return None
-    candidates = [
-        evaluation
-        for evaluation in event_edges
-        if evaluation.symbol == agenda.symbol
-        and evaluation.created_at >= input_watermark
-        and evaluation.created_at <= now
-    ]
+    candidates: list[EventEdgeEvaluation] = []
+    for evaluation in event_edges:
+        if evaluation.symbol != agenda.symbol or evaluation.created_at > now:
+            continue
+        if _has_event_edge_input_manifest(evaluation):
+            current_manifest = _event_edge_input_manifest_for_evaluation(
+                evaluation=evaluation,
+                now=now,
+                events=events,
+                reactions=reactions,
+                candles=candles,
+            )
+            if current_manifest is None:
+                continue
+            if not _event_edge_manifest_matches(evaluation, current_manifest):
+                continue
+            if evaluation.input_watermark is None or evaluation.input_watermark < current_manifest.input_watermark:
+                continue
+            if evaluation.created_at < current_manifest.input_watermark:
+                continue
+            candidates.append(evaluation)
+            continue
+        if evaluation.created_at >= input_watermark:
+            candidates.append(evaluation)
     return max(candidates, key=lambda item: (item.created_at, item.evaluation_id)) if candidates else None
+
+
+def _has_event_edge_input_manifest(evaluation: EventEdgeEvaluation) -> bool:
+    return bool(evaluation.input_event_ids or evaluation.input_reaction_check_ids or evaluation.input_candle_ids)
+
+
+def _event_edge_manifest_matches(
+    evaluation: EventEdgeEvaluation,
+    manifest: _EventEdgeInputManifest,
+) -> bool:
+    return (
+        sorted(evaluation.input_event_ids) == manifest.event_ids
+        and sorted(evaluation.input_reaction_check_ids) == manifest.reaction_check_ids
+        and sorted(evaluation.input_candle_ids) == manifest.candle_ids
+    )
+
+
+def _event_edge_input_manifest_for_evaluation(
+    *,
+    evaluation: EventEdgeEvaluation,
+    now: datetime,
+    events: list[CanonicalEvent],
+    reactions: list[MarketReactionCheck],
+    candles: list[MarketCandleRecord],
+) -> _EventEdgeInputManifest | None:
+    usable_events = {
+        event.event_id: event
+        for event in events
+        if _event_edge_event_available(event, symbol=evaluation.symbol, now=now)
+        and event.event_family == evaluation.event_family
+        and event.event_type == evaluation.event_type
+    }
+    if not usable_events:
+        return None
+    latest_reactions = _latest_event_edge_reactions_by_event(reactions, now=now)
+    candles_by_symbol = _event_edge_candles_by_symbol(candles, now=now)
+    symbol_candles = candles_by_symbol.get(evaluation.symbol, [])
+    event_ids: list[str] = []
+    reaction_check_ids: list[str] = []
+    candle_ids: list[str] = []
+    watermarks: list[datetime] = []
+    for event_id, event in sorted(usable_events.items()):
+        reaction = latest_reactions.get(event_id)
+        if reaction is None or not reaction.passed:
+            continue
+        sample_candle_ids = _event_edge_sample_candle_ids(
+            event=event,
+            reaction=reaction,
+            candles=symbol_candles,
+            horizon_hours=evaluation.horizon_hours,
+        )
+        if sample_candle_ids is None:
+            continue
+        event_ids.append(event.event_id)
+        reaction_check_ids.append(reaction.check_id)
+        candle_ids.extend(sample_candle_ids)
+        event_values = [event.available_at, event.fetched_at]
+        if event.created_at is not None:
+            event_values.append(event.created_at)
+        watermarks.append(max(value for value in event_values if value is not None))
+        watermarks.append(reaction.created_at)
+        for candle in symbol_candles:
+            if candle.candle_id in sample_candle_ids:
+                watermarks.append(max(candle.timestamp, candle.imported_at))
+    if not event_ids or not watermarks:
+        return None
+    return _EventEdgeInputManifest(
+        event_ids=sorted(set(event_ids)),
+        reaction_check_ids=sorted(set(reaction_check_ids)),
+        candle_ids=sorted(set(candle_ids)),
+        input_watermark=max(watermarks),
+    )
 
 
 def _latest_backtest_for_current_window(
@@ -761,6 +858,26 @@ def _has_event_edge_sample(
     start_candle = _candle_at(candles, start)
     end_candle = _candle_at(candles, end)
     return start_candle is not None and end_candle is not None and start_candle.close != 0
+
+
+def _event_edge_sample_candle_ids(
+    *,
+    event: CanonicalEvent,
+    reaction: MarketReactionCheck,
+    candles: list[MarketCandleRecord],
+    horizon_hours: int,
+) -> list[str] | None:
+    if reaction.symbol != event.symbol:
+        return None
+    if reaction.event_timestamp_used != _hour_boundary(reaction.event_timestamp_used):
+        return None
+    start = reaction.event_timestamp_used
+    end = start + timedelta(hours=horizon_hours)
+    start_candle = _candle_at(candles, start)
+    end_candle = _candle_at(candles, end)
+    if start_candle is None or end_candle is None or start_candle.close == 0:
+        return None
+    return sorted(candle.candle_id for candle in candles if start <= candle.timestamp <= end)
 
 
 def _hour_boundary(timestamp: datetime) -> datetime:

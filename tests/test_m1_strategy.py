@@ -10,6 +10,8 @@ from forecast_loop.decision import generate_strategy_decision
 from forecast_loop.health import run_health_check
 from forecast_loop.models import (
     BaselineEvaluation,
+    BacktestResult,
+    EventEdgeEvaluation,
     EvaluationSummary,
     Forecast,
     ForecastScore,
@@ -17,6 +19,9 @@ from forecast_loop.models import (
     PaperPortfolioSnapshot,
     Review,
     RiskSnapshot,
+    StrategyDecision,
+    WalkForwardValidation,
+    WalkForwardWindow,
 )
 from forecast_loop.storage import JsonFileRepository
 
@@ -61,6 +66,131 @@ def _score(score_id: str, forecast: Forecast, *, actual_regime: str, hit: bool, 
         observed_candle_count=3,
         provider_data_through=forecast.target_window_end,
         scoring_basis="test",
+    )
+
+
+def _decision(decision_id: str, *, now: datetime, forecast_id: str, decision_basis: str) -> StrategyDecision:
+    return StrategyDecision(
+        decision_id=decision_id,
+        created_at=now,
+        symbol="BTC-USD",
+        horizon_hours=24,
+        action="HOLD",
+        confidence=0.5,
+        evidence_grade="D",
+        risk_level="MEDIUM",
+        tradeable=False,
+        blocked_reason="test",
+        recommended_position_pct=0.0,
+        current_position_pct=0.0,
+        max_position_pct=0.15,
+        invalidation_conditions=["test invalidation"],
+        reason_summary="test decision",
+        forecast_ids=[forecast_id],
+        score_ids=[],
+        review_ids=[],
+        baseline_ids=[],
+        decision_basis=decision_basis,
+    )
+
+
+def _backtest_result(now: datetime, result_id: str = "backtest-result:valid") -> BacktestResult:
+    return BacktestResult(
+        result_id=result_id,
+        backtest_id="backtest-run:valid",
+        created_at=now,
+        symbol="BTC-USD",
+        start=now - timedelta(days=5),
+        end=now,
+        initial_cash=10_000,
+        final_equity=10_100,
+        strategy_return=0.01,
+        benchmark_return=0.005,
+        max_drawdown=0.02,
+        sharpe=1.0,
+        turnover=0.4,
+        win_rate=0.6,
+        trade_count=2,
+        equity_curve=[],
+        decision_basis="test",
+    )
+
+
+def _walk_forward_validation(now: datetime, validation_id: str = "walk-forward:valid") -> WalkForwardValidation:
+    window = WalkForwardWindow(
+        window_id=f"{validation_id}:window",
+        train_start=now - timedelta(days=5),
+        train_end=now - timedelta(days=4),
+        validation_start=now - timedelta(days=3),
+        validation_end=now - timedelta(days=2),
+        test_start=now - timedelta(days=1),
+        test_end=now,
+        train_candle_count=2,
+        validation_candle_count=2,
+        test_candle_count=2,
+        validation_backtest_result_id="backtest-result:valid",
+        test_backtest_result_id="backtest-result:valid",
+        validation_return=0.01,
+        test_return=0.01,
+        benchmark_return=0.005,
+        excess_return=0.005,
+        overfit_flags=[],
+        decision_basis="test",
+    )
+    return WalkForwardValidation(
+        validation_id=validation_id,
+        created_at=now,
+        symbol="BTC-USD",
+        start=now - timedelta(days=5),
+        end=now,
+        strategy_name="moving_average_trend",
+        train_size=2,
+        validation_size=2,
+        test_size=2,
+        step_size=1,
+        initial_cash=10_000,
+        fee_bps=5,
+        slippage_bps=10,
+        moving_average_window=2,
+        window_count=1,
+        average_validation_return=0.01,
+        average_test_return=0.01,
+        average_benchmark_return=0.005,
+        average_excess_return=0.005,
+        test_win_rate=1.0,
+        overfit_window_count=0,
+        overfit_risk_flags=[],
+        backtest_result_ids=["backtest-result:valid"],
+        windows=[window],
+        decision_basis="test",
+    )
+
+
+def _event_edge_evaluation(now: datetime, evaluation_id: str = "event-edge:valid") -> EventEdgeEvaluation:
+    return EventEdgeEvaluation(
+        evaluation_id=evaluation_id,
+        event_family="crypto_flow",
+        event_type="CRYPTO_FLOW",
+        symbol="BTC-USD",
+        created_at=now,
+        split="historical_event_sample",
+        horizon_hours=24,
+        sample_n=5,
+        average_forward_return=0.02,
+        average_benchmark_return=0.01,
+        average_excess_return_after_costs=0.008,
+        hit_rate=0.6,
+        max_adverse_excursion_p50=-0.01,
+        max_adverse_excursion_p90=-0.03,
+        max_drawdown_if_traded=-0.04,
+        turnover=1.0,
+        estimated_cost_bps=10,
+        dsr=None,
+        white_rc_p=None,
+        stability_score=0.7,
+        passed=True,
+        blocked_reason=None,
+        flags=[],
     )
 
 
@@ -482,6 +612,97 @@ def test_health_check_detects_baseline_pointing_to_missing_artifacts(tmp_path, m
     assert "baseline_missing_forecast" in codes
     assert "baseline_missing_score" in codes
     assert result.repair_required is True
+
+
+def test_health_check_detects_strategy_decision_basis_missing_research_evidence(tmp_path):
+    storage = tmp_path / "storage"
+    repository = JsonFileRepository(storage)
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    forecast = _forecast("forecast:valid", anchor_time=now, status="pending")
+    repository.save_forecast(forecast)
+    repository.save_strategy_decision(
+        _decision(
+            "decision:broken-basis",
+            now=now,
+            forecast_id=forecast.forecast_id,
+            decision_basis=(
+                "research_gate=sample_size=6; "
+                "backtest_result=backtest-result:missing; "
+                "walk_forward=walk-forward:missing; "
+                "event_edge=event-edge:missing"
+            ),
+        )
+    )
+
+    result = run_health_check(storage_dir=storage, symbol="BTC-USD", now=now, create_repair_request=False)
+    codes = {finding.code for finding in result.findings}
+
+    assert "decision_basis_missing_backtest_result" in codes
+    assert "decision_basis_missing_walk_forward" in codes
+    assert "decision_basis_missing_event_edge" in codes
+    assert result.repair_required is True
+
+
+def test_health_check_ignores_strategy_decision_basis_missing_placeholders(tmp_path):
+    storage = tmp_path / "storage"
+    repository = JsonFileRepository(storage)
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    forecast = _forecast("forecast:valid", anchor_time=now, status="pending")
+    repository.save_forecast(forecast)
+    repository.save_strategy_decision(
+        _decision(
+            "decision:placeholder-basis",
+            now=now,
+            forecast_id=forecast.forecast_id,
+            decision_basis=(
+                "research_gate=sample_size=6; "
+                "backtest_result=missing; "
+                "walk_forward=missing; "
+                "event_edge=missing"
+            ),
+        )
+    )
+
+    result = run_health_check(storage_dir=storage, symbol="BTC-USD", now=now, create_repair_request=False)
+
+    assert not {finding.code for finding in result.findings} & {
+        "decision_basis_missing_backtest_result",
+        "decision_basis_missing_walk_forward",
+        "decision_basis_missing_event_edge",
+    }
+    assert result.repair_required is False
+
+
+def test_health_check_allows_strategy_decision_basis_persisted_research_evidence(tmp_path):
+    storage = tmp_path / "storage"
+    repository = JsonFileRepository(storage)
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    forecast = _forecast("forecast:valid", anchor_time=now, status="pending")
+    repository.save_forecast(forecast)
+    repository.save_backtest_result(_backtest_result(now))
+    repository.save_walk_forward_validation(_walk_forward_validation(now))
+    repository.save_event_edge_evaluation(_event_edge_evaluation(now))
+    repository.save_strategy_decision(
+        _decision(
+            "decision:valid-basis",
+            now=now,
+            forecast_id=forecast.forecast_id,
+            decision_basis=(
+                "research_gate=sample_size=6; "
+                "backtest_result=backtest-result:valid; "
+                "walk_forward=walk-forward:valid; "
+                "event_edge=event-edge:valid"
+            ),
+        )
+    )
+
+    result = run_health_check(storage_dir=storage, symbol="BTC-USD", now=now, create_repair_request=False)
+
+    assert not {finding.code for finding in result.findings} & {
+        "decision_basis_missing_backtest_result",
+        "decision_basis_missing_walk_forward",
+        "decision_basis_missing_event_edge",
+    }
 
 
 def test_health_check_detects_non_replay_evaluation_summary_broken_links(tmp_path, monkeypatch):

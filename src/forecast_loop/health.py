@@ -803,6 +803,14 @@ def _check_links(
             _add_link_finding("decision_missing_review", storage_path / "strategy_decisions.jsonl", decision.decision_id, ", ".join(missing_reviews), findings)
         if missing_baselines:
             _add_link_finding("decision_missing_baseline", storage_path / "strategy_decisions.jsonl", decision.decision_id, ", ".join(missing_baselines), findings)
+        _check_decision_basis_research_links(
+            storage_path,
+            decision,
+            backtest_result_ids,
+            walk_forward_validation_ids,
+            event_edge_evaluation_ids,
+            findings,
+        )
 
     for summary in evaluation_summaries:
         if summary.replay_window_start is not None or summary.replay_window_end is not None:
@@ -1655,6 +1663,56 @@ def _add_link_finding(code: str, path: Path, source_id: str, missing_id: str, fi
             repair_required=True,
         )
     )
+
+
+def _check_decision_basis_research_links(
+    storage_path: Path,
+    decision: StrategyDecision,
+    backtest_result_ids: set[str],
+    walk_forward_validation_ids: set[str],
+    event_edge_evaluation_ids: set[str],
+    findings: list[HealthFinding],
+) -> None:
+    evidence_specs = [
+        (
+            "backtest_result",
+            backtest_result_ids,
+            "decision_basis_missing_backtest_result",
+        ),
+        (
+            "walk_forward",
+            walk_forward_validation_ids,
+            "decision_basis_missing_walk_forward",
+        ),
+        (
+            "event_edge",
+            event_edge_evaluation_ids,
+            "decision_basis_missing_event_edge",
+        ),
+    ]
+    for field_name, valid_ids, code in evidence_specs:
+        missing_ids = [
+            value
+            for value in _decision_basis_values(decision.decision_basis, field_name)
+            if not _is_empty_evidence_reference(value) and value not in valid_ids
+        ]
+        if missing_ids:
+            _add_link_finding(
+                code,
+                storage_path / "strategy_decisions.jsonl",
+                decision.decision_id,
+                ", ".join(sorted(set(missing_ids))),
+                findings,
+            )
+
+
+def _decision_basis_values(decision_basis: str, field_name: str) -> list[str]:
+    pattern = rf"(?:^|[;,\s]){re.escape(field_name)}=([^;,\s]+)"
+    return re.findall(pattern, decision_basis)
+
+
+def _is_empty_evidence_reference(value: str) -> bool:
+    return value.strip().lower() in {"", "missing", "none", "null"}
 
 
 def _research_run_strategy_card_matches_agenda(

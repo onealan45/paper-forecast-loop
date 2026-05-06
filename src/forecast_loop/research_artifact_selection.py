@@ -6,6 +6,9 @@ from forecast_loop.models import BacktestResult, BacktestRun
 
 
 DECISION_BLOCKER_BACKTEST_ID_CONTEXT = "id_context=decision_blocker_research:run_backtest:backtest_result"
+DECISION_BLOCKER_WALK_FORWARD_ID_CONTEXT = (
+    "id_context=decision_blocker_research:run_walk_forward_validation:walk_forward_validation"
+)
 
 
 def latest_backtest_for_research(

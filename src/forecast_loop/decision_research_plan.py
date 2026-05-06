@@ -19,7 +19,10 @@ from forecast_loop.models import (
     StrategyDecision,
     WalkForwardValidation,
 )
-from forecast_loop.research_artifact_selection import latest_backtest_for_research
+from forecast_loop.research_artifact_selection import (
+    DECISION_BLOCKER_BACKTEST_ID_CONTEXT,
+    DECISION_BLOCKER_WALK_FORWARD_ID_CONTEXT,
+)
 from forecast_loop.storage import ArtifactRepository
 
 
@@ -202,7 +205,14 @@ def _event_edge_task(
     reactions: list[MarketReactionCheck],
     candles: list[MarketCandleRecord],
 ) -> DecisionBlockerResearchTask:
-    latest_edge = _latest_event_edge_after_agenda(event_edges, agenda)
+    latest_edge = _latest_current_event_edge(
+        event_edges=event_edges,
+        agenda=agenda,
+        now=now,
+        events=events,
+        reactions=reactions,
+        candles=candles,
+    )
     if latest_edge is not None:
         return DecisionBlockerResearchTask(
             task_id="build_event_edge_evaluation",
@@ -214,7 +224,7 @@ def _event_edge_task(
             worker_prompt=_worker_prompt("event-edge evaluation", blockers),
             blocked_reason=None,
             missing_inputs=[],
-            rationale="A same-symbol event-edge evaluation already exists after this blocker agenda.",
+            rationale="A same-symbol event-edge evaluation already covers the current blocker input set.",
         )
     missing = _missing_event_edge_inputs(
         symbol=symbol,
@@ -272,20 +282,6 @@ def _backtest_task(
     backtest_runs: list[BacktestRun],
     backtests: list[BacktestResult],
 ) -> DecisionBlockerResearchTask:
-    latest_backtest = _latest_backtest_after_agenda(backtests, backtest_runs, agenda)
-    if latest_backtest is not None:
-        return DecisionBlockerResearchTask(
-            task_id="run_backtest",
-            title="Run blocker-focused backtest",
-            status="completed",
-            required_artifact="backtest_result",
-            artifact_id=latest_backtest.result_id,
-            command_args=None,
-            worker_prompt=_worker_prompt("backtest", blockers),
-            blocked_reason=None,
-            missing_inputs=[],
-            rationale="A same-symbol backtest result already exists after this blocker agenda.",
-        )
     if storage is None:
         return _window_blocked_task(
             task_id="run_backtest",
@@ -296,8 +292,8 @@ def _backtest_task(
             rationale="Backtest evidence needs a storage directory before a command can be emitted.",
             missing_inputs=["storage_dir"],
         )
-    window = _candle_window(candles, symbol=symbol, now=now, min_count=10)
-    if window is None:
+    window_candles = _candle_window_records(candles, symbol=symbol, now=now, min_count=10)
+    if window_candles is None:
         return _window_blocked_task(
             task_id="run_backtest",
             title="Run blocker-focused backtest",
@@ -307,7 +303,30 @@ def _backtest_task(
             rationale="Backtest evidence needs at least 10 same-symbol candles imported by plan time.",
             missing_inputs=["market_candles"],
         )
-    start, end = window
+    start, end = window_candles[0].timestamp, window_candles[-1].timestamp
+    current_backtest = _latest_backtest_for_current_window(
+        backtests=backtests,
+        backtest_runs=backtest_runs,
+        symbol=symbol,
+        start=start,
+        end=end,
+        candle_ids=[candle.candle_id for candle in window_candles],
+        input_watermark=_candle_input_watermark(window_candles),
+        now=now,
+    )
+    if current_backtest is not None:
+        return DecisionBlockerResearchTask(
+            task_id="run_backtest",
+            title="Run blocker-focused backtest",
+            status="completed",
+            required_artifact="backtest_result",
+            artifact_id=current_backtest.result_id,
+            command_args=None,
+            worker_prompt=_worker_prompt("backtest", blockers),
+            blocked_reason=None,
+            missing_inputs=[],
+            rationale="A blocker-focused backtest already covers the unchanged current candle window.",
+        )
     command = _base_command() + [
         "backtest",
         "--storage-dir",
@@ -346,20 +365,6 @@ def _walk_forward_task(
     candles: list[MarketCandleRecord],
     walk_forwards: list[WalkForwardValidation],
 ) -> DecisionBlockerResearchTask:
-    latest_walk_forward = _latest_walk_forward_after_agenda(walk_forwards, agenda)
-    if latest_walk_forward is not None:
-        return DecisionBlockerResearchTask(
-            task_id="run_walk_forward_validation",
-            title="Run blocker-focused walk-forward validation",
-            status="completed",
-            required_artifact="walk_forward_validation",
-            artifact_id=latest_walk_forward.validation_id,
-            command_args=None,
-            worker_prompt=_worker_prompt("walk-forward validation", blockers),
-            blocked_reason=None,
-            missing_inputs=[],
-            rationale="A same-symbol walk-forward validation already exists after this blocker agenda.",
-        )
     if storage is None:
         return _window_blocked_task(
             task_id="run_walk_forward_validation",
@@ -370,8 +375,8 @@ def _walk_forward_task(
             rationale="Walk-forward validation needs a storage directory before a command can be emitted.",
             missing_inputs=["storage_dir"],
         )
-    window = _candle_window(candles, symbol=symbol, now=now, min_count=10)
-    if window is None:
+    window_candles = _candle_window_records(candles, symbol=symbol, now=now, min_count=10)
+    if window_candles is None:
         return _window_blocked_task(
             task_id="run_walk_forward_validation",
             title="Run blocker-focused walk-forward validation",
@@ -381,7 +386,28 @@ def _walk_forward_task(
             rationale="Walk-forward validation needs at least 10 same-symbol candles imported by plan time.",
             missing_inputs=["market_candles"],
         )
-    start, end = window
+    start, end = window_candles[0].timestamp, window_candles[-1].timestamp
+    current_walk_forward = _latest_walk_forward_for_current_window(
+        walk_forwards=walk_forwards,
+        symbol=symbol,
+        start=start,
+        end=end,
+        input_watermark=_candle_input_watermark(window_candles),
+        now=now,
+    )
+    if current_walk_forward is not None:
+        return DecisionBlockerResearchTask(
+            task_id="run_walk_forward_validation",
+            title="Run blocker-focused walk-forward validation",
+            status="completed",
+            required_artifact="walk_forward_validation",
+            artifact_id=current_walk_forward.validation_id,
+            command_args=None,
+            worker_prompt=_worker_prompt("walk-forward validation", blockers),
+            blocked_reason=None,
+            missing_inputs=[],
+            rationale="A blocker-focused walk-forward validation already covers the unchanged current candle window.",
+        )
     command = _base_command() + [
         "walk-forward",
         "--storage-dir",
@@ -477,27 +503,88 @@ def _latest_event_edge_after_agenda(
     return max(candidates, key=lambda item: (item.created_at, item.evaluation_id)) if candidates else None
 
 
-def _latest_backtest_after_agenda(
+def _latest_current_event_edge(
+    *,
+    event_edges: list[EventEdgeEvaluation],
+    agenda: ResearchAgenda,
+    now: datetime,
+    events: list[CanonicalEvent],
+    reactions: list[MarketReactionCheck],
+    candles: list[MarketCandleRecord],
+) -> EventEdgeEvaluation | None:
+    input_watermark = _event_edge_input_watermark(
+        symbol=agenda.symbol,
+        now=now,
+        events=events,
+        reactions=reactions,
+        candles=candles,
+    )
+    if input_watermark is None:
+        return None
+    candidates = [
+        evaluation
+        for evaluation in event_edges
+        if evaluation.symbol == agenda.symbol
+        and evaluation.created_at >= input_watermark
+        and evaluation.created_at <= now
+    ]
+    return max(candidates, key=lambda item: (item.created_at, item.evaluation_id)) if candidates else None
+
+
+def _latest_backtest_for_current_window(
+    *,
     backtests: list[BacktestResult],
     backtest_runs: list[BacktestRun],
-    agenda: ResearchAgenda,
+    symbol: str,
+    start: datetime,
+    end: datetime,
+    candle_ids: list[str],
+    input_watermark: datetime,
+    now: datetime,
 ) -> BacktestResult | None:
-    return latest_backtest_for_research(
-        backtests=backtests,
-        backtest_runs=backtest_runs,
-        symbol=agenda.symbol,
-        created_at_min=agenda.created_at,
-    )
+    run_by_id = {run.backtest_id: run for run in backtest_runs}
+    current_candle_ids = sorted(candle_ids)
+    candidates: list[BacktestResult] = []
+    for result in backtests:
+        run = run_by_id.get(result.backtest_id)
+        if run is None:
+            continue
+        if result.symbol != symbol or run.symbol != symbol:
+            continue
+        if result.start != start or result.end != end or run.start != start or run.end != end:
+            continue
+        if sorted(run.candle_ids) != current_candle_ids:
+            continue
+        if DECISION_BLOCKER_BACKTEST_ID_CONTEXT not in run.decision_basis:
+            continue
+        if run.created_at > now or result.created_at > now:
+            continue
+        if result.created_at < run.created_at:
+            continue
+        if run.created_at < input_watermark or result.created_at < input_watermark:
+            continue
+        candidates.append(result)
+    return max(candidates, key=lambda item: (item.created_at, item.result_id)) if candidates else None
 
 
-def _latest_walk_forward_after_agenda(
+def _latest_walk_forward_for_current_window(
+    *,
     walk_forwards: list[WalkForwardValidation],
-    agenda: ResearchAgenda,
+    symbol: str,
+    start: datetime,
+    end: datetime,
+    input_watermark: datetime,
+    now: datetime,
 ) -> WalkForwardValidation | None:
     candidates = [
         validation
         for validation in walk_forwards
-        if validation.symbol == agenda.symbol and validation.created_at >= agenda.created_at
+        if validation.symbol == symbol
+        and validation.start == start
+        and validation.end == end
+        and validation.created_at >= input_watermark
+        and validation.created_at <= now
+        and DECISION_BLOCKER_WALK_FORWARD_ID_CONTEXT in validation.decision_basis
     ]
     return max(candidates, key=lambda item: (item.created_at, item.validation_id)) if candidates else None
 
@@ -509,6 +596,19 @@ def _candle_window(
     now: datetime,
     min_count: int,
 ) -> tuple[datetime, datetime] | None:
+    records = _candle_window_records(candles, symbol=symbol, now=now, min_count=min_count)
+    if records is None:
+        return None
+    return records[0].timestamp, records[-1].timestamp
+
+
+def _candle_window_records(
+    candles: list[MarketCandleRecord],
+    *,
+    symbol: str,
+    now: datetime,
+    min_count: int,
+) -> list[MarketCandleRecord] | None:
     by_time: dict[datetime, MarketCandleRecord] = {}
     for candle in candles:
         if candle.symbol != symbol:
@@ -525,7 +625,35 @@ def _candle_window(
     timestamps = sorted(by_time)
     if len(timestamps) < min_count:
         return None
-    return timestamps[0], timestamps[-1]
+    return [by_time[timestamp] for timestamp in timestamps]
+
+
+def _candle_input_watermark(candles: list[MarketCandleRecord]) -> datetime:
+    return max(max(candle.timestamp, candle.imported_at) for candle in candles)
+
+
+def _event_edge_input_watermark(
+    *,
+    symbol: str,
+    now: datetime,
+    events: list[CanonicalEvent],
+    reactions: list[MarketReactionCheck],
+    candles: list[MarketCandleRecord],
+) -> datetime | None:
+    watermarks: list[datetime] = []
+    for event in events:
+        if _event_edge_event_available(event, symbol=symbol, now=now):
+            event_values = [event.available_at, event.fetched_at]
+            if event.created_at is not None:
+                event_values.append(event.created_at)
+            watermarks.append(max(value for value in event_values if value is not None))
+    for reaction in reactions:
+        if reaction.symbol == symbol and reaction.created_at <= now:
+            watermarks.append(reaction.created_at)
+    for candle in candles:
+        if candle.symbol == symbol and candle.timestamp <= now and candle.imported_at <= now:
+            watermarks.append(max(candle.timestamp, candle.imported_at))
+    return max(watermarks) if watermarks else None
 
 
 def _missing_event_edge_inputs(

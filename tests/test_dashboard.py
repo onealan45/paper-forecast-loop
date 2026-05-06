@@ -1293,6 +1293,178 @@ def test_dashboard_prioritizes_strategy_decision_and_health_status(tmp_path):
     assert "需要修復" not in html.split('id="strategy"', 1)[1].split("</section>", 1)[0]
 
 
+def test_dashboard_strategy_decision_uses_latest_created_at_not_file_tail(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 4, 0, tzinfo=UTC)
+    forecast = Forecast(
+        forecast_id="forecast:latest-decision",
+        symbol="BTC-USD",
+        created_at=now,
+        anchor_time=now,
+        target_window_start=now,
+        target_window_end=now + timedelta(hours=24),
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        status="pending",
+        status_reason="awaiting_horizon_end",
+        predicted_regime="trend_up",
+        confidence=0.72,
+        provider_data_through=now,
+        observed_candle_count=1,
+    )
+    current_decision = StrategyDecision(
+        decision_id="decision:current-buy",
+        created_at=now,
+        symbol="BTC-USD",
+        horizon_hours=24,
+        action="BUY",
+        confidence=0.72,
+        evidence_grade="B",
+        risk_level="MEDIUM",
+        tradeable=True,
+        blocked_reason=None,
+        recommended_position_pct=0.15,
+        current_position_pct=0.0,
+        max_position_pct=0.15,
+        invalidation_conditions=[],
+        reason_summary="目前最新決策是偏多。",
+        forecast_ids=[forecast.forecast_id],
+        score_ids=[],
+        review_ids=[],
+        baseline_ids=[],
+        decision_basis="test-current",
+    )
+    old_tail_decision = StrategyDecision(
+        decision_id="decision:old-tail-hold",
+        created_at=now - timedelta(hours=2),
+        symbol="BTC-USD",
+        horizon_hours=24,
+        action="HOLD",
+        confidence=0.1,
+        evidence_grade="D",
+        risk_level="HIGH",
+        tradeable=False,
+        blocked_reason="old_tail",
+        recommended_position_pct=0.0,
+        current_position_pct=0.0,
+        max_position_pct=0.15,
+        invalidation_conditions=[],
+        reason_summary="舊決策不應因為檔尾而覆蓋最新決策。",
+        forecast_ids=[forecast.forecast_id],
+        score_ids=[],
+        review_ids=[],
+        baseline_ids=[],
+        decision_basis="test-old-tail",
+    )
+    repository.save_forecast(forecast)
+    repository.save_strategy_decision(current_decision)
+    repository.save_strategy_decision(old_tail_decision)
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+    html = render_dashboard_html(snapshot)
+
+    assert snapshot.latest_strategy_decision is not None
+    assert snapshot.latest_strategy_decision.decision_id == "decision:current-buy"
+    assert "買進（BUY）" in html
+    assert "舊決策不應因為檔尾而覆蓋最新決策。" not in html
+
+
+def test_dashboard_strategy_decision_is_scoped_to_dashboard_symbol(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 4, 0, tzinfo=UTC)
+    btc_forecast = Forecast(
+        forecast_id="forecast:btc",
+        symbol="BTC-USD",
+        created_at=now,
+        anchor_time=now,
+        target_window_start=now,
+        target_window_end=now + timedelta(hours=24),
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        status="pending",
+        status_reason="awaiting_horizon_end",
+        predicted_regime="trend_up",
+        confidence=0.72,
+        provider_data_through=now,
+        observed_candle_count=1,
+    )
+    spy_forecast = Forecast(
+        forecast_id="forecast:spy",
+        symbol="SPY",
+        created_at=now,
+        anchor_time=now,
+        target_window_start=now,
+        target_window_end=now + timedelta(hours=24),
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        status="pending",
+        status_reason="awaiting_horizon_end",
+        predicted_regime="trend_down",
+        confidence=0.62,
+        provider_data_through=now,
+        observed_candle_count=1,
+    )
+    btc_decision = StrategyDecision(
+        decision_id="decision:btc-tail",
+        created_at=now + timedelta(minutes=5),
+        symbol="BTC-USD",
+        horizon_hours=24,
+        action="BUY",
+        confidence=0.72,
+        evidence_grade="B",
+        risk_level="MEDIUM",
+        tradeable=True,
+        blocked_reason=None,
+        recommended_position_pct=0.15,
+        current_position_pct=0.0,
+        max_position_pct=0.15,
+        invalidation_conditions=[],
+        reason_summary="BTC decision should not appear on SPY dashboard state.",
+        forecast_ids=[btc_forecast.forecast_id],
+        score_ids=[],
+        review_ids=[],
+        baseline_ids=[],
+        decision_basis="test-btc",
+    )
+    spy_decision = StrategyDecision(
+        decision_id="decision:spy-current",
+        created_at=now,
+        symbol="SPY",
+        horizon_hours=24,
+        action="HOLD",
+        confidence=0.55,
+        evidence_grade="C",
+        risk_level="LOW",
+        tradeable=False,
+        blocked_reason="market_closed",
+        recommended_position_pct=0.0,
+        current_position_pct=0.0,
+        max_position_pct=0.15,
+        invalidation_conditions=[],
+        reason_summary="SPY decision matches the latest forecast symbol.",
+        forecast_ids=[spy_forecast.forecast_id],
+        score_ids=[],
+        review_ids=[],
+        baseline_ids=[],
+        decision_basis="test-spy",
+    )
+    repository.save_forecast(btc_forecast)
+    repository.save_strategy_decision(spy_decision)
+    repository.save_strategy_decision(btc_decision)
+    repository.save_forecast(spy_forecast)
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+
+    assert snapshot.latest_forecast is not None
+    assert snapshot.latest_forecast.symbol == "SPY"
+    assert snapshot.latest_strategy_decision is not None
+    assert snapshot.latest_strategy_decision.decision_id == "decision:spy-current"
+
+
 def test_dashboard_uses_specific_blocked_decision_reason_summary(tmp_path):
     from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
 

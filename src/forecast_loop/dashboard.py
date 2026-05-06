@@ -165,8 +165,11 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
     execution_safety_gates = repository.load_execution_safety_gates()
     provider_runs = repository.load_provider_runs()
     replay_summaries = repository.load_evaluation_summaries()
-    latest_forecast = forecasts[-1] if forecasts else None
-    dashboard_symbol = latest_forecast.symbol if latest_forecast else (strategy_decisions[-1].symbol if strategy_decisions else "BTC-USD")
+    latest_forecast = _latest(forecasts)
+    latest_strategy_decision_any = _latest(strategy_decisions)
+    dashboard_symbol = latest_forecast.symbol if latest_forecast else (
+        latest_strategy_decision_any.symbol if latest_strategy_decision_any else "BTC-USD"
+    )
     dashboard_forecast_ids = {item.forecast_id for item in forecasts if item.symbol == dashboard_symbol}
     if dashboard_forecast_ids:
         dashboard_scores = [item for item in scores if item.forecast_id in dashboard_forecast_ids]

@@ -1061,17 +1061,17 @@ def test_dashboard_review_score_and_proposal_are_scoped_to_dashboard_symbol(tmp_
     spy_forecast = Forecast(
         forecast_id="forecast:score-spy",
         symbol="SPY",
-        created_at=now,
-        anchor_time=now,
-        target_window_start=now,
-        target_window_end=now + timedelta(hours=24),
+        created_at=now + timedelta(minutes=1),
+        anchor_time=now + timedelta(minutes=1),
+        target_window_start=now + timedelta(minutes=1),
+        target_window_end=now + timedelta(hours=24, minutes=1),
         candle_interval_minutes=60,
         expected_candle_count=25,
         status="resolved",
         status_reason="scored",
         predicted_regime="trend_down",
         confidence=0.62,
-        provider_data_through=now + timedelta(hours=24),
+        provider_data_through=now + timedelta(hours=24, minutes=1),
         observed_candle_count=25,
     )
     spy_score = ForecastScore(
@@ -1624,10 +1624,10 @@ def test_dashboard_strategy_decision_is_scoped_to_dashboard_symbol(tmp_path):
     spy_forecast = Forecast(
         forecast_id="forecast:spy",
         symbol="SPY",
-        created_at=now,
-        anchor_time=now,
-        target_window_start=now,
-        target_window_end=now + timedelta(hours=24),
+        created_at=now + timedelta(minutes=1),
+        anchor_time=now + timedelta(minutes=1),
+        target_window_start=now + timedelta(minutes=1),
+        target_window_end=now + timedelta(hours=24, minutes=1),
         candle_interval_minutes=60,
         expected_candle_count=25,
         status="pending",
@@ -1692,6 +1692,111 @@ def test_dashboard_strategy_decision_is_scoped_to_dashboard_symbol(tmp_path):
     assert snapshot.latest_forecast.symbol == "SPY"
     assert snapshot.latest_strategy_decision is not None
     assert snapshot.latest_strategy_decision.decision_id == "decision:spy-current"
+
+
+def test_dashboard_latest_forecast_uses_created_at_not_file_tail(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 4, 0, tzinfo=UTC)
+    current_spy_forecast = Forecast(
+        forecast_id="forecast:spy-current-time",
+        symbol="SPY",
+        created_at=now,
+        anchor_time=now,
+        target_window_start=now,
+        target_window_end=now + timedelta(hours=24),
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        status="pending",
+        status_reason="awaiting_horizon_end",
+        predicted_regime="trend_down",
+        confidence=0.62,
+        provider_data_through=now + timedelta(minutes=1),
+        observed_candle_count=1,
+    )
+    old_tail_btc_forecast = Forecast(
+        forecast_id="forecast:btc-old-tail",
+        symbol="BTC-USD",
+        created_at=now - timedelta(hours=2),
+        anchor_time=now - timedelta(hours=2),
+        target_window_start=now - timedelta(hours=2),
+        target_window_end=now + timedelta(hours=22),
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        status="pending",
+        status_reason="awaiting_horizon_end",
+        predicted_regime="trend_up",
+        confidence=0.72,
+        provider_data_through=now - timedelta(hours=2),
+        observed_candle_count=1,
+    )
+    repository.save_forecast(current_spy_forecast)
+    repository.save_forecast(old_tail_btc_forecast)
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+
+    assert snapshot.latest_forecast is not None
+    assert snapshot.latest_forecast.forecast_id == "forecast:spy-current-time"
+
+
+def test_dashboard_symbol_fallback_uses_latest_decision_created_at_not_file_tail(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 4, 0, tzinfo=UTC)
+    current_spy_decision = StrategyDecision(
+        decision_id="decision:spy-current-time",
+        created_at=now,
+        symbol="SPY",
+        horizon_hours=24,
+        action="HOLD",
+        confidence=0.55,
+        evidence_grade="C",
+        risk_level="LOW",
+        tradeable=False,
+        blocked_reason="market_closed",
+        recommended_position_pct=0.0,
+        current_position_pct=0.0,
+        max_position_pct=0.15,
+        invalidation_conditions=[],
+        reason_summary="SPY decision is the latest no-forecast fallback.",
+        forecast_ids=[],
+        score_ids=[],
+        review_ids=[],
+        baseline_ids=[],
+        decision_basis="test-spy",
+    )
+    old_tail_btc_decision = StrategyDecision(
+        decision_id="decision:btc-old-tail",
+        created_at=now - timedelta(hours=2),
+        symbol="BTC-USD",
+        horizon_hours=24,
+        action="BUY",
+        confidence=0.72,
+        evidence_grade="B",
+        risk_level="MEDIUM",
+        tradeable=True,
+        blocked_reason=None,
+        recommended_position_pct=0.15,
+        current_position_pct=0.0,
+        max_position_pct=0.15,
+        invalidation_conditions=[],
+        reason_summary="BTC old tail should not define dashboard symbol.",
+        forecast_ids=[],
+        score_ids=[],
+        review_ids=[],
+        baseline_ids=[],
+        decision_basis="test-btc",
+    )
+    repository.save_strategy_decision(current_spy_decision)
+    repository.save_strategy_decision(old_tail_btc_decision)
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+
+    assert snapshot.latest_forecast is None
+    assert snapshot.latest_strategy_decision is not None
+    assert snapshot.latest_strategy_decision.decision_id == "decision:spy-current-time"
 
 
 def test_dashboard_baseline_evaluation_uses_latest_created_at_not_file_tail(tmp_path):
@@ -1777,17 +1882,17 @@ def test_dashboard_baseline_evaluation_is_scoped_to_dashboard_symbol(tmp_path):
     spy_forecast = Forecast(
         forecast_id="forecast:baseline-spy",
         symbol="SPY",
-        created_at=now,
-        anchor_time=now,
-        target_window_start=now,
-        target_window_end=now + timedelta(hours=24),
+        created_at=now + timedelta(minutes=1),
+        anchor_time=now + timedelta(minutes=1),
+        target_window_start=now + timedelta(minutes=1),
+        target_window_end=now + timedelta(hours=24, minutes=1),
         candle_interval_minutes=60,
         expected_candle_count=25,
         status="pending",
         status_reason="awaiting_horizon_end",
         predicted_regime="trend_down",
         confidence=0.62,
-        provider_data_through=now,
+        provider_data_through=now + timedelta(minutes=1),
         observed_candle_count=1,
     )
     spy_baseline = BaselineEvaluation(
@@ -3364,17 +3469,17 @@ def test_dashboard_risk_snapshot_is_scoped_to_symbol_and_created_at(tmp_path):
     spy_forecast = Forecast(
         forecast_id="forecast:risk-spy",
         symbol="SPY",
-        created_at=now,
-        anchor_time=now,
-        target_window_start=now,
-        target_window_end=now + timedelta(hours=24),
+        created_at=now + timedelta(minutes=1),
+        anchor_time=now + timedelta(minutes=1),
+        target_window_start=now + timedelta(minutes=1),
+        target_window_end=now + timedelta(hours=24, minutes=1),
         candle_interval_minutes=60,
         expected_candle_count=25,
         status="pending",
         status_reason="awaiting_horizon_end",
         predicted_regime="trend_down",
         confidence=0.62,
-        provider_data_through=now,
+        provider_data_through=now + timedelta(minutes=1),
         observed_candle_count=1,
     )
     spy_current_risk = RiskSnapshot(

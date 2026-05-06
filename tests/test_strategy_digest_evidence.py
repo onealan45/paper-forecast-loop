@@ -196,8 +196,7 @@ def test_resolve_strategy_digest_evidence_falls_back_to_latest_same_symbol_as_of
         ],
     )
 
-    assert evidence.event_edge is not None
-    assert evidence.event_edge.evaluation_id == "event-edge:latest"
+    assert evidence.event_edge is None
     assert evidence.backtest is not None
     assert evidence.backtest.result_id == "backtest-result:latest"
     assert evidence.walk_forward is not None

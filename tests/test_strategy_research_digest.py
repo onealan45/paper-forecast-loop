@@ -541,6 +541,27 @@ def test_strategy_research_digest_does_not_use_decision_blocker_event_edge_as_st
     assert "Event edge：" not in digest.research_summary
 
 
+def test_strategy_research_digest_does_not_fallback_to_unlinked_event_edge(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+    _seed_strategy_research_chain(repository, now)
+    repository.save_event_edge_evaluation(
+        _digest_event_edge(
+            now + timedelta(minutes=21),
+            evaluation_id="event-edge:unlinked-latest",
+        )
+    )
+
+    digest = record_strategy_research_digest(
+        repository=repository,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=30),
+    )
+
+    assert "event-edge:unlinked-latest" not in digest.evidence_artifact_ids
+    assert "Event edge：" not in digest.research_summary
+
+
 def test_strategy_research_digest_does_not_label_tradeable_buy_evidence_as_blocker_research(
     tmp_path,
 ):
@@ -636,7 +657,7 @@ def test_strategy_research_digest_does_not_label_risk_stop_evidence_as_blocker_r
     assert "decision:digest-risk-stop" in digest.evidence_artifact_ids
 
 
-def test_strategy_research_digest_surfaces_latest_blocker_evidence_metrics(tmp_path):
+def test_strategy_research_digest_surfaces_latest_backtest_and_walk_forward_metrics(tmp_path):
     repository = JsonFileRepository(tmp_path)
     now = datetime(2026, 5, 2, 10, 0, tzinfo=UTC)
     _seed_strategy_research_chain(repository, now)
@@ -668,12 +689,12 @@ def test_strategy_research_digest_surfaces_latest_blocker_evidence_metrics(tmp_p
         created_at=now + timedelta(minutes=5),
     )
 
-    assert "event-edge:digest-latest" in digest.evidence_artifact_ids
+    assert "event-edge:digest-latest" not in digest.evidence_artifact_ids
     assert "backtest-result:digest-latest" in digest.evidence_artifact_ids
     assert "walk-forward:digest-latest" in digest.evidence_artifact_ids
     assert "event-edge:digest-stale" not in digest.evidence_artifact_ids
     assert "event-edge:eth" not in digest.evidence_artifact_ids
-    assert "Event edge：樣本 2，after-cost edge -1.14%" in digest.research_summary
+    assert "Event edge：" not in digest.research_summary
     assert "Backtest：策略 -8.72%，benchmark +1.02%" in digest.research_summary
     assert "Walk-forward：excess -0.09%，windows 176" in digest.research_summary
     assert "aggregate_underperforms_benchmark" in digest.research_summary
@@ -773,7 +794,7 @@ def test_strategy_research_digest_is_point_in_time_for_chain_decision_and_eviden
     assert artifacts["revision_outcome"].outcome_id not in digest.evidence_artifact_ids
     assert digest.decision_id is None
     assert "decision:future-digest" not in digest.evidence_artifact_ids
-    assert "event-edge:digest-latest" in digest.evidence_artifact_ids
+    assert "event-edge:digest-latest" not in digest.evidence_artifact_ids
     assert "event-edge:future" not in digest.evidence_artifact_ids
 
 

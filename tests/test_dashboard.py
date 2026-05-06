@@ -1467,6 +1467,47 @@ def test_dashboard_surfaces_strategy_research_digest_summary(tmp_path):
     assert html.index("策略研究摘要") < html.index("目前策略假設")
 
 
+def test_dashboard_strategy_research_digest_uses_latest_created_at_not_file_tail(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+    _seed_dashboard_strategy_research(repository, now)
+    _seed_dashboard_strategy_research_digest(repository, now + timedelta(minutes=15))
+    repository.save_strategy_research_digest(
+        StrategyResearchDigest(
+            digest_id="strategy-research-digest:dashboard-old-tail",
+            created_at=now - timedelta(hours=2),
+            symbol="BTC-USD",
+            strategy_card_id="strategy-card:dashboard-visible",
+            strategy_name="Old appended digest",
+            strategy_status="DRAFT",
+            hypothesis="This older digest was appended after the current digest.",
+            paper_shadow_outcome_id=None,
+            outcome_grade=None,
+            excess_return_after_costs=None,
+            recommended_strategy_action=None,
+            top_failure_attributions=[],
+            lineage_root_card_id=None,
+            lineage_revision_count=0,
+            lineage_outcome_count=0,
+            lineage_primary_failure_attribution=None,
+            lineage_next_research_focus=None,
+            next_research_action="REPAIR_EVIDENCE_CHAIN",
+            autopilot_run_id=None,
+            evidence_artifact_ids=[],
+            research_summary="舊摘要不應因為檔案尾端而成為 dashboard latest。",
+            next_step_rationale="Ignore old tail digest.",
+            decision_basis="test-old-tail",
+        )
+    )
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+
+    assert snapshot.latest_strategy_research_digest is not None
+    assert snapshot.latest_strategy_research_digest.digest_id == "strategy-research-digest:dashboard-visible"
+
+
 def test_dashboard_uses_autopilot_linked_chain_instead_of_latest_symbol_artifacts(tmp_path):
     from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
 

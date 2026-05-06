@@ -287,7 +287,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         revision_card=lineage_replacement_card,
     )
 
-    latest_digest = strategy_research_digests[-1] if strategy_research_digests else None
+    latest_digest = _latest(strategy_research_digests)
 
     return DashboardSnapshot(
         storage_dir=storage_dir,
@@ -564,6 +564,10 @@ def _latest_lineage_research_task_run(
         if automation_run_matches_lineage_research_plan(run, task_plan)
     ]
     return max(matches, key=lambda run: run.completed_at) if matches else None
+
+
+def _latest(items: list, field: str = "created_at"):
+    return max(items, key=lambda item: getattr(item, field)) if items else None
 
 
 def _latest_lineage_research_agenda(

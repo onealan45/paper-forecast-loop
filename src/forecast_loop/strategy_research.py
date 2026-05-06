@@ -657,7 +657,15 @@ def _latest_anchor(
     anchors.extend(
         (item.created_at, priority_by_kind["outcome"], "outcome", item) for item in outcomes
     )
-    anchors.extend((item.created_at, priority_by_kind["agenda"], "agenda", item) for item in agendas)
+    strategy_agenda_anchors = [
+        (item.created_at, priority_by_kind["agenda"], "agenda", item)
+        for item in agendas
+        if item.strategy_card_ids
+    ]
+    if strategy_agenda_anchors:
+        anchors.extend(strategy_agenda_anchors)
+    elif not anchors:
+        anchors.extend((item.created_at, priority_by_kind["agenda"], "agenda", item) for item in agendas)
     if not anchors:
         return None
     _, _, kind, item = max(anchors, key=lambda value: (value[0], value[1]))

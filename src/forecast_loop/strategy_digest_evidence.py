@@ -36,7 +36,11 @@ def resolve_strategy_digest_evidence(
             items=event_edges,
             id_field="evaluation_id",
             prefix="event-edge:",
-            fallback=lambda: _latest_same_symbol_as_of(event_edges, digest),
+            fallback=lambda: _latest_same_symbol_as_of(
+                event_edges,
+                digest,
+                id_field="evaluation_id",
+            ),
         ),
         backtest=_evidence_by_id_or_fallback(
             digest=digest,
@@ -90,11 +94,18 @@ def _by_id(
     return None
 
 
-def _latest_same_symbol_as_of(items: list, digest: StrategyResearchDigest):
+def _latest_same_symbol_as_of(
+    items: list,
+    digest: StrategyResearchDigest,
+    *,
+    id_field: str | None = None,
+):
+    excluded = set(digest.decision_research_artifact_ids)
     matches = [
         item
         for item in items
         if getattr(item, "symbol", None) == digest.symbol
         and getattr(item, "created_at", digest.created_at) <= digest.created_at
+        and (id_field is None or getattr(item, id_field, None) not in excluded)
     ]
     return max(matches, key=lambda item: item.created_at) if matches else None

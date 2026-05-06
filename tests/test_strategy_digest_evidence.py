@@ -10,7 +10,12 @@ from forecast_loop.models import (
 from forecast_loop.strategy_digest_evidence import resolve_strategy_digest_evidence
 
 
-def _digest(now: datetime, *, evidence_ids: list[str] | None = None) -> StrategyResearchDigest:
+def _digest(
+    now: datetime,
+    *,
+    evidence_ids: list[str] | None = None,
+    decision_research_artifact_ids: list[str] | None = None,
+) -> StrategyResearchDigest:
     return StrategyResearchDigest(
         digest_id="strategy-research-digest:evidence",
         created_at=now,
@@ -35,6 +40,7 @@ def _digest(now: datetime, *, evidence_ids: list[str] | None = None) -> Strategy
         research_summary="test",
         next_step_rationale="test",
         decision_basis="test",
+        decision_research_artifact_ids=decision_research_artifact_ids or [],
     )
 
 
@@ -278,3 +284,21 @@ def test_resolve_strategy_digest_evidence_fallback_prefers_decision_blocker_back
 
     assert evidence.backtest is not None
     assert evidence.backtest.result_id == "backtest-result:blocker"
+
+
+def test_resolve_strategy_digest_evidence_event_edge_fallback_excludes_decision_blocker_ids() -> None:
+    now = datetime(2026, 5, 6, 8, 0, tzinfo=UTC)
+
+    evidence = resolve_strategy_digest_evidence(
+        digest=_digest(
+            now,
+            decision_research_artifact_ids=["event-edge:blocker"],
+        ),
+        event_edges=[
+            _event_edge(now - timedelta(minutes=1), evaluation_id="event-edge:blocker"),
+        ],
+        backtests=[],
+        walk_forwards=[],
+    )
+
+    assert evidence.event_edge is None

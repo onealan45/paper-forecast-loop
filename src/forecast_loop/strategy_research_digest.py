@@ -110,7 +110,13 @@ def build_strategy_research_digest(
         single_attr="event_edge_evaluation_id",
         card_list_attr="event_edge_evaluation_ids",
         id_field="evaluation_id",
-        fallback=lambda: _latest_symbol_artifact(event_edges, symbol=symbol, as_of=created_at),
+        fallback=lambda: _latest_symbol_artifact(
+            event_edges,
+            symbol=symbol,
+            as_of=created_at,
+            id_field="evaluation_id",
+            excluded_ids=decision_research_artifact_ids,
+        ),
     )
     latest_backtest = _chain_artifact_or_fallback(
         chain,
@@ -318,11 +324,20 @@ def _decision_research_artifact_ids(decision: StrategyDecision | None) -> list[s
     return ids
 
 
-def _latest_symbol_artifact(items: list, *, symbol: str, as_of: datetime):
+def _latest_symbol_artifact(
+    items: list,
+    *,
+    symbol: str,
+    as_of: datetime,
+    id_field: str | None = None,
+    excluded_ids: list[str] | None = None,
+):
+    excluded = set(excluded_ids or [])
     matches = [
         item
         for item in items
         if getattr(item, "symbol", None) == symbol and getattr(item, "created_at", as_of) <= as_of
+        and (id_field is None or getattr(item, id_field, None) not in excluded)
     ]
     return max(matches, key=lambda item: item.created_at) if matches else None
 

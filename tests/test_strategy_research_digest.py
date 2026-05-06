@@ -490,6 +490,57 @@ def test_strategy_research_digest_records_decision_blocker_research_artifact_ids
     assert "decision:digest-blocker-evidence" in digest.evidence_artifact_ids
 
 
+def test_strategy_research_digest_does_not_use_decision_blocker_event_edge_as_strategy_metric(
+    tmp_path,
+):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+    _seed_strategy_research_chain(repository, now)
+    repository.save_event_edge_evaluation(
+        _digest_event_edge(
+            now + timedelta(minutes=21),
+            evaluation_id="event-edge:blocker-current",
+        )
+    )
+    repository.save_strategy_decision(
+        StrategyDecision(
+            decision_id="decision:digest-blocker-event-edge",
+            created_at=now + timedelta(minutes=22),
+            symbol="BTC-USD",
+            horizon_hours=24,
+            action="HOLD",
+            confidence=0.51,
+            evidence_grade="D",
+            risk_level="MEDIUM",
+            tradeable=False,
+            blocked_reason="model_not_beating_baseline",
+            recommended_position_pct=0.0,
+            current_position_pct=0.0,
+            max_position_pct=0.15,
+            invalidation_conditions=["補齊 decision-blocker event edge。"],
+            reason_summary=(
+                "模型證據沒有打贏 baseline。 "
+                "主要研究阻擋：event edge 未通過。"
+            ),
+            forecast_ids=["forecast:digest"],
+            score_ids=["score:digest"],
+            review_ids=["review:digest"],
+            baseline_ids=["baseline:digest"],
+            decision_basis="event_edge=event-edge:blocker-current; flags=research_event_edge_not_passed",
+        )
+    )
+
+    digest = record_strategy_research_digest(
+        repository=repository,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=30),
+    )
+
+    assert digest.decision_research_artifact_ids == ["event-edge:blocker-current"]
+    assert "event-edge:blocker-current" not in digest.evidence_artifact_ids
+    assert "Event edge：" not in digest.research_summary
+
+
 def test_strategy_research_digest_does_not_label_tradeable_buy_evidence_as_blocker_research(
     tmp_path,
 ):

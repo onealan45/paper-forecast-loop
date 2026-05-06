@@ -20,6 +20,9 @@ class StrategyDigestEvidence:
     event_edge_source: str | None = None
     backtest_source: str | None = None
     walk_forward_source: str | None = None
+    decision_event_edge: EventEdgeEvaluation | None = None
+    decision_backtest: BacktestResult | None = None
+    decision_walk_forward: WalkForwardValidation | None = None
 
 
 def resolve_strategy_digest_evidence(
@@ -67,6 +70,7 @@ def resolve_strategy_digest_evidence(
             id_field="validation_id",
         ),
     )
+    decision_artifact_ids = set(digest.decision_research_artifact_ids)
     return StrategyDigestEvidence(
         event_edge=event_edge,
         backtest=backtest,
@@ -74,6 +78,24 @@ def resolve_strategy_digest_evidence(
         event_edge_source=event_edge_source,
         backtest_source=backtest_source,
         walk_forward_source=walk_forward_source,
+        decision_event_edge=_by_id(
+            event_edges,
+            "evaluation_id",
+            decision_artifact_ids,
+            digest,
+        ),
+        decision_backtest=_by_id(
+            backtests,
+            "result_id",
+            decision_artifact_ids,
+            digest,
+        ),
+        decision_walk_forward=_by_id(
+            walk_forwards,
+            "validation_id",
+            decision_artifact_ids,
+            digest,
+        ),
     )
 
 

@@ -1333,7 +1333,7 @@ def _render_strategy_research_digest(
           <dt>下一步理由</dt><dd>{escape(digest.next_step_rationale)}</dd>
           <dt>策略規則摘要</dt><dd>{_render_digest_strategy_rules(digest, card)}</dd>
           <dt>策略證據指標</dt><dd>{_render_digest_evidence_metrics(evidence)}</dd>
-          <dt>決策阻擋研究證據</dt><dd>{_render_digest_decision_research_evidence(digest)}</dd>
+          <dt>決策阻擋研究證據</dt><dd>{_render_digest_decision_research_evidence(digest, evidence)}</dd>
           <dt>證據</dt><dd>{_dashboard_list_inline(digest.evidence_artifact_ids)}</dd>
         </dl>
       </div>
@@ -1424,13 +1424,72 @@ def _display_digest_evidence_source(source: str | None) -> str:
     return "未知"
 
 
-def _render_digest_decision_research_evidence(digest: StrategyResearchDigest) -> str:
+def _render_digest_decision_research_evidence(
+    digest: StrategyResearchDigest,
+    evidence: StrategyDigestEvidence | None,
+) -> str:
     if not digest.decision_research_artifact_ids:
         return '<span class="empty">沒有獨立 decision-blocker research evidence</span>'
+    metric_items: list[str] = []
+    resolved_ids: set[str] = set()
+    if evidence is not None and evidence.decision_event_edge is not None:
+        edge = evidence.decision_event_edge
+        resolved_ids.add(edge.evaluation_id)
+        metric_items.append(
+            "Event edge "
+            f"<code>{escape(edge.evaluation_id)}</code>："
+            f"樣本 {edge.sample_n}；"
+            f"after-cost edge {_format_signed_ratio(edge.average_excess_return_after_costs)}；"
+            f"hit-rate {_format_optional_ratio(edge.hit_rate)}；"
+            f"pass {_display_boolean(edge.passed)}；"
+            f"flags {escape(', '.join(edge.flags[:5]) if edge.flags else 'none')}"
+        )
+    if evidence is not None and evidence.decision_backtest is not None:
+        backtest = evidence.decision_backtest
+        resolved_ids.add(backtest.result_id)
+        metric_items.append(
+            "Backtest "
+            f"<code>{escape(backtest.result_id)}</code>："
+            f"策略 {_format_signed_ratio(backtest.strategy_return)}；"
+            f"benchmark {_format_optional_ratio(backtest.benchmark_return)}；"
+            f"max DD {_format_optional_ratio(backtest.max_drawdown)}；"
+            f"win-rate {_format_optional_ratio(backtest.win_rate)}；"
+            f"trades {backtest.trade_count}"
+        )
+    if evidence is not None and evidence.decision_walk_forward is not None:
+        walk_forward = evidence.decision_walk_forward
+        resolved_ids.add(walk_forward.validation_id)
+        metric_items.append(
+            "Walk-forward "
+            f"<code>{escape(walk_forward.validation_id)}</code>："
+            f"excess {_format_signed_ratio(walk_forward.average_excess_return)}；"
+            f"windows {walk_forward.window_count}；"
+            f"test win-rate {_format_optional_ratio(walk_forward.test_win_rate)}；"
+            f"overfit windows {walk_forward.overfit_window_count}；"
+            f"flags {escape(', '.join(walk_forward.overfit_risk_flags[:5]) if walk_forward.overfit_risk_flags else 'none')}"
+        )
+    metrics = (
+        "<ul class=\"digest-rule-list\">"
+        + "".join(f"<li>{item}</li>" for item in metric_items)
+        + "</ul>"
+        if metric_items
+        else ""
+    )
+    unresolved_ids = [
+        artifact_id
+        for artifact_id in digest.decision_research_artifact_ids
+        if artifact_id not in resolved_ids
+    ]
+    unresolved = (
+        f"<p class=\"micro-copy\">未解析 artifact：{_dashboard_list_inline(unresolved_ids)}</p>"
+        if unresolved_ids
+        else ""
+    )
     return f"""
       <div class="compact-stack">
         <p class="micro-copy">這些證據用來解釋目前 BUY/SELL 為何被擋住；不等同於 active strategy validation。</p>
-        {_dashboard_list_inline(digest.decision_research_artifact_ids)}
+        {metrics}
+        {unresolved}
       </div>
     """
 

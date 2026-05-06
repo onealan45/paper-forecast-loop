@@ -300,6 +300,10 @@ def test_resolve_strategy_digest_evidence_fallback_excludes_decision_blocker_ids
     assert evidence.backtest_source == "background_fallback"
     assert evidence.walk_forward is None
     assert evidence.walk_forward_source is None
+    assert evidence.decision_backtest is not None
+    assert evidence.decision_backtest.result_id == "backtest-result:blocker"
+    assert evidence.decision_walk_forward is not None
+    assert evidence.decision_walk_forward.validation_id == "walk-forward:blocker"
 
 
 def test_resolve_strategy_digest_evidence_event_edge_fallback_excludes_decision_blocker_ids() -> None:

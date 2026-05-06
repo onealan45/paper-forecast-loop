@@ -1333,6 +1333,7 @@ def _render_strategy_research_digest(
           <dt>下一步理由</dt><dd>{escape(digest.next_step_rationale)}</dd>
           <dt>策略規則摘要</dt><dd>{_render_digest_strategy_rules(digest, card)}</dd>
           <dt>策略證據指標</dt><dd>{_render_digest_evidence_metrics(evidence)}</dd>
+          <dt>決策阻擋研究證據</dt><dd>{_render_digest_decision_research_evidence(digest)}</dd>
           <dt>證據</dt><dd>{_dashboard_list_inline(digest.evidence_artifact_ids)}</dd>
         </dl>
       </div>
@@ -1410,6 +1411,17 @@ def _render_digest_evidence_metrics(evidence: StrategyDigestEvidence | None) -> 
             f"flags {escape(', '.join(walk_forward.overfit_risk_flags[:5]) if walk_forward.overfit_risk_flags else 'none')}"
         )
     return "<ul class=\"digest-rule-list\">" + "".join(f"<li>{item}</li>" for item in items) + "</ul>"
+
+
+def _render_digest_decision_research_evidence(digest: StrategyResearchDigest) -> str:
+    if not digest.decision_research_artifact_ids:
+        return '<span class="empty">沒有獨立 decision-blocker research evidence</span>'
+    return f"""
+      <div class="compact-stack">
+        <p class="micro-copy">這些證據用來解釋目前 BUY/SELL 為何被擋住；不等同於 active strategy validation。</p>
+        {_dashboard_list_inline(digest.decision_research_artifact_ids)}
+      </div>
+    """
 
 
 def _render_lineage_research_agenda(agenda: ResearchAgenda | None) -> str:

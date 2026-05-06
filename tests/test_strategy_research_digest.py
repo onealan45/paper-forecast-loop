@@ -441,6 +441,150 @@ def test_record_strategy_research_digest_persists_current_strategy_and_lineage_c
     ]
 
 
+def test_strategy_research_digest_records_decision_blocker_research_artifact_ids(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+    _seed_strategy_research_chain(repository, now)
+    repository.save_strategy_decision(
+        StrategyDecision(
+            decision_id="decision:digest-blocker-evidence",
+            created_at=now + timedelta(minutes=20),
+            symbol="BTC-USD",
+            horizon_hours=24,
+            action="HOLD",
+            confidence=0.51,
+            evidence_grade="D",
+            risk_level="MEDIUM",
+            tradeable=False,
+            blocked_reason="model_not_beating_baseline",
+            recommended_position_pct=0.0,
+            current_position_pct=0.0,
+            max_position_pct=0.15,
+            invalidation_conditions=["補齊 decision-blocker research evidence。"],
+            reason_summary="主要研究阻擋：event edge 未通過、backtest 未打贏 benchmark。",
+            forecast_ids=["forecast:digest"],
+            score_ids=["score:digest"],
+            review_ids=["review:digest"],
+            baseline_ids=["baseline:digest"],
+            decision_basis=(
+                "action=HOLD; "
+                "event_edge=event-edge:blocker-current; "
+                "backtest_result=backtest-result:blocker-current; "
+                "walk_forward=walk-forward:blocker-current; "
+                "event_edge=event-edge:blocker-current"
+            ),
+        )
+    )
+
+    digest = record_strategy_research_digest(
+        repository=repository,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=30),
+    )
+
+    assert digest.decision_research_artifact_ids == [
+        "event-edge:blocker-current",
+        "backtest-result:blocker-current",
+        "walk-forward:blocker-current",
+    ]
+    assert "decision:digest-blocker-evidence" in digest.evidence_artifact_ids
+
+
+def test_strategy_research_digest_does_not_label_tradeable_buy_evidence_as_blocker_research(
+    tmp_path,
+):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+    _seed_strategy_research_chain(repository, now)
+    repository.save_strategy_decision(
+        StrategyDecision(
+            decision_id="decision:digest-tradeable-buy",
+            created_at=now + timedelta(minutes=20),
+            symbol="BTC-USD",
+            horizon_hours=24,
+            action="BUY",
+            confidence=0.72,
+            evidence_grade="B",
+            risk_level="MEDIUM",
+            tradeable=True,
+            blocked_reason=None,
+            recommended_position_pct=0.1,
+            current_position_pct=0.0,
+            max_position_pct=0.15,
+            invalidation_conditions=["edge disappears"],
+            reason_summary="研究證據已通過，允許 BUY 模擬決策。",
+            forecast_ids=["forecast:digest"],
+            score_ids=["score:digest"],
+            review_ids=["review:digest"],
+            baseline_ids=["baseline:digest"],
+            decision_basis=(
+                "action=BUY; "
+                "event_edge=event-edge:passing-gate; "
+                "backtest_result=backtest-result:passing-gate; "
+                "walk_forward=walk-forward:passing-gate; "
+                "flags=none"
+            ),
+        )
+    )
+
+    digest = record_strategy_research_digest(
+        repository=repository,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=30),
+    )
+
+    assert digest.decision_research_artifact_ids == []
+    assert "decision:digest-tradeable-buy" in digest.evidence_artifact_ids
+
+
+def test_strategy_research_digest_does_not_label_risk_stop_evidence_as_blocker_research(
+    tmp_path,
+):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+    _seed_strategy_research_chain(repository, now)
+    repository.save_strategy_decision(
+        StrategyDecision(
+            decision_id="decision:digest-risk-stop",
+            created_at=now + timedelta(minutes=20),
+            symbol="BTC-USD",
+            horizon_hours=24,
+            action="STOP_NEW_ENTRIES",
+            confidence=None,
+            evidence_grade="B",
+            risk_level="HIGH",
+            tradeable=False,
+            blocked_reason="risk_stop_new_entries",
+            recommended_position_pct=0.0,
+            current_position_pct=0.0,
+            max_position_pct=0.15,
+            invalidation_conditions=["risk control is lifted"],
+            reason_summary="風險控制要求停止新進場；研究 gate 本身沒有阻擋。",
+            forecast_ids=["forecast:digest"],
+            score_ids=["score:digest"],
+            review_ids=["review:digest"],
+            baseline_ids=["baseline:digest"],
+            decision_basis=(
+                "action=STOP_NEW_ENTRIES; "
+                "blocked_reason=risk_stop_new_entries; "
+                "event_edge=event-edge:passing-gate; "
+                "backtest_result=backtest-result:passing-gate; "
+                "walk_forward=walk-forward:passing-gate; "
+                "flags=none"
+            ),
+        )
+    )
+
+    digest = record_strategy_research_digest(
+        repository=repository,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=30),
+    )
+
+    assert digest.decision_research_artifact_ids == []
+    assert "decision:digest-risk-stop" in digest.evidence_artifact_ids
+
+
 def test_strategy_research_digest_surfaces_latest_blocker_evidence_metrics(tmp_path):
     repository = JsonFileRepository(tmp_path)
     now = datetime(2026, 5, 2, 10, 0, tzinfo=UTC)

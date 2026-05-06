@@ -627,6 +627,73 @@ def test_strategy_research_digest_keeps_card_shadow_outcome_when_decision_agenda
     assert "尚未有 paper-shadow 結果" not in digest.research_summary
 
 
+def test_strategy_research_digest_does_not_let_empty_decision_agenda_mask_current_strategy(
+    tmp_path,
+):
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+    artifacts = _seed_strategy_research_chain(repository, now)
+    decision = StrategyDecision(
+        decision_id="decision:empty-agenda-mask",
+        created_at=now + timedelta(minutes=19),
+        symbol="BTC-USD",
+        horizon_hours=24,
+        action="HOLD",
+        confidence=0.51,
+        evidence_grade="D",
+        risk_level="MEDIUM",
+        tradeable=False,
+        blocked_reason="model_not_beating_baseline",
+        recommended_position_pct=0.0,
+        current_position_pct=0.0,
+        max_position_pct=0.15,
+        invalidation_conditions=["Keep current strategy visible."],
+        reason_summary="Latest decision is blocked, but it should not hide the active strategy.",
+        forecast_ids=[],
+        score_ids=[],
+        review_ids=[],
+        baseline_ids=[],
+        decision_basis="test",
+    )
+    repository.save_strategy_decision(decision)
+    repository.save_research_agenda(
+        ResearchAgenda(
+            agenda_id="research-agenda:empty-decision-blocker",
+            created_at=now + timedelta(minutes=20),
+            symbol="BTC-USD",
+            title="Decision blocker research: BTC-USD HOLD",
+            hypothesis="Latest decision has blockers but no strategy card ownership.",
+            priority="MEDIUM",
+            status="OPEN",
+            target_strategy_family="decision_blocker_research",
+            strategy_card_ids=[],
+            expected_artifacts=[
+                "strategy_decision",
+                "event_edge_evaluation",
+                "backtest_result",
+                "walk_forward_validation",
+            ],
+            acceptance_criteria=["Do not hide the active strategy context."],
+            blocked_actions=["directional_buy_sell_without_research_evidence"],
+            decision_basis="decision_blocker_research_agenda",
+        )
+    )
+
+    digest = record_strategy_research_digest(
+        repository=repository,
+        symbol="BTC-USD",
+        created_at=now + timedelta(minutes=21),
+    )
+
+    assert digest.strategy_card_id == artifacts["revision"].card_id
+    assert digest.paper_shadow_outcome_id == artifacts["revision_outcome"].outcome_id
+    assert digest.strategy_name == artifacts["revision"].strategy_name
+    assert digest.decision_id == decision.decision_id
+    assert decision.decision_id in digest.evidence_artifact_ids
+    assert digest.strategy_name != "no_strategy_card"
+    assert "目前沒有策略卡" not in digest.research_summary
+
+
 def test_strategy_research_digest_does_not_mask_newer_same_card_retest_waiting_for_shadow(
     tmp_path,
 ):

@@ -311,6 +311,83 @@ def _seed_dashboard_strategy_research_digest(repository: JsonFileRepository, now
             decision_basis="test",
         )
     )
+    repository.save_event_edge_evaluation(
+        EventEdgeEvaluation(
+            evaluation_id="event-edge:dashboard-blocker",
+            event_family="crypto_flow",
+            event_type="CRYPTO_FLOW",
+            symbol="BTC-USD",
+            created_at=now,
+            split="decision_blocker_sample",
+            horizon_hours=24,
+            sample_n=3,
+            average_forward_return=-0.03,
+            average_benchmark_return=-0.007,
+            average_excess_return_after_costs=-0.022,
+            hit_rate=0.333,
+            max_adverse_excursion_p50=-0.04,
+            max_adverse_excursion_p90=-0.08,
+            max_drawdown_if_traded=-0.11,
+            turnover=1.5,
+            estimated_cost_bps=15.0,
+            dsr=None,
+            white_rc_p=None,
+            stability_score=None,
+            passed=False,
+            blocked_reason="non_positive_after_cost_edge",
+            flags=["non_positive_after_cost_edge", "low_hit_rate"],
+        )
+    )
+    repository.save_backtest_result(
+        BacktestResult(
+            result_id="backtest-result:dashboard-blocker",
+            backtest_id="backtest-run:dashboard-blocker",
+            created_at=now,
+            symbol="BTC-USD",
+            start=now - timedelta(days=30),
+            end=now,
+            initial_cash=10_000,
+            final_equity=7_780,
+            strategy_return=-0.222,
+            benchmark_return=0.044,
+            max_drawdown=0.188,
+            sharpe=-4.2,
+            turnover=0.91,
+            win_rate=0.125,
+            trade_count=8,
+            equity_curve=[],
+            decision_basis="decision blocker fixture",
+        )
+    )
+    repository.save_walk_forward_validation(
+        WalkForwardValidation(
+            validation_id="walk-forward:dashboard-blocker",
+            created_at=now,
+            symbol="BTC-USD",
+            start=now - timedelta(days=20),
+            end=now,
+            strategy_name="moving_average_trend",
+            train_size=12,
+            validation_size=6,
+            test_size=6,
+            step_size=1,
+            initial_cash=10_000,
+            fee_bps=5,
+            slippage_bps=10,
+            moving_average_window=24,
+            window_count=7,
+            average_validation_return=-0.002,
+            average_test_return=-0.0015,
+            average_benchmark_return=0.0018,
+            average_excess_return=-0.0033,
+            test_win_rate=0.143,
+            overfit_window_count=5,
+            overfit_risk_flags=["majority_windows_flagged"],
+            backtest_result_ids=["backtest-result:dashboard-blocker"],
+            windows=[],
+            decision_basis="decision blocker fixture",
+        )
+    )
     repository.save_strategy_research_digest(
         StrategyResearchDigest(
             digest_id="strategy-research-digest:dashboard-visible",
@@ -1359,6 +1436,12 @@ def test_dashboard_surfaces_strategy_research_digest_summary(tmp_path):
     assert "<code>event-edge:dashboard-blocker</code>" in decision_evidence_section
     assert "<code>backtest-result:dashboard-blocker</code>" in decision_evidence_section
     assert "<code>walk-forward:dashboard-blocker</code>" in decision_evidence_section
+    assert "樣本 3" in decision_evidence_section
+    assert "after-cost edge -2.20%" in decision_evidence_section
+    assert "策略 -22.20%" in decision_evidence_section
+    assert "benchmark 4.40%" in decision_evidence_section
+    assert "excess -0.33%" in decision_evidence_section
+    assert "windows 7" in decision_evidence_section
     assert "event-edge:dashboard-blocker" not in metric_section
     assert "Digest strategy rules" not in digest_section
     assert "Failure concentration" not in digest_section

@@ -7,11 +7,14 @@ from forecast_loop.cli import main
 from forecast_loop.decision_research_plan import build_decision_blocker_research_task_plan
 from forecast_loop.models import (
     BacktestResult,
+    BacktestRun,
     CanonicalEvent,
+    EventEdgeEvaluation,
     MarketCandle,
     MarketCandleRecord,
     MarketReactionCheck,
     ResearchAgenda,
+    WalkForwardValidation,
 )
 from forecast_loop.storage import JsonFileRepository
 
@@ -94,6 +97,35 @@ def _market_reaction(event: CanonicalEvent, *, passed: bool = True) -> MarketRea
     )
 
 
+def _market_reaction_for_timestamp(
+    event: CanonicalEvent,
+    *,
+    event_timestamp_used: datetime,
+    created_at: datetime,
+    passed: bool = True,
+) -> MarketReactionCheck:
+    return MarketReactionCheck(
+        check_id=f"market-reaction:{event.event_id.split(':')[-1]}:{created_at.timestamp()}",
+        event_id=event.event_id,
+        symbol=event.symbol,
+        created_at=created_at,
+        decision_timestamp=created_at,
+        event_timestamp_used=event_timestamp_used,
+        pre_event_ret_1h=0.001,
+        pre_event_ret_4h=0.002,
+        pre_event_ret_24h=0.003,
+        post_event_ret_15m=None,
+        post_event_ret_1h=0.004,
+        pre_event_drift_z=0.1,
+        volume_shock_z=0.1,
+        priced_in_ratio=0.1,
+        already_priced=False,
+        passed=passed,
+        blocked_reason=None if passed else "already_priced",
+        flags=[] if passed else ["already_priced"],
+    )
+
+
 def _save_event_candles(repository: JsonFileRepository, event: CanonicalEvent) -> None:
     event_time = event.available_at or event.fetched_at
     imported_at = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
@@ -136,6 +168,33 @@ def _save_single_candle(repository: JsonFileRepository, *, timestamp: datetime, 
     )
 
 
+def _save_event_candles_for_timestamp(
+    repository: JsonFileRepository,
+    *,
+    timestamp: datetime,
+    imported_at: datetime,
+) -> None:
+    for candle_timestamp, close in [
+        (timestamp, 100.0),
+        (timestamp + timedelta(hours=24), 103.0),
+    ]:
+        repository.save_market_candle(
+            MarketCandleRecord.from_candle(
+                MarketCandle(
+                    timestamp=candle_timestamp,
+                    open=close,
+                    high=close + 1.0,
+                    low=close - 1.0,
+                    close=close,
+                    volume=1_000.0,
+                ),
+                symbol="BTC-USD",
+                source="planner-fixture",
+                imported_at=imported_at,
+            )
+        )
+
+
 def _save_walk_forward_candles(repository: JsonFileRepository, *, start: datetime, count: int) -> None:
     for index in range(count):
         close = 100.0 + index
@@ -175,6 +234,123 @@ def _backtest_result(*, created_at: datetime, symbol: str = "BTC-USD") -> Backte
         trade_count=1,
         equity_curve=[],
         decision_basis="planner fixture backtest",
+    )
+
+
+def _decision_blocker_backtest_run(
+    *,
+    created_at: datetime,
+    start: datetime,
+    end: datetime,
+    candle_ids: list[str],
+    symbol: str = "BTC-USD",
+) -> BacktestRun:
+    return BacktestRun(
+        backtest_id=f"backtest-run:planner-{created_at.timestamp()}",
+        created_at=created_at,
+        symbol=symbol,
+        start=start,
+        end=end,
+        strategy_name="moving_average_trend",
+        initial_cash=10_000.0,
+        fee_bps=5.0,
+        slippage_bps=10.0,
+        moving_average_window=3,
+        candle_ids=candle_ids,
+        decision_basis=(
+            "paper-only moving-average trend backtest using stored candles; "
+            "id_context=decision_blocker_research:run_backtest:backtest_result"
+        ),
+    )
+
+
+def _backtest_result_for_run(run: BacktestRun, *, created_at: datetime) -> BacktestResult:
+    return BacktestResult(
+        result_id=f"backtest-result:planner-window-{created_at.timestamp()}",
+        backtest_id=run.backtest_id,
+        created_at=created_at,
+        symbol=run.symbol,
+        start=run.start,
+        end=run.end,
+        initial_cash=run.initial_cash,
+        final_equity=10_050.0,
+        strategy_return=0.005,
+        benchmark_return=0.003,
+        max_drawdown=0.01,
+        sharpe=None,
+        turnover=1.0,
+        win_rate=None,
+        trade_count=1,
+        equity_curve=[],
+        decision_basis="planner fixture backtest",
+    )
+
+
+def _event_edge_evaluation(*, evaluation_id: str, created_at: datetime, symbol: str = "BTC-USD") -> EventEdgeEvaluation:
+    return EventEdgeEvaluation(
+        evaluation_id=evaluation_id,
+        event_family="crypto_flow",
+        event_type="CRYPTO_FLOW",
+        symbol=symbol,
+        created_at=created_at,
+        split="historical_event_sample",
+        horizon_hours=24,
+        sample_n=3,
+        average_forward_return=0.02,
+        average_benchmark_return=0.0,
+        average_excess_return_after_costs=0.01,
+        hit_rate=1.0,
+        max_adverse_excursion_p50=-0.01,
+        max_adverse_excursion_p90=-0.02,
+        max_drawdown_if_traded=-0.02,
+        turnover=3.0,
+        estimated_cost_bps=10.0,
+        dsr=None,
+        white_rc_p=None,
+        stability_score=None,
+        passed=True,
+        blocked_reason=None,
+        flags=[],
+    )
+
+
+def _walk_forward_validation(
+    *,
+    validation_id: str,
+    created_at: datetime,
+    start: datetime,
+    end: datetime,
+    symbol: str = "BTC-USD",
+) -> WalkForwardValidation:
+    return WalkForwardValidation(
+        validation_id=validation_id,
+        created_at=created_at,
+        symbol=symbol,
+        start=start,
+        end=end,
+        strategy_name="moving_average_trend",
+        train_size=4,
+        validation_size=3,
+        test_size=3,
+        step_size=1,
+        initial_cash=10_000.0,
+        fee_bps=5.0,
+        slippage_bps=10.0,
+        moving_average_window=3,
+        window_count=1,
+        average_validation_return=0.004,
+        average_test_return=0.003,
+        average_benchmark_return=0.002,
+        average_excess_return=0.001,
+        test_win_rate=1.0,
+        overfit_window_count=0,
+        overfit_risk_flags=[],
+        backtest_result_ids=["backtest-result:planner-window"],
+        windows=[],
+        decision_basis=(
+            "rolling walk-forward validation; "
+            "id_context=decision_blocker_research:run_walk_forward_validation:walk_forward_validation"
+        ),
     )
 
 
@@ -306,6 +482,97 @@ def test_decision_blocker_research_plan_blocks_event_edge_without_exact_horizon_
     assert task.missing_inputs == ["market_candles"]
 
 
+def test_decision_blocker_research_plan_reuses_event_edge_when_inputs_are_unchanged_after_new_agenda(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    old_agenda_at = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
+    new_agenda_at = datetime(2026, 5, 2, 11, 0, tzinfo=UTC)
+    repository.save_research_agenda(
+        _agenda(
+            agenda_id="research-agenda:old-event-edge",
+            created_at=old_agenda_at,
+            expected_artifacts=["strategy_decision", "event_edge_evaluation"],
+        )
+    )
+    repository.save_research_agenda(
+        _agenda(
+            agenda_id="research-agenda:new-event-edge",
+            created_at=new_agenda_at,
+            expected_artifacts=["strategy_decision", "event_edge_evaluation"],
+        )
+    )
+    _seed_event_edge_prerequisites(repository)
+    repository.save_event_edge_evaluation(
+        _event_edge_evaluation(
+            evaluation_id="event-edge:already-current",
+            created_at=old_agenda_at + timedelta(minutes=10),
+        )
+    )
+
+    plan = build_decision_blocker_research_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=new_agenda_at + timedelta(minutes=30),
+    )
+
+    task = plan.task_by_id("build_event_edge_evaluation")
+    assert task.status == "completed"
+    assert task.artifact_id == "event-edge:already-current"
+    assert task.command_args is None
+    assert plan.next_task_id is None
+
+
+def test_decision_blocker_research_plan_rebuilds_event_edge_when_inputs_arrive_after_evaluation(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    agenda_at = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
+    evaluation_at = datetime(2026, 5, 2, 10, 0, tzinfo=UTC)
+    new_input_at = datetime(2026, 5, 2, 10, 30, tzinfo=UTC)
+    repository.save_research_agenda(
+        _agenda(
+            agenda_id="research-agenda:stale-event-edge",
+            created_at=agenda_at,
+            expected_artifacts=["strategy_decision", "event_edge_evaluation"],
+        )
+    )
+    _seed_event_edge_prerequisites(repository)
+    repository.save_event_edge_evaluation(
+        _event_edge_evaluation(
+            evaluation_id="event-edge:stale-after-agenda",
+            created_at=evaluation_at,
+        )
+    )
+    new_event = _event(2)
+    new_event.created_at = new_input_at
+    new_event.available_at = new_input_at
+    new_event.fetched_at = new_input_at
+    repository.save_canonical_event(new_event)
+    repository.save_market_reaction_check(
+        _market_reaction_for_timestamp(
+            new_event,
+            event_timestamp_used=new_event.event_time,
+            created_at=new_input_at,
+        )
+    )
+    _save_event_candles_for_timestamp(
+        repository,
+        timestamp=new_event.event_time,
+        imported_at=new_input_at,
+    )
+
+    plan = build_decision_blocker_research_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=new_input_at + timedelta(minutes=30),
+    )
+
+    task = plan.task_by_id("build_event_edge_evaluation")
+    assert task.status == "ready"
+    assert task.artifact_id is None
+    assert task.command_args is not None
+    assert plan.next_task_id == "build_event_edge_evaluation"
+
+
 def test_decision_blocker_research_plan_blocks_backtest_without_window(tmp_path):
     repository = JsonFileRepository(tmp_path)
     now = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
@@ -330,6 +597,120 @@ def test_decision_blocker_research_plan_blocks_backtest_without_window(tmp_path)
     assert task.command_args is None
     assert task.blocked_reason == "missing_backtest_window"
     assert task.missing_inputs == ["market_candles"]
+
+
+def test_decision_blocker_research_plan_reuses_backtest_when_candle_window_is_unchanged_after_new_agenda(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    old_agenda_at = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
+    new_agenda_at = datetime(2026, 5, 2, 11, 0, tzinfo=UTC)
+    candle_start = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    old_agenda = _agenda(
+        agenda_id="research-agenda:old-backtest",
+        created_at=old_agenda_at,
+        expected_artifacts=["strategy_decision", "research_dataset", "backtest_result"],
+        hypothesis="Latest decision decision:old is HOLD because backtest 未打贏 benchmark.",
+    )
+    new_agenda = _agenda(
+        agenda_id="research-agenda:new-backtest",
+        created_at=new_agenda_at,
+        expected_artifacts=["strategy_decision", "research_dataset", "backtest_result"],
+        hypothesis="Latest decision decision:new is HOLD because backtest 未打贏 benchmark.",
+    )
+    repository.save_research_agenda(old_agenda)
+    repository.save_research_agenda(new_agenda)
+    _save_walk_forward_candles(repository, start=candle_start, count=12)
+    candles = repository.load_market_candles()
+    run = _decision_blocker_backtest_run(
+        created_at=old_agenda_at + timedelta(minutes=10),
+        start=candles[0].timestamp,
+        end=candles[-1].timestamp,
+        candle_ids=[candle.candle_id for candle in candles],
+    )
+    result = _backtest_result_for_run(run, created_at=old_agenda_at + timedelta(minutes=10))
+    repository.save_backtest_run(run)
+    repository.save_backtest_result(result)
+
+    plan = build_decision_blocker_research_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=new_agenda_at + timedelta(minutes=30),
+    )
+
+    task = plan.task_by_id("run_backtest")
+    assert task.status == "completed"
+    assert task.artifact_id == result.result_id
+    assert task.command_args is None
+    assert plan.next_task_id is None
+
+
+def test_decision_blocker_research_plan_does_not_reuse_generic_backtest_after_agenda(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    agenda_at = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
+    candle_start = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    repository.save_research_agenda(
+        _agenda(
+            agenda_id="research-agenda:generic-backtest",
+            created_at=agenda_at,
+            expected_artifacts=["strategy_decision", "research_dataset", "backtest_result"],
+            hypothesis="Latest decision decision:blocked is HOLD because backtest 未打贏 benchmark.",
+        )
+    )
+    _save_walk_forward_candles(repository, start=candle_start, count=12)
+    repository.save_backtest_result(_backtest_result(created_at=agenda_at + timedelta(minutes=10)))
+
+    plan = build_decision_blocker_research_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=agenda_at + timedelta(minutes=30),
+    )
+
+    task = plan.task_by_id("run_backtest")
+    assert task.status == "ready"
+    assert task.artifact_id is None
+    assert task.command_args is not None
+    assert plan.next_task_id == "run_backtest"
+
+
+def test_decision_blocker_research_plan_does_not_reuse_backtest_with_stale_run_and_late_result(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    agenda_at = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
+    candle_start = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    stale_run_at = datetime(2026, 5, 1, 10, 0, tzinfo=UTC)
+    late_result_at = datetime(2026, 5, 2, 9, 10, tzinfo=UTC)
+    repository.save_research_agenda(
+        _agenda(
+            agenda_id="research-agenda:stale-run-late-result",
+            created_at=agenda_at,
+            expected_artifacts=["strategy_decision", "research_dataset", "backtest_result"],
+            hypothesis="Latest decision decision:blocked is HOLD because backtest 未打贏 benchmark.",
+        )
+    )
+    _save_walk_forward_candles(repository, start=candle_start, count=12)
+    candles = repository.load_market_candles()
+    run = _decision_blocker_backtest_run(
+        created_at=stale_run_at,
+        start=candles[0].timestamp,
+        end=candles[-1].timestamp,
+        candle_ids=[candle.candle_id for candle in candles],
+    )
+    result = _backtest_result_for_run(run, created_at=late_result_at)
+    repository.save_backtest_run(run)
+    repository.save_backtest_result(result)
+
+    plan = build_decision_blocker_research_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=agenda_at + timedelta(minutes=30),
+    )
+
+    task = plan.task_by_id("run_backtest")
+    assert task.status == "ready"
+    assert task.artifact_id is None
+    assert task.command_args is not None
+    assert plan.next_task_id == "run_backtest"
 
 
 def test_decision_blocker_research_plan_emits_asof_backtest_command_when_candles_cover_window(tmp_path):
@@ -376,9 +757,91 @@ def test_decision_blocker_research_plan_emits_asof_backtest_command_when_candles
     ]
 
 
-def test_decision_blocker_research_plan_marks_backtest_complete_when_recent_result_exists(tmp_path):
+def test_decision_blocker_research_plan_reuses_walk_forward_when_candle_window_is_unchanged_after_new_agenda(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    old_agenda_at = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
+    new_agenda_at = datetime(2026, 5, 2, 11, 0, tzinfo=UTC)
+    candle_start = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    repository.save_research_agenda(
+        _agenda(
+            agenda_id="research-agenda:old-walk-forward",
+            created_at=old_agenda_at,
+            expected_artifacts=["strategy_decision", "research_dataset", "walk_forward_validation"],
+            hypothesis="Latest decision decision:old is HOLD because walk-forward overfit risk.",
+        )
+    )
+    repository.save_research_agenda(
+        _agenda(
+            agenda_id="research-agenda:new-walk-forward",
+            created_at=new_agenda_at,
+            expected_artifacts=["strategy_decision", "research_dataset", "walk_forward_validation"],
+            hypothesis="Latest decision decision:new is HOLD because walk-forward overfit risk.",
+        )
+    )
+    _save_walk_forward_candles(repository, start=candle_start, count=12)
+    repository.save_walk_forward_validation(
+        _walk_forward_validation(
+            validation_id="walk-forward:already-current",
+            created_at=old_agenda_at + timedelta(minutes=10),
+            start=candle_start,
+            end=candle_start + timedelta(hours=11),
+        )
+    )
+
+    plan = build_decision_blocker_research_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=new_agenda_at + timedelta(minutes=30),
+    )
+
+    task = plan.task_by_id("run_walk_forward_validation")
+    assert task.status == "completed"
+    assert task.artifact_id == "walk-forward:already-current"
+    assert task.command_args is None
+    assert plan.next_task_id is None
+
+
+def test_decision_blocker_research_plan_does_not_reuse_wrong_window_walk_forward_after_agenda(tmp_path):
+    repository = JsonFileRepository(tmp_path)
+    agenda_at = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
+    candle_start = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+    repository.save_research_agenda(
+        _agenda(
+            agenda_id="research-agenda:wrong-walk-forward",
+            created_at=agenda_at,
+            expected_artifacts=["strategy_decision", "research_dataset", "walk_forward_validation"],
+            hypothesis="Latest decision decision:blocked is HOLD because walk-forward overfit risk.",
+        )
+    )
+    _save_walk_forward_candles(repository, start=candle_start, count=12)
+    repository.save_walk_forward_validation(
+        _walk_forward_validation(
+            validation_id="walk-forward:wrong-window",
+            created_at=agenda_at + timedelta(minutes=10),
+            start=candle_start - timedelta(hours=2),
+            end=candle_start + timedelta(hours=9),
+        )
+    )
+
+    plan = build_decision_blocker_research_task_plan(
+        repository=repository,
+        storage_dir=tmp_path,
+        symbol="BTC-USD",
+        now=agenda_at + timedelta(minutes=30),
+    )
+
+    task = plan.task_by_id("run_walk_forward_validation")
+    assert task.status == "ready"
+    assert task.artifact_id is None
+    assert task.command_args is not None
+    assert plan.next_task_id == "run_walk_forward_validation"
+
+
+def test_decision_blocker_research_plan_marks_backtest_complete_when_current_window_result_exists(tmp_path):
     repository = JsonFileRepository(tmp_path)
     agenda_created_at = datetime(2026, 5, 2, 9, 0, tzinfo=UTC)
+    candle_start = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
     agenda = _agenda(
         agenda_id="research-agenda:backtest-complete",
         created_at=agenda_created_at,
@@ -386,7 +849,17 @@ def test_decision_blocker_research_plan_marks_backtest_complete_when_recent_resu
         hypothesis="Latest decision decision:blocked is HOLD because backtest 未打贏 benchmark.",
     )
     repository.save_research_agenda(agenda)
-    repository.save_backtest_result(_backtest_result(created_at=agenda_created_at + timedelta(minutes=5)))
+    _save_walk_forward_candles(repository, start=candle_start, count=12)
+    candles = repository.load_market_candles()
+    run = _decision_blocker_backtest_run(
+        created_at=agenda_created_at + timedelta(minutes=5),
+        start=candles[0].timestamp,
+        end=candles[-1].timestamp,
+        candle_ids=[candle.candle_id for candle in candles],
+    )
+    result = _backtest_result_for_run(run, created_at=agenda_created_at + timedelta(minutes=5))
+    repository.save_backtest_run(run)
+    repository.save_backtest_result(result)
 
     plan = build_decision_blocker_research_task_plan(
         repository=repository,
@@ -397,7 +870,7 @@ def test_decision_blocker_research_plan_marks_backtest_complete_when_recent_resu
 
     task = plan.task_by_id("run_backtest")
     assert task.status == "completed"
-    assert task.artifact_id is not None
+    assert task.artifact_id == result.result_id
     assert task.command_args is None
     assert plan.next_task_id is None
 

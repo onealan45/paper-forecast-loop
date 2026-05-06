@@ -33,14 +33,28 @@ This file captures the repo-level Codex collaboration rules for this project.
 
 ## Review Rule
 
-Only use subagents for review. Do not self-review your own changes.
+Only subagents may perform substantive review of repo changes, including code,
+tests, docs, instructions, and automation rules. The controller may coordinate
+review, summarize reviewer findings, and check that review artifacts exist, but
+must not self-approve its own changes unless the user explicitly exempts a
+trivial non-substantive edit.
 
 When a final review is needed:
 
 - plan the reviewer role before spawning subagents
 - use the smallest role set that separates risk
 - prefer the strongest available model and highest reasoning effort
+- organize current subagents before spawning new ones to avoid hitting
+  worker-count limits
 - keep `max_depth = 1` unless there is a strong reason to nest workers
+- treat changed files as the starting point, not the review boundary
+- inspect nearby readers, builders, schemas, CLI output, storage helpers, and
+  tests when they may affect the claimed behavior
+- do not treat controller-reported verification as proof
+- reviewers must independently inspect whether tests and evidence cover intended
+  failure modes, false positives, false negatives, and compatibility paths
+- check that review conclusions are supported by file references, tests, or
+  command evidence
 - archive final review results under `docs/reviews/`
 
 ## Browser Rule
@@ -140,12 +154,19 @@ When the task is:
 - Verifier should prefer tests and assertions, not large production rewrites.
 - Docs should reflect code reality, not imagined behavior.
 - Reviewer should critique and tighten, not silently redesign.
+- Controller should integrate work and enforce scope, not hide unresolved worker
+  disagreements.
+- Workers should not continue editing after their ownership has moved.
 
 ## Worker Lifecycle
 
 - Keep `max_depth = 1` unless there is a very strong reason to nest workers.
 - Controller stays alive across the milestone.
 - Workers are disposable.
+- Prefer respawning a focused worker over stretching one worker across unrelated
+  roles.
+- Before spawning new workers, summarize active workers and close or retire stale
+  ones when possible.
 
 Respawn a worker if:
 
@@ -164,6 +185,8 @@ Every worker handoff should state:
 - what it assumes is true
 - what still looks risky
 - what tests were added or updated
+- what verification commands were run
+- what remains blocked or intentionally out of scope
 
 ## Done Rule
 
@@ -173,3 +196,96 @@ A role task is done only when:
 - changes are coherent
 - tests or evidence match the claimed behavior
 - handoff is explicit
+- residual risks are stated
+- no final self-review was used as merge evidence
+
+## PR Review Prompt Requirements
+
+Every final reviewer prompt should include:
+
+- role file path, usually `docs/roles/reviewer.md`
+- strict instruction: review only, do not edit files
+- repo path
+- branch name
+- base SHA or base branch
+- PR intent
+- changed files
+- verification already run
+- explicit review tasks
+- output format requiring verdict, findings, residual risks, and tests reviewed
+
+Reviewer output must use:
+
+- `Verdict: APPROVED` or `Verdict: CHANGES_REQUESTED`
+- severity-ranked findings
+- file and line references when available
+- residual risks
+- tests reviewed
+- no implementation patches
+
+## Review Quality Bar
+
+A reviewer must check:
+
+- whether the implementation actually satisfies the stated intent
+- whether behavior changed outside the intended scope
+- whether old artifacts remain backward compatible
+- whether false positives and false negatives are covered
+- whether severity, repair, blocking, and health semantics are correct
+- whether tests assert behavior rather than only snapshotting strings
+- whether fixtures match realistic artifact shapes
+- whether CLI behavior, storage behavior, and docs agree
+- whether changed files depended on nearby unchanged code that also needed
+  review
+
+## Verification Quality Bar
+
+A verifier must prefer:
+
+- focused regression tests for the new behavior
+- compatibility tests for old artifacts and old storage shapes
+- negative tests for malformed or missing evidence
+- command-level verification when CLI behavior is part of the change
+- exact command output summaries in handoff
+
+A verifier must not:
+
+- rewrite large production modules just to make testing easier
+- rely only on happy-path tests
+- claim full coverage when edge cases were not exercised
+- treat `pytest passed` as proof that acceptance criteria were met
+
+## Documentation Rule
+
+Docs changes must:
+
+- describe actual implemented behavior
+- preserve current execution boundaries
+- avoid promising live trading, real orders, broker submission, or real capital
+  movement
+- name known limitations and residual risks
+- stay aligned with architecture docs, role docs, and CLI behavior
+
+## Storage And Artifact Rule
+
+For artifact, replay, health, or research-quality changes:
+
+- preserve append-only and audit-friendly behavior where applicable
+- keep legacy artifacts readable unless the task explicitly migrates them
+- distinguish missing evidence from weak evidence
+- distinguish repair-required findings from informational findings
+- avoid fabricating future market results, paper-shadow outcomes, or evaluation
+  evidence
+- keep ids, timestamps, symbol scope, and provenance traceable
+
+## Final Report Rule
+
+Final reports should include:
+
+- concise summary
+- files changed
+- behavior changed
+- tests run
+- review status
+- residual risks
+- next recommended action only when useful

@@ -1161,6 +1161,63 @@ def test_health_check_detects_latest_strategy_research_digest_symbol_mismatches(
     assert result.repair_required is True
 
 
+def test_health_check_ignores_non_latest_strategy_research_digest_symbol_mismatches(tmp_path):
+    storage = tmp_path / "storage"
+    repository = JsonFileRepository(storage)
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    repository.save_forecast(_forecast("forecast:valid", anchor_time=now, status="pending"))
+    eth_backtest = _backtest_result(now, result_id="backtest-result:old-eth")
+    eth_backtest.symbol = "ETH-USD"
+    repository.save_backtest_result(eth_backtest)
+    repository.save_strategy_research_digest(
+        _strategy_research_digest(
+            now - timedelta(hours=1),
+            digest_id="strategy-research-digest:old-btc-links-eth",
+            evidence_artifact_ids=["backtest-result:old-eth"],
+        )
+    )
+    repository.save_strategy_research_digest(
+        _strategy_research_digest(
+            now,
+            digest_id="strategy-research-digest:latest-clean",
+            evidence_artifact_ids=["missing"],
+        )
+    )
+
+    result = run_health_check(storage_dir=storage, symbol="BTC-USD", now=now, create_repair_request=False)
+
+    assert "strategy_research_digest_symbol_mismatch_backtest_result" not in {
+        finding.code for finding in result.findings
+    }
+
+
+def test_health_check_treats_strategy_research_digest_symbol_matches_case_insensitively(tmp_path):
+    storage = tmp_path / "storage"
+    repository = JsonFileRepository(storage)
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    forecast = _forecast("forecast:valid", anchor_time=now, status="pending")
+    repository.save_forecast(forecast)
+    lowercase_backtest = _backtest_result(now, result_id="backtest-result:lowercase")
+    lowercase_backtest.symbol = "btc-usd"
+    repository.save_backtest_result(lowercase_backtest)
+    repository.save_strategy_card(_strategy_card("strategy-card:lowercase", now=now, symbols=["btc-usd"]))
+    repository.save_strategy_research_digest(
+        _strategy_research_digest(
+            now,
+            digest_id="strategy-research-digest:case-insensitive",
+            strategy_card_id="strategy-card:lowercase",
+            evidence_artifact_ids=["strategy-card:lowercase", "backtest-result:lowercase"],
+        )
+    )
+
+    result = run_health_check(storage_dir=storage, symbol="BTC-USD", now=now, create_repair_request=False)
+
+    assert not {finding.code for finding in result.findings} & {
+        "strategy_research_digest_symbol_mismatch_strategy_card",
+        "strategy_research_digest_symbol_mismatch_backtest_result",
+    }
+
+
 def test_health_check_detects_non_replay_evaluation_summary_broken_links(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     storage = tmp_path / "storage"

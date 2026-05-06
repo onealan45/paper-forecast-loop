@@ -167,6 +167,19 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
     replay_summaries = repository.load_evaluation_summaries()
     latest_forecast = forecasts[-1] if forecasts else None
     dashboard_symbol = latest_forecast.symbol if latest_forecast else (strategy_decisions[-1].symbol if strategy_decisions else "BTC-USD")
+    dashboard_forecast_ids = {item.forecast_id for item in forecasts if item.symbol == dashboard_symbol}
+    if dashboard_forecast_ids:
+        dashboard_scores = [item for item in scores if item.forecast_id in dashboard_forecast_ids]
+        dashboard_score_ids = {item.score_id for item in dashboard_scores}
+        dashboard_reviews = [
+            item
+            for item in reviews
+            if set(item.forecast_ids).intersection(dashboard_forecast_ids)
+            or set(item.score_ids).intersection(dashboard_score_ids)
+        ]
+    else:
+        dashboard_scores = scores
+        dashboard_reviews = reviews
     dashboard_strategy_decisions = [item for item in strategy_decisions if item.symbol == dashboard_symbol]
     dashboard_baseline_evaluations = [item for item in baseline_evaluations if item.symbol == dashboard_symbol]
     strategy_cards = [item for item in repository.load_strategy_cards() if dashboard_symbol in item.symbols]
@@ -204,7 +217,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         research_agendas=research_agendas,
         research_autopilot_runs=research_autopilot_runs,
     )
-    latest_review = reviews[-1] if reviews else None
+    latest_review = _latest(dashboard_reviews)
     latest_proposal = _latest_proposal_for_review(proposals, latest_review)
     latest_replay_summary = replay_summaries[-1] if replay_summaries else None
     hourly_state = _load_automation_state("hourly-paper-forecast")
@@ -297,7 +310,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         last_run_meta=_load_json(storage_dir / "last_run_meta.json"),
         last_replay_meta=_load_json(storage_dir / "last_replay_meta.json"),
         latest_forecast=latest_forecast,
-        latest_score=scores[-1] if scores else None,
+        latest_score=_latest(dashboard_scores, field="scored_at"),
         latest_review=latest_review,
         latest_proposal=latest_proposal,
         latest_strategy_decision=_latest(dashboard_strategy_decisions),

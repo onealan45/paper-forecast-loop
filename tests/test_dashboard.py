@@ -1037,6 +1037,235 @@ def test_render_dashboard_uses_only_proposal_for_latest_review(tmp_path):
     assert "old proposal should not be shown as current" not in decision_section
 
 
+def test_dashboard_review_score_and_proposal_are_scoped_to_dashboard_symbol(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 4, 0, tzinfo=UTC)
+    btc_forecast = Forecast(
+        forecast_id="forecast:score-btc",
+        symbol="BTC-USD",
+        created_at=now,
+        anchor_time=now,
+        target_window_start=now,
+        target_window_end=now + timedelta(hours=24),
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        status="resolved",
+        status_reason="scored",
+        predicted_regime="trend_up",
+        confidence=0.72,
+        provider_data_through=now + timedelta(hours=24),
+        observed_candle_count=25,
+    )
+    spy_forecast = Forecast(
+        forecast_id="forecast:score-spy",
+        symbol="SPY",
+        created_at=now,
+        anchor_time=now,
+        target_window_start=now,
+        target_window_end=now + timedelta(hours=24),
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        status="resolved",
+        status_reason="scored",
+        predicted_regime="trend_down",
+        confidence=0.62,
+        provider_data_through=now + timedelta(hours=24),
+        observed_candle_count=25,
+    )
+    spy_score = ForecastScore(
+        score_id="score:spy-current",
+        forecast_id=spy_forecast.forecast_id,
+        scored_at=now + timedelta(hours=24),
+        predicted_regime="trend_down",
+        actual_regime="trend_down",
+        score=1.0,
+        target_window_start=spy_forecast.target_window_start,
+        target_window_end=spy_forecast.target_window_end,
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        observed_candle_count=25,
+        provider_data_through=spy_forecast.target_window_end,
+        scoring_basis="spy current score",
+    )
+    btc_score = ForecastScore(
+        score_id="score:btc-tail",
+        forecast_id=btc_forecast.forecast_id,
+        scored_at=now + timedelta(hours=24, minutes=5),
+        predicted_regime="trend_up",
+        actual_regime="trend_down",
+        score=0.0,
+        target_window_start=btc_forecast.target_window_start,
+        target_window_end=btc_forecast.target_window_end,
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        observed_candle_count=25,
+        provider_data_through=btc_forecast.target_window_end,
+        scoring_basis="btc tail score should not appear on SPY dashboard",
+    )
+    spy_review = Review(
+        review_id="review:spy-current",
+        created_at=now + timedelta(hours=24, minutes=1),
+        score_ids=[spy_score.score_id],
+        forecast_ids=[spy_forecast.forecast_id],
+        average_score=1.0,
+        threshold_used=0.6,
+        decision_basis="spy current review",
+        summary="SPY review matches the dashboard symbol.",
+        proposal_recommended=True,
+        proposal_reason="spy proposal wanted",
+    )
+    btc_review = Review(
+        review_id="review:btc-tail",
+        created_at=now + timedelta(hours=24, minutes=6),
+        score_ids=[btc_score.score_id],
+        forecast_ids=[btc_forecast.forecast_id],
+        average_score=0.0,
+        threshold_used=0.6,
+        decision_basis="btc tail review",
+        summary="BTC review should not appear on SPY dashboard.",
+        proposal_recommended=True,
+        proposal_reason="btc proposal wanted",
+    )
+    spy_proposal = Proposal(
+        proposal_id="proposal:spy-current",
+        created_at=now + timedelta(hours=24, minutes=2),
+        review_id=spy_review.review_id,
+        score_ids=[spy_score.score_id],
+        proposal_type="risk_adjustment",
+        changes={"max_position_pct": 0.12},
+        threshold_used=0.6,
+        decision_basis="spy proposal",
+        rationale="SPY proposal matches the latest SPY review.",
+    )
+    btc_proposal = Proposal(
+        proposal_id="proposal:btc-tail",
+        created_at=now + timedelta(hours=24, minutes=7),
+        review_id=btc_review.review_id,
+        score_ids=[btc_score.score_id],
+        proposal_type="risk_adjustment",
+        changes={"max_position_pct": 0.05},
+        threshold_used=0.6,
+        decision_basis="btc proposal",
+        rationale="BTC proposal should not appear on SPY dashboard.",
+    )
+    repository.save_forecast(btc_forecast)
+    repository.save_score(spy_score)
+    repository.save_review(spy_review)
+    repository.save_proposal(spy_proposal)
+    repository.save_score(btc_score)
+    repository.save_review(btc_review)
+    repository.save_proposal(btc_proposal)
+    repository.save_forecast(spy_forecast)
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+    html = render_dashboard_html(snapshot)
+    decision_section = html.split('id="decision"', 1)[1].split("</section>", 1)[0]
+
+    assert snapshot.latest_forecast is not None
+    assert snapshot.latest_forecast.symbol == "SPY"
+    assert snapshot.latest_score is not None
+    assert snapshot.latest_score.score_id == "score:spy-current"
+    assert snapshot.latest_review is not None
+    assert snapshot.latest_review.review_id == "review:spy-current"
+    assert snapshot.latest_proposal is not None
+    assert snapshot.latest_proposal.proposal_id == "proposal:spy-current"
+    assert "SPY review matches the dashboard symbol." in decision_section
+    assert "SPY proposal matches the latest SPY review." in html
+    assert "BTC review should not appear on SPY dashboard." not in decision_section
+    assert "BTC proposal should not appear on SPY dashboard." not in html
+
+
+def test_dashboard_review_and_score_use_created_times_not_scoped_file_tail(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 4, 0, tzinfo=UTC)
+    forecast = Forecast(
+        forecast_id="forecast:score-order",
+        symbol="BTC-USD",
+        created_at=now,
+        anchor_time=now,
+        target_window_start=now,
+        target_window_end=now + timedelta(hours=24),
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        status="resolved",
+        status_reason="scored",
+        predicted_regime="trend_up",
+        confidence=0.72,
+        provider_data_through=now + timedelta(hours=24),
+        observed_candle_count=25,
+    )
+    current_score = ForecastScore(
+        score_id="score:current-time",
+        forecast_id=forecast.forecast_id,
+        scored_at=now + timedelta(hours=24),
+        predicted_regime="trend_up",
+        actual_regime="trend_up",
+        score=1.0,
+        target_window_start=forecast.target_window_start,
+        target_window_end=forecast.target_window_end,
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        observed_candle_count=25,
+        provider_data_through=forecast.target_window_end,
+        scoring_basis="current score by scored_at",
+    )
+    old_tail_score = ForecastScore(
+        score_id="score:old-tail",
+        forecast_id=forecast.forecast_id,
+        scored_at=now + timedelta(hours=23),
+        predicted_regime="trend_up",
+        actual_regime="trend_down",
+        score=0.0,
+        target_window_start=forecast.target_window_start,
+        target_window_end=forecast.target_window_end,
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        observed_candle_count=25,
+        provider_data_through=forecast.target_window_end,
+        scoring_basis="old tail score",
+    )
+    current_review = Review(
+        review_id="review:current-time",
+        created_at=now + timedelta(hours=24, minutes=1),
+        score_ids=[current_score.score_id],
+        forecast_ids=[forecast.forecast_id],
+        average_score=1.0,
+        threshold_used=0.6,
+        decision_basis="current review by created_at",
+        summary="Current review should win by created_at.",
+        proposal_recommended=False,
+        proposal_reason="current review",
+    )
+    old_tail_review = Review(
+        review_id="review:old-tail",
+        created_at=now + timedelta(hours=23, minutes=1),
+        score_ids=[old_tail_score.score_id],
+        forecast_ids=[forecast.forecast_id],
+        average_score=0.0,
+        threshold_used=0.6,
+        decision_basis="old tail review",
+        summary="Old tail review should not win by file order.",
+        proposal_recommended=True,
+        proposal_reason="old review",
+    )
+    repository.save_forecast(forecast)
+    repository.save_score(current_score)
+    repository.save_review(current_review)
+    repository.save_score(old_tail_score)
+    repository.save_review(old_tail_review)
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+
+    assert snapshot.latest_score is not None
+    assert snapshot.latest_score.score_id == "score:current-time"
+    assert snapshot.latest_review is not None
+    assert snapshot.latest_review.review_id == "review:current-time"
+
+
 def test_render_dashboard_labels_waiting_for_data_as_coverage_wait(tmp_path):
     from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
 

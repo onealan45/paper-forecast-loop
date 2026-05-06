@@ -1465,6 +1465,143 @@ def test_dashboard_strategy_decision_is_scoped_to_dashboard_symbol(tmp_path):
     assert snapshot.latest_strategy_decision.decision_id == "decision:spy-current"
 
 
+def test_dashboard_baseline_evaluation_uses_latest_created_at_not_file_tail(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 4, 0, tzinfo=UTC)
+    forecast = Forecast(
+        forecast_id="forecast:baseline-latest",
+        symbol="BTC-USD",
+        created_at=now,
+        anchor_time=now,
+        target_window_start=now,
+        target_window_end=now + timedelta(hours=24),
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        status="pending",
+        status_reason="awaiting_horizon_end",
+        predicted_regime="trend_up",
+        confidence=0.72,
+        provider_data_through=now,
+        observed_candle_count=1,
+    )
+    current_baseline = BaselineEvaluation(
+        baseline_id="baseline:btc-current",
+        created_at=now,
+        symbol="BTC-USD",
+        sample_size=10,
+        directional_accuracy=0.7,
+        baseline_accuracy=0.4,
+        model_edge=0.3,
+        recent_score=0.8,
+        evidence_grade="B",
+        forecast_ids=[forecast.forecast_id],
+        score_ids=["score:current"],
+        decision_basis="current baseline",
+    )
+    old_tail_baseline = BaselineEvaluation(
+        baseline_id="baseline:btc-old-tail",
+        created_at=now - timedelta(hours=2),
+        symbol="BTC-USD",
+        sample_size=2,
+        directional_accuracy=0.1,
+        baseline_accuracy=0.9,
+        model_edge=-0.8,
+        recent_score=0.1,
+        evidence_grade="D",
+        forecast_ids=[forecast.forecast_id],
+        score_ids=["score:old"],
+        decision_basis="old tail baseline",
+    )
+    repository.save_forecast(forecast)
+    repository.save_baseline_evaluation(current_baseline)
+    repository.save_baseline_evaluation(old_tail_baseline)
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+
+    assert snapshot.latest_baseline_evaluation is not None
+    assert snapshot.latest_baseline_evaluation.baseline_id == "baseline:btc-current"
+
+
+def test_dashboard_baseline_evaluation_is_scoped_to_dashboard_symbol(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 4, 0, tzinfo=UTC)
+    btc_forecast = Forecast(
+        forecast_id="forecast:baseline-btc",
+        symbol="BTC-USD",
+        created_at=now,
+        anchor_time=now,
+        target_window_start=now,
+        target_window_end=now + timedelta(hours=24),
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        status="pending",
+        status_reason="awaiting_horizon_end",
+        predicted_regime="trend_up",
+        confidence=0.72,
+        provider_data_through=now,
+        observed_candle_count=1,
+    )
+    spy_forecast = Forecast(
+        forecast_id="forecast:baseline-spy",
+        symbol="SPY",
+        created_at=now,
+        anchor_time=now,
+        target_window_start=now,
+        target_window_end=now + timedelta(hours=24),
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        status="pending",
+        status_reason="awaiting_horizon_end",
+        predicted_regime="trend_down",
+        confidence=0.62,
+        provider_data_through=now,
+        observed_candle_count=1,
+    )
+    spy_baseline = BaselineEvaluation(
+        baseline_id="baseline:spy-current",
+        created_at=now,
+        symbol="SPY",
+        sample_size=8,
+        directional_accuracy=0.55,
+        baseline_accuracy=0.5,
+        model_edge=0.05,
+        recent_score=0.6,
+        evidence_grade="C",
+        forecast_ids=[spy_forecast.forecast_id],
+        score_ids=["score:spy"],
+        decision_basis="spy baseline",
+    )
+    btc_tail_baseline = BaselineEvaluation(
+        baseline_id="baseline:btc-tail",
+        created_at=now + timedelta(minutes=5),
+        symbol="BTC-USD",
+        sample_size=20,
+        directional_accuracy=0.8,
+        baseline_accuracy=0.4,
+        model_edge=0.4,
+        recent_score=0.9,
+        evidence_grade="A",
+        forecast_ids=[btc_forecast.forecast_id],
+        score_ids=["score:btc"],
+        decision_basis="btc tail baseline",
+    )
+    repository.save_forecast(btc_forecast)
+    repository.save_baseline_evaluation(spy_baseline)
+    repository.save_baseline_evaluation(btc_tail_baseline)
+    repository.save_forecast(spy_forecast)
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+
+    assert snapshot.latest_forecast is not None
+    assert snapshot.latest_forecast.symbol == "SPY"
+    assert snapshot.latest_baseline_evaluation is not None
+    assert snapshot.latest_baseline_evaluation.baseline_id == "baseline:spy-current"
+
+
 def test_dashboard_uses_specific_blocked_decision_reason_summary(tmp_path):
     from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
 

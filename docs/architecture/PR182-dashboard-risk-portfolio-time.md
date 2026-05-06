@@ -41,4 +41,3 @@ python -m compileall -q src tests run_forecast_loop.py sitecustomize.py
 python .\run_forecast_loop.py --help
 git diff --check
 ```
-

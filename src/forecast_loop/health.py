@@ -49,6 +49,7 @@ from forecast_loop.models import (
     SourceRegistryEntry,
     StrategyCard,
     StrategyDecision,
+    StrategyResearchDigest,
     SplitManifest,
     WalkForwardValidation,
 )
@@ -208,6 +209,11 @@ def run_health_check(
             ResearchAutopilotRun.from_dict,
             findings,
         ),
+        "strategy_research_digests": _load_jsonl(
+            storage_path / "strategy_research_digests.jsonl",
+            StrategyResearchDigest.from_dict,
+            findings,
+        ),
     }
     forecasts: list[Forecast] = artifact_rows["forecasts"]
     scores: list[ForecastScore] = artifact_rows["scores"]
@@ -252,6 +258,7 @@ def run_health_check(
     paper_shadow_outcomes: list[PaperShadowOutcome] = artifact_rows["paper_shadow_outcomes"]
     research_agendas: list[ResearchAgenda] = artifact_rows["research_agendas"]
     research_autopilot_runs: list[ResearchAutopilotRun] = artifact_rows["research_autopilot_runs"]
+    strategy_research_digests: list[StrategyResearchDigest] = artifact_rows["strategy_research_digests"]
 
     _check_duplicate_ids(forecasts, "forecast_id", storage_path / "forecasts.jsonl", findings)
     _check_duplicate_ids(scores, "score_id", storage_path / "scores.jsonl", findings)
@@ -337,6 +344,12 @@ def run_health_check(
         storage_path / "research_autopilot_runs.jsonl",
         findings,
     )
+    _check_duplicate_ids(
+        strategy_research_digests,
+        "digest_id",
+        storage_path / "strategy_research_digests.jsonl",
+        findings,
+    )
 
     scoped_forecasts = [forecast for forecast in forecasts if forecast.symbol == symbol]
     latest_forecast = scoped_forecasts[-1] if scoped_forecasts else None
@@ -397,6 +410,7 @@ def run_health_check(
         paper_shadow_outcomes,
         research_agendas,
         research_autopilot_runs,
+        strategy_research_digests,
         findings,
     )
     _check_revision_retest_passed_trial_contexts(
@@ -726,6 +740,7 @@ def _check_links(
     paper_shadow_outcomes: list[PaperShadowOutcome],
     research_agendas: list[ResearchAgenda],
     research_autopilot_runs: list[ResearchAutopilotRun],
+    strategy_research_digests: list[StrategyResearchDigest],
     findings: list[HealthFinding],
 ) -> None:
     forecast_ids = {forecast.forecast_id for forecast in forecasts}
@@ -753,6 +768,7 @@ def _check_links(
     paper_shadow_outcome_ids = {outcome.outcome_id for outcome in paper_shadow_outcomes}
     research_agenda_ids = {agenda.agenda_id for agenda in research_agendas}
     research_agenda_by_id = {agenda.agenda_id: agenda for agenda in research_agendas}
+    research_autopilot_run_ids = {run.run_id for run in research_autopilot_runs}
 
     for score in scores:
         if score.forecast_id not in forecast_ids:
@@ -810,6 +826,32 @@ def _check_links(
             walk_forward_validation_ids,
             event_edge_evaluation_ids,
             findings,
+        )
+
+    # Digest links drive the current UX surface; historical digest gaps belong
+    # to deeper storage audit/repair, not the operational health gate.
+    latest_digest_by_symbol: dict[str, StrategyResearchDigest] = {}
+    for digest in strategy_research_digests:
+        previous = latest_digest_by_symbol.get(digest.symbol)
+        if previous is None or digest.created_at >= previous.created_at:
+            latest_digest_by_symbol[digest.symbol] = digest
+
+    for digest in latest_digest_by_symbol.values():
+        _check_strategy_research_digest_links(
+            storage_path=storage_path,
+            digest=digest,
+            strategy_card_ids=strategy_card_ids,
+            paper_shadow_outcome_ids=paper_shadow_outcome_ids,
+            research_autopilot_run_ids=research_autopilot_run_ids,
+            decision_ids=decision_ids,
+            backtest_result_ids=backtest_result_ids,
+            walk_forward_validation_ids=walk_forward_validation_ids,
+            event_edge_evaluation_ids=event_edge_evaluation_ids,
+            locked_evaluation_ids=locked_evaluation_ids,
+            leaderboard_entry_ids={entry.entry_id for entry in leaderboard_entries},
+            experiment_trial_ids=trial_ids,
+            research_agenda_ids=research_agenda_ids,
+            findings=findings,
         )
 
     for summary in evaluation_summaries:
@@ -1704,6 +1746,147 @@ def _check_decision_basis_research_links(
                 ", ".join(sorted(set(missing_ids))),
                 findings,
             )
+
+
+def _check_strategy_research_digest_links(
+    *,
+    storage_path: Path,
+    digest: StrategyResearchDigest,
+    strategy_card_ids: set[str],
+    paper_shadow_outcome_ids: set[str],
+    research_autopilot_run_ids: set[str],
+    decision_ids: set[str],
+    backtest_result_ids: set[str],
+    walk_forward_validation_ids: set[str],
+    event_edge_evaluation_ids: set[str],
+    locked_evaluation_ids: set[str],
+    leaderboard_entry_ids: set[str],
+    experiment_trial_ids: set[str],
+    research_agenda_ids: set[str],
+    findings: list[HealthFinding],
+) -> None:
+    artifact_ids = [*digest.evidence_artifact_ids, *digest.decision_research_artifact_ids]
+    missing_by_code: dict[str, set[str]] = {
+        "strategy_research_digest_missing_strategy_card": set(),
+        "strategy_research_digest_missing_paper_shadow_outcome": set(),
+        "strategy_research_digest_missing_research_autopilot_run": set(),
+        "strategy_research_digest_missing_decision": set(),
+        "strategy_research_digest_missing_backtest_result": set(),
+        "strategy_research_digest_missing_walk_forward": set(),
+        "strategy_research_digest_missing_event_edge": set(),
+        "strategy_research_digest_missing_locked_evaluation": set(),
+        "strategy_research_digest_missing_leaderboard_entry": set(),
+        "strategy_research_digest_missing_experiment_trial": set(),
+        "strategy_research_digest_missing_research_agenda": set(),
+    }
+
+    _collect_missing_digest_reference(
+        digest.strategy_card_id,
+        strategy_card_ids,
+        missing_by_code["strategy_research_digest_missing_strategy_card"],
+    )
+    _collect_missing_digest_reference(
+        digest.lineage_root_card_id,
+        strategy_card_ids,
+        missing_by_code["strategy_research_digest_missing_strategy_card"],
+    )
+    _collect_missing_digest_reference(
+        digest.paper_shadow_outcome_id,
+        paper_shadow_outcome_ids,
+        missing_by_code["strategy_research_digest_missing_paper_shadow_outcome"],
+    )
+    _collect_missing_digest_reference(
+        digest.autopilot_run_id,
+        research_autopilot_run_ids,
+        missing_by_code["strategy_research_digest_missing_research_autopilot_run"],
+    )
+    _collect_missing_digest_reference(
+        digest.decision_id,
+        decision_ids,
+        missing_by_code["strategy_research_digest_missing_decision"],
+    )
+
+    prefix_specs = [
+        (
+            "strategy-card:",
+            strategy_card_ids,
+            "strategy_research_digest_missing_strategy_card",
+        ),
+        (
+            "paper-shadow-outcome:",
+            paper_shadow_outcome_ids,
+            "strategy_research_digest_missing_paper_shadow_outcome",
+        ),
+        (
+            "research-autopilot-run:",
+            research_autopilot_run_ids,
+            "strategy_research_digest_missing_research_autopilot_run",
+        ),
+        ("decision:", decision_ids, "strategy_research_digest_missing_decision"),
+        (
+            "backtest-result:",
+            backtest_result_ids,
+            "strategy_research_digest_missing_backtest_result",
+        ),
+        (
+            "walk-forward:",
+            walk_forward_validation_ids,
+            "strategy_research_digest_missing_walk_forward",
+        ),
+        (
+            "event-edge:",
+            event_edge_evaluation_ids,
+            "strategy_research_digest_missing_event_edge",
+        ),
+        (
+            "locked-evaluation:",
+            locked_evaluation_ids,
+            "strategy_research_digest_missing_locked_evaluation",
+        ),
+        (
+            "leaderboard-entry:",
+            leaderboard_entry_ids,
+            "strategy_research_digest_missing_leaderboard_entry",
+        ),
+        (
+            "experiment-trial:",
+            experiment_trial_ids,
+            "strategy_research_digest_missing_experiment_trial",
+        ),
+        (
+            "research-agenda:",
+            research_agenda_ids,
+            "strategy_research_digest_missing_research_agenda",
+        ),
+    ]
+    for artifact_id in artifact_ids:
+        if _is_empty_evidence_reference(artifact_id):
+            continue
+        for prefix, valid_ids, code in prefix_specs:
+            if artifact_id.startswith(prefix):
+                _collect_missing_digest_reference(artifact_id, valid_ids, missing_by_code[code])
+                break
+
+    for code, missing_ids in missing_by_code.items():
+        if missing_ids:
+            _add_link_finding(
+                code,
+                storage_path / "strategy_research_digests.jsonl",
+                digest.digest_id,
+                ", ".join(sorted(missing_ids)),
+                findings,
+            )
+
+
+def _collect_missing_digest_reference(
+    artifact_id: str | None,
+    valid_ids: set[str],
+    missing_ids: set[str],
+) -> None:
+    if artifact_id is None or _is_empty_evidence_reference(artifact_id):
+        return
+    if artifact_id not in valid_ids:
+        missing_ids.add(artifact_id)
 
 
 def _decision_basis_values(decision_basis: str, field_name: str) -> list[str]:

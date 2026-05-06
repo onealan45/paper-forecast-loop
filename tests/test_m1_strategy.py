@@ -20,6 +20,7 @@ from forecast_loop.models import (
     Review,
     RiskSnapshot,
     StrategyDecision,
+    StrategyResearchDigest,
     WalkForwardValidation,
     WalkForwardWindow,
 )
@@ -191,6 +192,50 @@ def _event_edge_evaluation(now: datetime, evaluation_id: str = "event-edge:valid
         passed=True,
         blocked_reason=None,
         flags=[],
+    )
+
+
+def _strategy_research_digest(
+    now: datetime,
+    *,
+    digest_id: str = "strategy-research-digest:test",
+    strategy_card_id: str | None = None,
+    paper_shadow_outcome_id: str | None = None,
+    autopilot_run_id: str | None = None,
+    evidence_artifact_ids: list[str] | None = None,
+    decision_id: str | None = None,
+    decision_research_artifact_ids: list[str] | None = None,
+) -> StrategyResearchDigest:
+    return StrategyResearchDigest(
+        digest_id=digest_id,
+        created_at=now,
+        symbol="BTC-USD",
+        strategy_card_id=strategy_card_id,
+        strategy_name="test digest strategy",
+        strategy_status="DRAFT",
+        hypothesis="test hypothesis",
+        paper_shadow_outcome_id=paper_shadow_outcome_id,
+        outcome_grade=None,
+        excess_return_after_costs=None,
+        recommended_strategy_action=None,
+        top_failure_attributions=[],
+        lineage_root_card_id=None,
+        lineage_revision_count=0,
+        lineage_outcome_count=0,
+        lineage_primary_failure_attribution=None,
+        lineage_next_research_focus=None,
+        next_research_action="REPAIR_EVIDENCE_CHAIN",
+        autopilot_run_id=autopilot_run_id,
+        evidence_artifact_ids=evidence_artifact_ids or [],
+        research_summary="test digest summary",
+        next_step_rationale="test next step",
+        decision_basis="test",
+        decision_id=decision_id,
+        decision_action="HOLD" if decision_id else None,
+        decision_blocked_reason="model_not_beating_baseline" if decision_id else None,
+        decision_research_blockers=["missing research evidence"] if decision_research_artifact_ids else [],
+        decision_research_artifact_ids=decision_research_artifact_ids or [],
+        decision_reason_summary="test decision reason" if decision_id else None,
     )
 
 
@@ -702,6 +747,148 @@ def test_health_check_allows_strategy_decision_basis_persisted_research_evidence
         "decision_basis_missing_backtest_result",
         "decision_basis_missing_walk_forward",
         "decision_basis_missing_event_edge",
+    }
+
+
+def test_health_check_detects_strategy_research_digest_missing_artifact_links(tmp_path):
+    storage = tmp_path / "storage"
+    repository = JsonFileRepository(storage)
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    repository.save_forecast(_forecast("forecast:valid", anchor_time=now, status="pending"))
+    repository.save_strategy_research_digest(
+        _strategy_research_digest(
+            now,
+            digest_id="strategy-research-digest:broken",
+            strategy_card_id="strategy-card:missing",
+            paper_shadow_outcome_id="paper-shadow-outcome:missing",
+            autopilot_run_id="research-autopilot-run:missing",
+            evidence_artifact_ids=[
+                "decision:missing-evidence",
+                "backtest-result:missing-evidence",
+                "walk-forward:missing-evidence",
+                "event-edge:missing-evidence",
+            ],
+            decision_id="decision:missing",
+            decision_research_artifact_ids=[
+                "backtest-result:missing-blocker",
+                "walk-forward:missing-blocker",
+                "event-edge:missing-blocker",
+            ],
+        )
+    )
+
+    result = run_health_check(storage_dir=storage, symbol="BTC-USD", now=now, create_repair_request=False)
+    codes = {finding.code for finding in result.findings}
+
+    assert "strategy_research_digest_missing_strategy_card" in codes
+    assert "strategy_research_digest_missing_paper_shadow_outcome" in codes
+    assert "strategy_research_digest_missing_research_autopilot_run" in codes
+    assert "strategy_research_digest_missing_decision" in codes
+    assert "strategy_research_digest_missing_backtest_result" in codes
+    assert "strategy_research_digest_missing_walk_forward" in codes
+    assert "strategy_research_digest_missing_event_edge" in codes
+    assert result.repair_required is True
+
+
+def test_health_check_allows_strategy_research_digest_placeholder_evidence_ids(tmp_path):
+    storage = tmp_path / "storage"
+    repository = JsonFileRepository(storage)
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    repository.save_forecast(_forecast("forecast:valid", anchor_time=now, status="pending"))
+    repository.save_strategy_research_digest(
+        _strategy_research_digest(
+            now,
+            digest_id="strategy-research-digest:placeholder",
+            evidence_artifact_ids=["missing", "none", "null"],
+            decision_research_artifact_ids=["missing", "none", "null"],
+        )
+    )
+
+    result = run_health_check(storage_dir=storage, symbol="BTC-USD", now=now, create_repair_request=False)
+
+    assert not {finding.code for finding in result.findings} & {
+        "strategy_research_digest_missing_strategy_card",
+        "strategy_research_digest_missing_paper_shadow_outcome",
+        "strategy_research_digest_missing_research_autopilot_run",
+        "strategy_research_digest_missing_decision",
+        "strategy_research_digest_missing_backtest_result",
+        "strategy_research_digest_missing_walk_forward",
+        "strategy_research_digest_missing_event_edge",
+    }
+
+
+def test_health_check_allows_strategy_research_digest_persisted_research_evidence(tmp_path):
+    storage = tmp_path / "storage"
+    repository = JsonFileRepository(storage)
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    forecast = _forecast("forecast:valid", anchor_time=now, status="pending")
+    repository.save_forecast(forecast)
+    repository.save_strategy_decision(
+        _decision("decision:valid-digest", now=now, forecast_id=forecast.forecast_id, decision_basis="test")
+    )
+    repository.save_backtest_result(_backtest_result(now))
+    repository.save_walk_forward_validation(_walk_forward_validation(now))
+    repository.save_event_edge_evaluation(_event_edge_evaluation(now))
+    repository.save_strategy_research_digest(
+        _strategy_research_digest(
+            now,
+            digest_id="strategy-research-digest:valid",
+            evidence_artifact_ids=[
+                "decision:valid-digest",
+                "backtest-result:valid",
+                "walk-forward:valid",
+                "event-edge:valid",
+            ],
+            decision_id="decision:valid-digest",
+            decision_research_artifact_ids=[
+                "backtest-result:valid",
+                "walk-forward:valid",
+                "event-edge:valid",
+            ],
+        )
+    )
+
+    result = run_health_check(storage_dir=storage, symbol="BTC-USD", now=now, create_repair_request=False)
+
+    assert not {finding.code for finding in result.findings} & {
+        "strategy_research_digest_missing_decision",
+        "strategy_research_digest_missing_backtest_result",
+        "strategy_research_digest_missing_walk_forward",
+        "strategy_research_digest_missing_event_edge",
+    }
+
+
+def test_health_check_scopes_strategy_research_digest_link_gate_to_latest_symbol_digest(tmp_path):
+    storage = tmp_path / "storage"
+    repository = JsonFileRepository(storage)
+    now = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
+    repository.save_forecast(_forecast("forecast:valid", anchor_time=now, status="pending"))
+    repository.save_strategy_research_digest(
+        _strategy_research_digest(
+            now - timedelta(hours=1),
+            digest_id="strategy-research-digest:old-broken",
+            evidence_artifact_ids=[
+                "paper-shadow-outcome:missing-old",
+                "experiment-trial:missing-old",
+                "research-autopilot-run:missing-old",
+            ],
+        )
+    )
+    repository.save_strategy_research_digest(
+        _strategy_research_digest(
+            now,
+            digest_id="strategy-research-digest:latest-current",
+            evidence_artifact_ids=["missing"],
+            decision_research_artifact_ids=["missing"],
+        )
+    )
+
+    result = run_health_check(storage_dir=storage, symbol="BTC-USD", now=now, create_repair_request=False)
+
+    assert not {finding.code for finding in result.findings} & {
+        "strategy_research_digest_missing_paper_shadow_outcome",
+        "strategy_research_digest_missing_experiment_trial",
+        "strategy_research_digest_missing_research_autopilot_run",
     }
 
 

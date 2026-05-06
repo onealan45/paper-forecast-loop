@@ -25,7 +25,9 @@ If no active-symbol forecast ids exist, replay summary selection preserves the
 legacy unscoped fallback because there is no reliable forecast-id mapping.
 If active-symbol forecast ids exist but no replay summary references them, the
 dashboard also falls back to the latest replay summary so historical replay
-context can still render as stale background instead of disappearing.
+context can still render as stale background instead of disappearing. That
+fallback is forced-stale and must not be labeled as aligned with current active
+forecast evidence.
 
 ## Boundaries
 
@@ -38,8 +40,8 @@ context can still render as stale background instead of disappearing.
 ## Verification
 
 ```powershell
-python -m pytest tests\test_dashboard.py::test_dashboard_replay_summary_is_scoped_to_active_forecast_and_generated_at tests\test_dashboard.py::test_dashboard_provider_run_is_scoped_to_symbol_and_created_at -q
-python -m pytest tests\test_dashboard.py::test_render_dashboard_includes_latest_artifacts tests\test_dashboard.py::test_dashboard_latest_forecast_uses_created_at_not_file_tail tests\test_dashboard.py::test_dashboard_replay_summary_is_scoped_to_active_forecast_and_generated_at tests\test_dashboard.py::test_dashboard_provider_run_is_scoped_to_symbol_and_created_at -q
+python -m pytest tests\test_dashboard.py::test_dashboard_unmatched_replay_fallback_is_marked_historical -q
+python -m pytest tests\test_dashboard.py::test_render_dashboard_includes_latest_artifacts tests\test_dashboard.py::test_dashboard_latest_forecast_uses_created_at_not_file_tail tests\test_dashboard.py::test_dashboard_replay_summary_is_scoped_to_active_forecast_and_generated_at tests\test_dashboard.py::test_dashboard_provider_run_is_scoped_to_symbol_and_created_at tests\test_dashboard.py::test_dashboard_unmatched_replay_fallback_is_marked_historical -q
 python -m pytest -q
 python -m compileall -q src tests run_forecast_loop.py sitecustomize.py
 python .\run_forecast_loop.py --help

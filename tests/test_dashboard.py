@@ -1350,6 +1350,7 @@ def test_render_dashboard_marks_stale_replay_context(tmp_path):
         observed_candle_count=2,
     )
     repository.save_forecast(latest_forecast)
+    repository.save_forecast(replay_forecast)
     summary = build_evaluation_summary(
         replay_id="replay:btc",
         generated_at=datetime(2026, 4, 22, 18, 40, tzinfo=UTC),
@@ -1966,6 +1967,57 @@ def test_dashboard_provider_run_is_scoped_to_symbol_and_created_at(tmp_path):
 
     assert snapshot.latest_provider_run is not None
     assert snapshot.latest_provider_run.provider_run_id == "provider-run:spy-current"
+
+
+def test_dashboard_unmatched_replay_fallback_is_marked_historical(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 4, 0, tzinfo=UTC)
+    spy_forecast = Forecast(
+        forecast_id="forecast:replay-unmatched-spy",
+        symbol="SPY",
+        created_at=now,
+        anchor_time=now,
+        target_window_start=now,
+        target_window_end=now + timedelta(hours=24),
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        status="pending",
+        status_reason="awaiting_horizon_end",
+        predicted_regime="trend_down",
+        confidence=0.62,
+        provider_data_through=now,
+        observed_candle_count=1,
+    )
+    unmatched_summary = EvaluationSummary(
+        summary_id="summary:unmatched-btc",
+        replay_id="replay:unmatched-btc",
+        generated_at=now,
+        forecast_ids=["forecast:btc-unmatched"],
+        scored_forecast_ids=["forecast:btc-unmatched"],
+        replay_window_start=now,
+        replay_window_end=now + timedelta(hours=24),
+        anchor_time_start=now,
+        anchor_time_end=now,
+        forecast_count=1,
+        resolved_count=1,
+        waiting_for_data_count=0,
+        unscorable_count=0,
+        average_score=1.0,
+        score_ids=["score:btc-unmatched"],
+        review_ids=[],
+        proposal_ids=[],
+    )
+    repository.save_forecast(spy_forecast)
+    repository.save_evaluation_summary(unmatched_summary)
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+
+    assert snapshot.latest_replay_summary is not None
+    assert snapshot.latest_replay_summary.replay_id == "replay:unmatched-btc"
+    assert snapshot.replay_is_stale is True
+    assert snapshot.replay_freshness_label == "Replay is historical (fallback outside active forecast evidence)"
 
 
 def test_dashboard_baseline_evaluation_uses_latest_created_at_not_file_tail(tmp_path):

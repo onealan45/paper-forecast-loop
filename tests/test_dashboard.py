@@ -3313,6 +3313,140 @@ def test_dashboard_renders_portfolio_nav_pnl_and_risk(tmp_path):
     assert "Gross exposure：10.50%" in html
 
 
+def test_dashboard_portfolio_snapshot_uses_created_at_not_file_tail(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 4, 0, tzinfo=UTC)
+    current_portfolio = PaperPortfolioSnapshot(
+        snapshot_id="portfolio:current-time",
+        created_at=now,
+        equity=12_000.0,
+        cash=9_000.0,
+        gross_exposure_pct=0.25,
+        net_exposure_pct=0.25,
+        max_drawdown_pct=0.02,
+        positions=[],
+        realized_pnl=100.0,
+        unrealized_pnl=200.0,
+        nav=12_000.0,
+    )
+    old_tail_portfolio = PaperPortfolioSnapshot(
+        snapshot_id="portfolio:old-tail",
+        created_at=now - timedelta(hours=3),
+        equity=8_000.0,
+        cash=8_000.0,
+        gross_exposure_pct=0.0,
+        net_exposure_pct=0.0,
+        max_drawdown_pct=0.10,
+        positions=[],
+        realized_pnl=-500.0,
+        unrealized_pnl=0.0,
+        nav=8_000.0,
+    )
+    repository.save_portfolio_snapshot(current_portfolio)
+    repository.save_portfolio_snapshot(old_tail_portfolio)
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+    html = render_dashboard_html(snapshot)
+
+    assert snapshot.latest_portfolio_snapshot is not None
+    assert snapshot.latest_portfolio_snapshot.snapshot_id == "portfolio:current-time"
+    assert "12000.00" in html
+    assert "8000.00" not in html
+
+
+def test_dashboard_risk_snapshot_is_scoped_to_symbol_and_created_at(tmp_path):
+    from forecast_loop.dashboard import build_dashboard_snapshot
+
+    repository = JsonFileRepository(tmp_path)
+    now = datetime(2026, 5, 2, 4, 0, tzinfo=UTC)
+    spy_forecast = Forecast(
+        forecast_id="forecast:risk-spy",
+        symbol="SPY",
+        created_at=now,
+        anchor_time=now,
+        target_window_start=now,
+        target_window_end=now + timedelta(hours=24),
+        candle_interval_minutes=60,
+        expected_candle_count=25,
+        status="pending",
+        status_reason="awaiting_horizon_end",
+        predicted_regime="trend_down",
+        confidence=0.62,
+        provider_data_through=now,
+        observed_candle_count=1,
+    )
+    spy_current_risk = RiskSnapshot(
+        risk_id="risk:spy-current",
+        created_at=now,
+        symbol="SPY",
+        status="OK",
+        severity="none",
+        current_drawdown_pct=0.01,
+        max_drawdown_pct=0.02,
+        gross_exposure_pct=0.10,
+        net_exposure_pct=0.10,
+        position_pct=0.05,
+        max_position_pct=0.15,
+        max_gross_exposure_pct=0.20,
+        reduce_risk_drawdown_pct=0.05,
+        stop_new_entries_drawdown_pct=0.10,
+        findings=[],
+        recommended_action="OK",
+        decision_basis="spy current risk",
+    )
+    btc_newer_risk = RiskSnapshot(
+        risk_id="risk:btc-newer",
+        created_at=now + timedelta(minutes=10),
+        symbol="BTC-USD",
+        status="STOP_NEW_ENTRIES",
+        severity="blocking",
+        current_drawdown_pct=0.12,
+        max_drawdown_pct=0.12,
+        gross_exposure_pct=0.30,
+        net_exposure_pct=0.30,
+        position_pct=0.30,
+        max_position_pct=0.15,
+        max_gross_exposure_pct=0.20,
+        reduce_risk_drawdown_pct=0.05,
+        stop_new_entries_drawdown_pct=0.10,
+        findings=["btc risk should not appear on SPY dashboard"],
+        recommended_action="STOP_NEW_ENTRIES",
+        decision_basis="btc newer risk",
+    )
+    spy_old_tail_risk = RiskSnapshot(
+        risk_id="risk:spy-old-tail",
+        created_at=now - timedelta(hours=2),
+        symbol="SPY",
+        status="REDUCE_RISK",
+        severity="warning",
+        current_drawdown_pct=0.06,
+        max_drawdown_pct=0.06,
+        gross_exposure_pct=0.18,
+        net_exposure_pct=0.18,
+        position_pct=0.18,
+        max_position_pct=0.15,
+        max_gross_exposure_pct=0.20,
+        reduce_risk_drawdown_pct=0.05,
+        stop_new_entries_drawdown_pct=0.10,
+        findings=["old SPY tail should not win by file order"],
+        recommended_action="REDUCE_RISK",
+        decision_basis="spy old tail risk",
+    )
+    repository.save_forecast(spy_forecast)
+    repository.save_risk_snapshot(spy_current_risk)
+    repository.save_risk_snapshot(btc_newer_risk)
+    repository.save_risk_snapshot(spy_old_tail_risk)
+
+    snapshot = build_dashboard_snapshot(tmp_path)
+
+    assert snapshot.latest_forecast is not None
+    assert snapshot.latest_forecast.symbol == "SPY"
+    assert snapshot.latest_risk_snapshot is not None
+    assert snapshot.latest_risk_snapshot.risk_id == "risk:spy-current"
+
+
 def test_dashboard_renders_broker_sandbox_state(tmp_path):
     from forecast_loop.dashboard import build_dashboard_snapshot, render_dashboard_html
 

@@ -182,6 +182,7 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         dashboard_reviews = reviews
     dashboard_strategy_decisions = [item for item in strategy_decisions if item.symbol == dashboard_symbol]
     dashboard_baseline_evaluations = [item for item in baseline_evaluations if item.symbol == dashboard_symbol]
+    dashboard_risk_snapshots = [item for item in risk_snapshots if item.symbol == dashboard_symbol]
     strategy_cards = [item for item in repository.load_strategy_cards() if dashboard_symbol in item.symbols]
     experiment_trials = [item for item in repository.load_experiment_trials() if item.symbol == dashboard_symbol]
     all_locked_evaluations = repository.load_locked_evaluation_results()
@@ -315,8 +316,8 @@ def build_dashboard_snapshot(storage_dir: Path | str) -> DashboardSnapshot:
         latest_proposal=latest_proposal,
         latest_strategy_decision=_latest(dashboard_strategy_decisions),
         latest_baseline_evaluation=_latest(dashboard_baseline_evaluations),
-        latest_portfolio_snapshot=portfolio_snapshots[-1] if portfolio_snapshots else None,
-        latest_risk_snapshot=risk_snapshots[-1] if risk_snapshots else None,
+        latest_portfolio_snapshot=_latest(portfolio_snapshots),
+        latest_risk_snapshot=_latest(dashboard_risk_snapshots),
         latest_strategy_card=research_chain.strategy_card,
         latest_experiment_trial=research_chain.experiment_trial,
         latest_locked_evaluation=research_chain.locked_evaluation,

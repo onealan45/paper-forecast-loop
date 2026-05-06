@@ -1,8 +1,9 @@
 from datetime import UTC, datetime, timedelta
 
-from forecast_loop.models import PaperShadowOutcome, ResearchAutopilotRun, StrategyCard
+from forecast_loop.models import EventEdgeEvaluation, PaperShadowOutcome, ResearchAutopilotRun, StrategyCard
 from forecast_loop.strategy_research_display import (
     build_strategy_research_conclusion,
+    format_event_edge_input_manifest,
     format_promotion_stage,
     format_strategy_card_status,
 )
@@ -129,3 +130,55 @@ def test_format_strategy_card_status_keeps_raw_code_with_readable_label():
     assert format_strategy_card_status("DRAFT") == "草稿 (DRAFT)"
     assert format_strategy_card_status("QUARANTINED") == "隔離中 (QUARANTINED)"
     assert format_strategy_card_status("UNKNOWN_STATUS") == "UNKNOWN_STATUS"
+
+
+def _event_edge_evaluation(now: datetime) -> EventEdgeEvaluation:
+    return EventEdgeEvaluation(
+        evaluation_id="event-edge:display",
+        event_family="crypto_flow",
+        event_type="CRYPTO_FLOW",
+        symbol="BTC-USD",
+        created_at=now,
+        split="historical_event_sample",
+        horizon_hours=24,
+        sample_n=2,
+        average_forward_return=-0.02,
+        average_benchmark_return=-0.008,
+        average_excess_return_after_costs=-0.011366,
+        hit_rate=0.0,
+        max_adverse_excursion_p50=-0.03,
+        max_adverse_excursion_p90=-0.05,
+        max_drawdown_if_traded=-0.09,
+        turnover=2.0,
+        estimated_cost_bps=15.0,
+        dsr=None,
+        white_rc_p=None,
+        stability_score=None,
+        passed=False,
+        blocked_reason="non_positive_after_cost_edge",
+        flags=["insufficient_sample_size", "non_positive_after_cost_edge"],
+    )
+
+
+def test_format_event_edge_input_manifest_summarizes_complete_manifest():
+    now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+    edge = _event_edge_evaluation(now)
+    edge.input_event_ids = ["canonical-event:a", "canonical-event:b"]
+    edge.input_reaction_check_ids = ["market-reaction:a", "market-reaction:b"]
+    edge.input_candle_ids = ["market-candle:a", "market-candle:b", "market-candle:c"]
+    edge.input_watermark = now - timedelta(hours=1)
+
+    assert (
+        format_event_edge_input_manifest(edge)
+        == "輸入：事件 2；反應 2；K線 3；watermark 2026-05-01T07:00:00+00:00"
+    )
+
+
+def test_format_event_edge_input_manifest_omits_legacy_or_partial_manifest():
+    now = datetime(2026, 5, 1, 8, 0, tzinfo=UTC)
+    legacy_edge = _event_edge_evaluation(now)
+    partial_edge = _event_edge_evaluation(now)
+    partial_edge.input_watermark = now
+
+    assert format_event_edge_input_manifest(legacy_edge) == ""
+    assert format_event_edge_input_manifest(partial_edge) == ""

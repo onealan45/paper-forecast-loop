@@ -110,13 +110,7 @@ def build_strategy_research_digest(
         single_attr="event_edge_evaluation_id",
         card_list_attr="event_edge_evaluation_ids",
         id_field="evaluation_id",
-        fallback=lambda: _latest_symbol_artifact(
-            event_edges,
-            symbol=symbol,
-            as_of=created_at,
-            id_field="evaluation_id",
-            excluded_ids=decision_research_artifact_ids,
-        ),
+        fallback=lambda: None,
     )
     latest_backtest = _chain_artifact_or_fallback(
         chain,

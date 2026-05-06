@@ -36,11 +36,7 @@ def resolve_strategy_digest_evidence(
             items=event_edges,
             id_field="evaluation_id",
             prefix="event-edge:",
-            fallback=lambda: _latest_same_symbol_as_of(
-                event_edges,
-                digest,
-                id_field="evaluation_id",
-            ),
+            fallback=lambda: None,
         ),
         backtest=_evidence_by_id_or_fallback(
             digest=digest,

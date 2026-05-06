@@ -34,6 +34,8 @@ class EventEdgeBuildResult:
 class _EdgeSample:
     event: CanonicalEvent
     reaction: MarketReactionCheck
+    candle_ids: list[str]
+    input_watermark: datetime
     forward_return: float
     benchmark_return: float
     excess_return_after_costs: float
@@ -173,6 +175,14 @@ def _sample_from_reaction(
     if start_candle is None or end_candle is None or start_candle.close == 0:
         return None
     window_candles = [candle for candle in candles if start <= candle.timestamp <= end]
+    input_times = [
+        event.available_at,
+        event.fetched_at,
+        reaction.created_at,
+        *[max(candle.timestamp, candle.imported_at) for candle in window_candles],
+    ]
+    if event.created_at is not None:
+        input_times.append(event.created_at)
     forward_return = (end_candle.close / start_candle.close) - 1.0
     benchmark_return = 0.0
     cost = estimated_cost_bps / 10_000.0
@@ -184,6 +194,8 @@ def _sample_from_reaction(
     return _EdgeSample(
         event=event,
         reaction=reaction,
+        candle_ids=[candle.candle_id for candle in window_candles],
+        input_watermark=max(value for value in input_times if value is not None),
         forward_return=forward_return,
         benchmark_return=benchmark_return,
         excess_return_after_costs=forward_return - benchmark_return - cost,
@@ -261,6 +273,10 @@ def _evaluation_from_samples(
         passed=passed,
         blocked_reason=flags[0] if flags else None,
         flags=flags,
+        input_event_ids=sorted({sample.event.event_id for sample in samples}),
+        input_reaction_check_ids=sorted({sample.reaction.check_id for sample in samples}),
+        input_candle_ids=sorted({candle_id for sample in samples for candle_id in sample.candle_ids}),
+        input_watermark=max(sample.input_watermark for sample in samples) if samples else None,
     )
 
 

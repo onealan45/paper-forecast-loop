@@ -139,6 +139,19 @@ def test_build_event_edge_passes_when_after_cost_edge_is_positive(tmp_path):
     assert evaluations[0].average_excess_return_after_costs > 0
     assert evaluations[0].passed is True
     assert evaluations[0].blocked_reason is None
+    assert evaluations[0].input_event_ids == [
+        "canonical-event:edge-1",
+        "canonical-event:edge-2",
+        "canonical-event:edge-3",
+    ]
+    assert evaluations[0].input_reaction_check_ids == [
+        "market-reaction:edge-1",
+        "market-reaction:edge-2",
+        "market-reaction:edge-3",
+    ]
+    input_candle_ids = {candle.candle_id for candle in repository.load_market_candles()}
+    assert set(evaluations[0].input_candle_ids) == input_candle_ids
+    assert evaluations[0].input_watermark == _created_at()
 
 
 def test_build_event_edge_blocks_when_sample_size_is_too_low(tmp_path):

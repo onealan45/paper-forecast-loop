@@ -225,6 +225,8 @@ def build_strategy_research_digest(
             next_research_action=next_research_action,
             lineage_focus=lineage.next_research_focus if lineage else None,
             primary_failure=lineage.primary_failure_attribution if lineage else None,
+            decision_research_blockers=decision_research_blockers,
+            decision_research_artifact_ids=decision_research_artifact_ids,
         ),
         decision_basis="strategy_research_digest_v1",
         strategy_rule_summary=_strategy_rule_summary(chain.strategy_card),
@@ -485,7 +487,19 @@ def _next_step_rationale(
     next_research_action: str | None,
     lineage_focus: str | None,
     primary_failure: str | None,
+    decision_research_blockers: list[str],
+    decision_research_artifact_ids: list[str],
 ) -> str:
+    if decision_research_blockers and decision_research_artifact_ids:
+        blockers = "、".join(decision_research_blockers[:3])
+        if len(decision_research_blockers) > 3:
+            blockers = f"{blockers} 等"
+        return (
+            f"決策阻擋研究仍未通過：{blockers}。"
+            f"已連結 {len(decision_research_artifact_ids)} 個 blocker evidence；"
+            "下一步先比較這些 event-edge、回測與 walk-forward 結果，"
+            "修訂策略假說或資料/特徵，不是只等待 paper-shadow。"
+        )
     if next_research_action == "WAIT_FOR_PAPER_SHADOW_OUTCOME":
         return (
             "已有 leaderboard entry，但尚未有 post-entry paper-shadow observation；"
